@@ -73,7 +73,7 @@ Expor apenas as portas necessárias para o app web (`80`, `443`) e SSH conforme 
 
 ## Tri Doçuras (App 1)
 
-Frontend Flutter web alinhado ao Design System v1. Telas implementadas: **catálogo**, **produto** e **carrinho** (checkout em placeholder). Carrinho em memória via `CartController`; API expõe catálogo (`GET /api/products`).
+Frontend Flutter web alinhado ao Design System v1. Telas implementadas: **catálogo**, **produto**, **carrinho** e **checkout** (Pix em placeholder). Carrinho em memória via `CartController`; API expõe catálogo (`GET /api/products`).
 
 Rebuild após mudanças no UI:
 

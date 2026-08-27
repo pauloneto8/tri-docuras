@@ -31,6 +31,7 @@ Lora Italic (wordmark `displayMedium`, produtos `titleMedium`), Lora (headings),
 - `TdButton` — pill; variantes `primary`, `outline`, `soft`, `disabled`; sem uppercase
 - `TdChip` — selecionado dark/white; inativo peach/dark
 - `TdSearchField` — pill branco, ícone sky
+- `TdTextField` — formulário cantos 12px (checkout)
 - `TdPhotoFrame` — moldura circular (dois anéis brown + coração pink), preenchimento peach
 - `TdIconButton` — botão circular (menu, voltar, favorito, carrinho)
 - `TdQuantityStepper` — seletor quantidade; modo `compact` no carrinho
@@ -39,6 +40,10 @@ Lora Italic (wordmark `displayMedium`, produtos `titleMedium`), Lora (headings),
 
 `CartController` (memória), `CartScope`, `DeliveryMode` (pickup/delivery).
 
+### Checkout (`lib/checkout/`)
+
+`CheckoutValidators` (nome/WhatsApp), `CheckoutDraft` (PII só em memória), `WhatsAppInputFormatter`. Sem persistência, logs ou query params com PII. Sem chaves Mercado Pago no cliente.
+
 ### Telas
 
 | # | Arquivo | Status |
@@ -46,9 +51,10 @@ Lora Italic (wordmark `displayMedium`, produtos `titleMedium`), Lora (headings),
 | 1 | `home_screen.dart` | Catálogo — badge, busca, chips, grade, nav no body |
 | 2 | `product_screen.dart` | Produto — opções, stepper, Adicionar + total |
 | 3 | `cart_screen.dart` | Carrinho — linhas, ENTREGA, resumo, Finalizar |
-| 4 | `checkout_screen.dart` | Placeholder |
+| 4 | `checkout_screen.dart` | Nome, WhatsApp, retirada, Pix visual, Gerar Pix |
+| 5 | `pix_screen.dart` | Placeholder (sem QR/código fake) |
 
-Navegação: card/Adicionar → produto; ícone carrinho → carrinho; Finalizar → checkout.
+Navegação: card/Adicionar → produto; ícone carrinho → carrinho; Finalizar → checkout; Gerar Pix → Pix.
 
 ## Layout web
 
@@ -80,4 +86,4 @@ Teste no domínio configurado em `APP1_DOMAIN` (hard refresh após deploy).
 
 ## Pendente (PDF)
 
-Telas 4–6: checkout completo, Pix, confirmação. API: pedidos + Mercado Pago.
+Telas 5–6: Pix Mercado Pago real, confirmação. API: pedidos + Mercado Pago.

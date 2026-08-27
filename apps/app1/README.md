@@ -60,8 +60,10 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 | Tela catálogo | `frontend/lib/screens/home_screen.dart` |
 | Tela produto | `frontend/lib/screens/product_screen.dart` |
 | Tela carrinho | `frontend/lib/screens/cart_screen.dart` |
-| Checkout (placeholder) | `frontend/lib/screens/checkout_screen.dart` |
+| Tela checkout | `frontend/lib/screens/checkout_screen.dart` |
+| Pix (placeholder) | `frontend/lib/screens/pix_screen.dart` |
 | Carrinho (memória) | `frontend/lib/cart/` |
+| Validadores checkout | `frontend/lib/checkout/` |
 
 ### Implementado
 
@@ -70,13 +72,14 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 | 1 | Catálogo | Wordmark, busca, chips, grade 2 colunas, bottom nav no body, badge dinâmico no carrinho |
 | 2 | Produto | Moldura, opções (brownies), quantidade, total no botão Adicionar, grava em `CartController` |
 | 3 | Carrinho | Linhas com stepper compacto, ENTREGA (retirar/receber), resumo, Finalizar pedido |
-| 4 | Checkout | Placeholder — formulário e Pix ainda não implementados |
+| 4 | Checkout | Nome, WhatsApp (validado), retirada, card Pix visual, Gerar Pix → tela 5 |
+| 5 | Pagamento Pix | Placeholder (sem QR/código fake) |
 
-**Navegação:** catálogo → produto (card ou Adicionar); catálogo → carrinho (ícone); carrinho → checkout (Finalizar pedido).
+**Navegação:** catálogo → produto (card ou Adicionar); catálogo → carrinho (ícone); carrinho → checkout (Finalizar); checkout → Pix (Gerar Pix).
 
-### Pendente (telas 4–6)
+### Pendente (telas 5–6)
 
-Checkout completo (nome, WhatsApp, retirada, Pix Mercado Pago), tela de pagamento Pix, confirmação. API: criação de pedidos e Mercado Pago.
+Pix Mercado Pago real, confirmação. API: criação de pedidos e Mercado Pago.
 
 ## Mobile
 

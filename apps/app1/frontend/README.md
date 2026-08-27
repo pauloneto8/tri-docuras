@@ -30,14 +30,20 @@ lib/
 │   ├── home_screen.dart      # catálogo (tela 1)
 │   ├── product_screen.dart   # detalhe do produto (tela 2)
 │   ├── cart_screen.dart      # carrinho (tela 3)
-│   └── checkout_screen.dart  # checkout (tela 4, placeholder)
+│   ├── checkout_screen.dart  # checkout (tela 4)
+│   └── pix_screen.dart       # pagamento Pix (tela 5, placeholder)
+├── checkout/
+│   ├── checkout_draft.dart      # rascunho em memória (PII não persistido)
+│   ├── checkout_validators.dart # nome/WhatsApp
+│   └── whatsapp_input_formatter.dart
 └── widgets/
     ├── td_button.dart
     ├── td_chip.dart
     ├── td_icon_button.dart
     ├── td_photo_frame.dart
     ├── td_quantity_stepper.dart
-    └── td_search_field.dart
+    ├── td_search_field.dart
+    └── td_text_field.dart
 ```
 
 ## Design system
@@ -84,6 +90,7 @@ Render PNG das páginas (comparação visual): `/root/.cursor/docs/tri-docuras/r
 | `TdButton` | Pill; variantes `primary`, `outline`, `soft`, `disabled`. Texto em caixa normal (não uppercase). Suporta `trailing` (ex.: preço na tela de produto). |
 | `TdChip` | Filtro de categoria; selecionado = dark + texto branco; inativo = peach + texto dark. |
 | `TdSearchField` | Campo pill branco com sombra; ícone de busca em sky. |
+| `TdTextField` | Campo de formulário (cantos 12px); usado no checkout. |
 | `TdPhotoFrame` | Moldura assinatura: círculo com dois anéis marrons (`CustomPaint`) + coração rosa no centro; preenchimento peach. Aceita `imageUrl` opcional. |
 | `TdIconButton` | Botão circular (header menu, voltar, favorito, carrinho). |
 | `TdQuantityStepper` | Seletor `−` / quantidade / `+` com círculos outline brown. Modo `compact` nas linhas do carrinho. |
@@ -118,27 +125,38 @@ Implementada conforme página 5 do PDF (lado esquerdo):
 - **Linhas:** moldura pequena, nome, preço unitário, stepper compacto
 - **ENTREGA:** `Retirar na loja` / `Receber em casa` (chips pill)
 - **Resumo:** Subtotal, Retirada/Entrega (Grátis), Total
-- **Rodapé:** `Finalizar pedido` + total → navega ao checkout (placeholder)
+- **Rodapé:** `Finalizar pedido` + total → navega ao checkout
 - Ícone do carrinho no catálogo abre esta tela
 - Carrinho vazio: mensagem orientando adicionar produtos
 
 ### Tela 4 — Checkout (`checkout_screen.dart`)
 
-**Placeholder** — aberta pelo botão Finalizar pedido no carrinho. Pendente: formulário (nome, WhatsApp), opções de retirada, pagamento Pix Mercado Pago e botão Gerar Pix (PDF página 5, lado direito).
+Implementada conforme página 5 do PDF (lado direito), com validação no cliente:
+
+- **Header:** voltar + título "Finalizar" (Lora)
+- **NOME COMPLETO** / **WHATSAPP** — `TdTextField` + validadores (`checkout_validators.dart`); máscara `(11) 91234-5678`
+- **RETIRADA / ENTREGA** — card somente leitura (sem formulário de endereço)
+- **PAGAMENTO** — card visual "Pix via Mercado Pago" (sem integração)
+- **Resumo:** Subtotal e Total a pagar via `CartController`
+- **Rodapé:** `Gerar Pix` + total — desabilitado até formulário válido; abre tela 5
+- PII só em memória (`CheckoutDraft` por construtor); sem persistência, URL ou logs
+
+### Tela 5 — Pagamento Pix (`pix_screen.dart`)
+
+**Placeholder** — sem QR nem código Pix inventado (risco de fraude). Total exibido a partir do draft.
 
 ### Fluxo de navegação
 
 ```
 HomeScreen ──► ProductScreen ──(Adicionar)──► pop → HomeScreen
-HomeScreen ──(ícone carrinho)──► CartScreen ──(Finalizar)──► CheckoutScreen
+HomeScreen ──(ícone carrinho)──► CartScreen ──(Finalizar)──► CheckoutScreen ──(Gerar Pix)──► PixScreen
 ```
 
 Estado do carrinho: `CartController` em memória (sem persistência). Badge do header = `itemCount`.
 
-### Pendente (PDF telas 4–6)
+### Pendente (PDF telas 5–6)
 
-Checkout completo, Pix Mercado Pago, confirmação. Melhorias opcionais: persistência do carrinho, favoritos, taxa de entrega para "Receber em casa".
-
+Pix Mercado Pago real, confirmação. API: pedidos + webhook. Melhorias opcionais: persistência do carrinho, favoritos, taxa de entrega.
 ## Desenvolvimento
 
 ```bash
