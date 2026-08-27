@@ -1,0 +1,43 @@
+# Secrets e ambiente local
+.env
+.env.*
+!.env.example
+
+# Certificados e ACME
+certs/
+www/certbot/
+
+# Flutter / Dart
+**/.dart_tool/
+**/.flutter-plugins-dependencies
+**/build/
+**/.packages
+**/coverage/
+**/.pub/
+
+# Android
+**/android/local.properties
+**/android/.gradle/
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+
+# iOS (gerados)
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# IDE
+**/.idea/
+**/*.iml
+
+# Dart Frog / API build
+apps/app1/api/build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporários de deploy
+/tmp/

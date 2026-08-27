@@ -1,0 +1,16 @@
+name: tri_docuras_api
+description: API Tri Doçuras - Dart Frog
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  dart_frog: ^1.2.0
+  postgres: ^3.5.2
+
+dev_dependencies:
+  dart_frog_lint: ^0.1.0
+  mocktail: ^1.0.4
+  test: ^1.25.8

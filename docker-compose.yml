@@ -1,0 +1,137 @@
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: hosting-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP1_DOMAIN: ${APP1_DOMAIN}
+      APP2_DOMAIN: ${APP2_DOMAIN}
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./certs:/etc/letsencrypt
+      - ./www/certbot:/var/www/certbot
+    depends_on:
+      app1:
+        condition: service_started
+      app1-web:
+        condition: service_started
+      app2:
+        condition: service_started
+    networks:
+      - proxy
+    restart: unless-stopped
+
+  # --- Tri Doçuras (App 1) ---
+  app1:
+    build: ./apps/app1/api
+    container_name: hosting-app1
+    environment:
+      APP_NAME: tri_docuras
+      PORT: "8080"
+      DATABASE_URL: postgresql://${APP1_DB_USER}:${APP1_DB_PASSWORD}@app1-db:5432/${APP1_DB_NAME}
+      DB_HOST: app1-db
+      DB_PORT: "5432"
+      DB_USER: ${APP1_DB_USER}
+      DB_PASSWORD: ${APP1_DB_PASSWORD}
+      DB_NAME: ${APP1_DB_NAME}
+    networks:
+      - proxy
+      - app1_internal
+    depends_on:
+      app1-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  app1-web:
+    build: ./apps/app1/frontend
+    container_name: hosting-app1-web
+    networks:
+      - proxy
+    restart: unless-stopped
+
+  app1-db:
+    image: postgres:16-alpine
+    container_name: hosting-app1-db
+    environment:
+      POSTGRES_USER: ${APP1_DB_USER}
+      POSTGRES_PASSWORD: ${APP1_DB_PASSWORD}
+      POSTGRES_DB: ${APP1_DB_NAME}
+    volumes:
+      - app1_db_data:/var/lib/postgresql/data
+    networks:
+      - app1_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # --- App 2 (stack isolada) ---
+  app2:
+    build: ./apps/app2
+    container_name: hosting-app2
+    environment:
+      APP_NAME: app2
+      DATABASE_URL: postgresql://${APP2_DB_USER}:${APP2_DB_PASSWORD}@app2-db:5432/${APP2_DB_NAME}
+      DB_HOST: app2-db
+      DB_PORT: "5432"
+      DB_USER: ${APP2_DB_USER}
+      DB_PASSWORD: ${APP2_DB_PASSWORD}
+      DB_NAME: ${APP2_DB_NAME}
+    networks:
+      - proxy
+      - app2_internal
+    depends_on:
+      app2-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  app2-db:
+    image: postgres:16-alpine
+    container_name: hosting-app2-db
+    environment:
+      POSTGRES_USER: ${APP2_DB_USER}
+      POSTGRES_PASSWORD: ${APP2_DB_PASSWORD}
+      POSTGRES_DB: ${APP2_DB_NAME}
+    volumes:
+      - app2_db_data:/var/lib/postgresql/data
+    networks:
+      - app2_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: hosting-certbot
+    volumes:
+      - ./certs:/etc/letsencrypt
+      - ./www/certbot:/var/www/certbot
+    profiles:
+      - certbot
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    name: proxy
+  app1_internal:
+    name: app1_internal
+    internal: true
+  app2_internal:
+    name: app2_internal
+    internal: true
+
+volumes:
+  app1_db_data:
+    name: app1_db_data
+  app2_db_data:
+    name: app2_db_data
