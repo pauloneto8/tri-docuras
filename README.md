@@ -73,7 +73,9 @@ Expor apenas as portas necessárias para o app web (`80`, `443`) e SSH conforme 
 
 ## Tri Doçuras (App 1)
 
-Frontend Flutter web com catálogo alinhado ao Design System v1 (tela 1 do PDF). Rebuild após mudanças no UI:
+Frontend Flutter web alinhado ao Design System v1. Telas implementadas: **catálogo**, **produto** e **carrinho** (checkout em placeholder). Carrinho em memória via `CartController`; API expõe catálogo (`GET /api/products`).
+
+Rebuild após mudanças no UI:
 
 ```bash
 docker compose build app1-web && docker compose up -d app1-web

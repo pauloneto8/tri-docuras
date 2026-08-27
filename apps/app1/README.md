@@ -59,19 +59,24 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 | Widgets base | `frontend/lib/widgets/` |
 | Tela catálogo | `frontend/lib/screens/home_screen.dart` |
 | Tela produto | `frontend/lib/screens/product_screen.dart` |
+| Tela carrinho | `frontend/lib/screens/cart_screen.dart` |
+| Checkout (placeholder) | `frontend/lib/screens/checkout_screen.dart` |
 | Carrinho (memória) | `frontend/lib/cart/` |
 
 ### Implementado
 
-**Tela 1 — Catálogo:** wordmark, busca, chips, grade 2 colunas, bottom nav, navegação para produto.
+| # | Tela | Resumo |
+|---|------|--------|
+| 1 | Catálogo | Wordmark, busca, chips, grade 2 colunas, bottom nav no body, badge dinâmico no carrinho |
+| 2 | Produto | Moldura, opções (brownies), quantidade, total no botão Adicionar, grava em `CartController` |
+| 3 | Carrinho | Linhas com stepper compacto, ENTREGA (retirar/receber), resumo, Finalizar pedido |
+| 4 | Checkout | Placeholder — formulário e Pix ainda não implementados |
 
-**Tela 2 — Produto:** opções de tamanho/extra, quantidade, total dinâmico, adicionar ao carrinho em memória (badge atualiza no catálogo).
-
-**Tela 3 — Carrinho:** lista de itens, entrega, resumo, finalizar pedido (checkout placeholder).
+**Navegação:** catálogo → produto (card ou Adicionar); catálogo → carrinho (ícone); carrinho → checkout (Finalizar pedido).
 
 ### Pendente (telas 4–6)
 
-Checkout completo, Pix Mercado Pago, confirmação.
+Checkout completo (nome, WhatsApp, retirada, Pix Mercado Pago), tela de pagamento Pix, confirmação. API: criação de pedidos e Mercado Pago.
 
 ## Mobile
 

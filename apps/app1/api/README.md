@@ -2,6 +2,8 @@
 
 API REST em Dart para catálogo de produtos e integração com o app Flutter.
 
+O frontend consome o catálogo na tela 1; carrinho e checkout usam estado local até existirem endpoints de pedidos e Mercado Pago.
+
 ## Endpoints
 
 | Método | Rota | Descrição |
@@ -87,3 +89,8 @@ O container aguarda o banco, roda seed e inicia `dart build/bin/server.dart` na 
 ## CORS
 
 Liberado para desenvolvimento (`Access-Control-Allow-Origin: *` no middleware).
+
+## Pendente
+
+- `POST /api/orders` — criar pedido a partir do carrinho
+- Integração Mercado Pago (Pix) e webhook de confirmação de pagamento

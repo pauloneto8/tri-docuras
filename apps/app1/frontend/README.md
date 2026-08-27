@@ -17,9 +17,10 @@ lib/
 ├── main.dart              # MaterialApp + CartScope + tema
 ├── config.dart            # apiBaseUrl (web: /api, mobile: host)
 ├── cart/
-│   ├── cart_controller.dart
+│   ├── cart_controller.dart   # itens, deliveryMode, subtotal/total
 │   ├── cart_item.dart
-│   └── cart_scope.dart
+│   ├── cart_scope.dart        # InheritedWidget para CartController
+│   └── delivery_mode.dart     # retirar na loja / receber em casa
 ├── theme/
 │   ├── app_colors.dart    # paleta do design system
 │   └── app_theme.dart     # ThemeData + tipografia
@@ -85,7 +86,7 @@ Render PNG das páginas (comparação visual): `/root/.cursor/docs/tri-docuras/r
 | `TdSearchField` | Campo pill branco com sombra; ícone de busca em sky. |
 | `TdPhotoFrame` | Moldura assinatura: círculo com dois anéis marrons (`CustomPaint`) + coração rosa no centro; preenchimento peach. Aceita `imageUrl` opcional. |
 | `TdIconButton` | Botão circular (header menu, voltar, favorito, carrinho). |
-| `TdQuantityStepper` | Seletor `−` / quantidade / `+` com círculos outline brown. |
+| `TdQuantityStepper` | Seletor `−` / quantidade / `+` com círculos outline brown. Modo `compact` nas linhas do carrinho. |
 
 ### Tela 1 — Catálogo (`home_screen.dart`)
 
@@ -119,10 +120,24 @@ Implementada conforme página 5 do PDF (lado esquerdo):
 - **Resumo:** Subtotal, Retirada/Entrega (Grátis), Total
 - **Rodapé:** `Finalizar pedido` + total → navega ao checkout (placeholder)
 - Ícone do carrinho no catálogo abre esta tela
+- Carrinho vazio: mensagem orientando adicionar produtos
+
+### Tela 4 — Checkout (`checkout_screen.dart`)
+
+**Placeholder** — aberta pelo botão Finalizar pedido no carrinho. Pendente: formulário (nome, WhatsApp), opções de retirada, pagamento Pix Mercado Pago e botão Gerar Pix (PDF página 5, lado direito).
+
+### Fluxo de navegação
+
+```
+HomeScreen ──► ProductScreen ──(Adicionar)──► pop → HomeScreen
+HomeScreen ──(ícone carrinho)──► CartScreen ──(Finalizar)──► CheckoutScreen
+```
+
+Estado do carrinho: `CartController` em memória (sem persistência). Badge do header = `itemCount`.
 
 ### Pendente (PDF telas 4–6)
 
-Checkout completo, Pix Mercado Pago, confirmação.
+Checkout completo, Pix Mercado Pago, confirmação. Melhorias opcionais: persistência do carrinho, favoritos, taxa de entrega para "Receber em casa".
 
 ## Desenvolvimento
 

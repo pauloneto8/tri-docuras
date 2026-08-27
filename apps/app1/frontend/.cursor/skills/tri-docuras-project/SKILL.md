@@ -32,18 +32,23 @@ Lora Italic (wordmark `displayMedium`, produtos `titleMedium`), Lora (headings),
 - `TdChip` — selecionado dark/white; inativo peach/dark
 - `TdSearchField` — pill branco, ícone sky
 - `TdPhotoFrame` — moldura circular (dois anéis brown + coração pink), preenchimento peach
+- `TdIconButton` — botão circular (menu, voltar, favorito, carrinho)
+- `TdQuantityStepper` — seletor quantidade; modo `compact` no carrinho
 
-### Catálogo (`home_screen.dart`)
+### Carrinho (`lib/cart/`)
 
-Header, busca, chips, grade 2 colunas, bottom nav. Badge do carrinho via `CartScope`. Card/Adicionar abre `ProductScreen`.
+`CartController` (memória), `CartScope`, `DeliveryMode` (pickup/delivery).
 
-### Produto (`product_screen.dart`)
+### Telas
 
-Voltar/favorito, moldura, opções (brownies), stepper qty=2, botão Adicionar + total. Combos sem opções. `cart.add()` + pop.
+| # | Arquivo | Status |
+|---|---------|--------|
+| 1 | `home_screen.dart` | Catálogo — badge, busca, chips, grade, nav no body |
+| 2 | `product_screen.dart` | Produto — opções, stepper, Adicionar + total |
+| 3 | `cart_screen.dart` | Carrinho — linhas, ENTREGA, resumo, Finalizar |
+| 4 | `checkout_screen.dart` | Placeholder |
 
-### Carrinho (`cart_screen.dart`)
-
-Linhas com stepper compacto, ENTREGA (retirar/receber), resumo, Finalizar pedido → checkout placeholder. Ícone carrinho no catálogo abre a tela.
+Navegação: card/Adicionar → produto; ícone carrinho → carrinho; Finalizar → checkout.
 
 ## Layout web
 
@@ -75,4 +80,4 @@ Teste no domínio configurado em `APP1_DOMAIN` (hard refresh após deploy).
 
 ## Pendente (PDF)
 
-Telas 4–6: checkout completo, Pix, confirmação.
+Telas 4–6: checkout completo, Pix, confirmação. API: pedidos + Mercado Pago.
