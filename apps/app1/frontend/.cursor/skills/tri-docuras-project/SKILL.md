@@ -57,7 +57,7 @@ docker compose up -d --build app1-web   # só frontend
 docker compose up -d --build app1      # API
 ```
 
-Teste: http://143.95.165.99/ (hard refresh após deploy)
+Teste no domínio configurado em `APP1_DOMAIN` (hard refresh após deploy).
 
 ## Plataformas
 

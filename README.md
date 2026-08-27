@@ -2,9 +2,6 @@
 
 Infraestrutura Docker para hospedar duas aplicações isoladas, com Nginx como proxy reverso por domínio.
 
-**IP público:** `143.95.165.99`  
-**SSH:** porta `22022`
-
 ## Arquitetura
 
 ```
@@ -40,7 +37,7 @@ Cada app tem stack isolada: container web/API, PostgreSQL dedicado, rede interna
 | `APP1_DOMAIN` | `tridocuras.example.com` | Tri Doçuras |
 | `APP2_DOMAIN` | `app2.example.com` | App 2 |
 
-Até o DNS apontar para o VPS, o site responde também pelo IP (`http://143.95.165.99/`).
+Configure o DNS do domínio (`APP1_DOMAIN`) para apontar ao servidor antes de usar HTTPS.
 
 ## Comandos úteis
 
@@ -66,13 +63,13 @@ docker compose logs -f app1 app1-web nginx
 ## HTTPS (quando o DNS existir)
 
 1. Edite `APP1_DOMAIN` e `CERTBOT_EMAIL` no `.env`
-2. Aponte o registro **A** do domínio para `143.95.165.99`
+2. Aponte o registro **A** do domínio ao IP público do servidor (no provedor/DNS)
 3. `./scripts/reload-nginx.sh`
 4. `./scripts/issue-certs.sh`
 
 ## Firewall (UFW)
 
-Portas abertas: `22022` (SSH), `80`, `443`.
+Expor apenas as portas necessárias para o app web (`80`, `443`) e SSH conforme a política do provedor.
 
 ## Tri Doçuras (App 1)
 

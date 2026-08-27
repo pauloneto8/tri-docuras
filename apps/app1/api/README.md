@@ -12,7 +12,7 @@ API REST em Dart para catálogo de produtos e integração com o app Flutter.
 ### Exemplo — health
 
 ```bash
-curl -H "Host: tridocuras.example.com" http://143.95.165.99/api/health
+curl https://tridocuras.example.com/api/health
 ```
 
 ```json

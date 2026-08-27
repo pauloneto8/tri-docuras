@@ -137,8 +137,8 @@ Invocar: `/flutter-build-responsive-layout` ou `@tri-docuras-project`
 ## Teste
 
 ```bash
-curl -s http://143.95.165.99/api/products
-# Abrir no navegador: http://143.95.165.99/
+curl -s https://tridocuras.example.com/api/products
+# Abrir no navegador: https://tridocuras.example.com/
 ```
 
 Após deploy, use hard refresh (`Ctrl+Shift+R`) para evitar cache do build anterior.
