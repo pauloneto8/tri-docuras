@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:tri_docuras/cart/cart_scope.dart';
 import 'package:tri_docuras/config.dart';
 import 'package:tri_docuras/models/product.dart';
+import 'package:tri_docuras/screens/cart_screen.dart';
+import 'package:tri_docuras/screens/product_screen.dart';
 import 'package:tri_docuras/services/api_service.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
 import 'package:tri_docuras/widgets/td_button.dart';
 import 'package:tri_docuras/widgets/td_chip.dart';
+import 'package:tri_docuras/widgets/td_icon_button.dart';
 import 'package:tri_docuras/widgets/td_photo_frame.dart';
 import 'package:tri_docuras/widgets/td_search_field.dart';
 
@@ -67,15 +71,34 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _navIndex = index);
   }
 
+  void _openProduct(Product product) {
+    if (!product.available) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProductScreen(product: product),
+      ),
+    );
+  }
+
+  void _openCart() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const CartScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final cartCount = CartScope.of(context).itemCount;
     return ColoredBox(
       color: AppColors.cream,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _CatalogHeader(cartCount: 2),
+            _CatalogHeader(
+              cartCount: cartCount,
+              onCartTap: _openCart,
+            ),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -199,7 +222,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   mainAxisExtent: 268,
                 ),
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => _ProductGridCard(product: products[index]),
+                  (context, index) => _ProductGridCard(
+                    product: products[index],
+                    onTap: () => _openProduct(products[index]),
+                    onAdd: () => _openProduct(products[index]),
+                  ),
                   childCount: products.length,
                 ),
               ),
@@ -212,9 +239,13 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _CatalogHeader extends StatelessWidget {
-  const _CatalogHeader({required this.cartCount});
+  const _CatalogHeader({
+    required this.cartCount,
+    required this.onCartTap,
+  });
 
   final int cartCount;
+  final VoidCallback onCartTap;
 
   @override
   Widget build(BuildContext context) {
@@ -224,7 +255,7 @@ class _CatalogHeader extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
         child: Row(
           children: [
-            _HeaderIconButton(
+            TdIconButton(
               icon: Icons.menu,
               onPressed: () {},
               tint: AppColors.peach,
@@ -239,9 +270,9 @@ class _CatalogHeader extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                _HeaderIconButton(
+                TdIconButton(
                   icon: Icons.shopping_cart_outlined,
-                  onPressed: () {},
+                  onPressed: onCartTap,
                   tint: AppColors.peach,
                 ),
                 if (cartCount > 0)
@@ -276,81 +307,66 @@ class _CatalogHeader extends StatelessWidget {
   }
 }
 
-class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({
-    required this.icon,
-    required this.onPressed,
-    this.tint,
+class _ProductGridCard extends StatelessWidget {
+  const _ProductGridCard({
+    required this.product,
+    required this.onTap,
+    required this.onAdd,
   });
 
-  final IconData icon;
-  final VoidCallback onPressed;
-  final Color? tint;
+  final Product product;
+  final VoidCallback onTap;
+  final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: tint ?? Colors.transparent,
-      shape: const CircleBorder(),
+      color: Colors.transparent,
       child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Icon(icon, color: AppColors.dark, size: 24),
-        ),
-      ),
-    );
-  }
-}
-
-class _ProductGridCard extends StatelessWidget {
-  const _ProductGridCard({required this.product});
-
-  final Product product;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.card,
+        onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.dark.withValues(alpha: 0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.dark.withValues(alpha: 0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
-        child: Column(
-          children: [
-            const Expanded(
-              child: TdPhotoFrame(),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+            child: Column(
+              children: [
+                const Expanded(
+                  child: TdPhotoFrame(),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  product.name,
+                  style: Theme.of(context).textTheme.titleMedium,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  product.formattedPrice,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                TdButton(
+                  label: product.available ? 'Adicionar' : 'Indisponível',
+                  variant: product.available ? TdButtonVariant.primary : TdButtonVariant.disabled,
+                  onPressed: product.available ? onAdd : null,
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              product.name,
-              style: Theme.of(context).textTheme.titleMedium,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              product.formattedPrice,
-              style: Theme.of(context).textTheme.bodyLarge,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            TdButton(
-              label: product.available ? 'Adicionar' : 'Indisponível',
-              variant: product.available ? TdButtonVariant.primary : TdButtonVariant.disabled,
-              onPressed: product.available ? () {} : null,
-            ),
-          ],
+          ),
         ),
       ),
     );

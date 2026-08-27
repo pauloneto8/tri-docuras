@@ -14,18 +14,28 @@ App multiplataforma da doceria Tri Doçuras (Android, iOS e web).
 
 ```
 lib/
-├── main.dart              # MaterialApp + tema
+├── main.dart              # MaterialApp + CartScope + tema
 ├── config.dart            # apiBaseUrl (web: /api, mobile: host)
+├── cart/
+│   ├── cart_controller.dart
+│   ├── cart_item.dart
+│   └── cart_scope.dart
 ├── theme/
 │   ├── app_colors.dart    # paleta do design system
 │   └── app_theme.dart     # ThemeData + tipografia
 ├── models/product.dart
 ├── services/api_service.dart
-├── screens/home_screen.dart  # catálogo (tela 1 do design system)
+├── screens/
+│   ├── home_screen.dart      # catálogo (tela 1)
+│   ├── product_screen.dart   # detalhe do produto (tela 2)
+│   ├── cart_screen.dart      # carrinho (tela 3)
+│   └── checkout_screen.dart  # checkout (tela 4, placeholder)
 └── widgets/
     ├── td_button.dart
     ├── td_chip.dart
+    ├── td_icon_button.dart
     ├── td_photo_frame.dart
+    ├── td_quantity_stepper.dart
     └── td_search_field.dart
 ```
 
@@ -74,23 +84,45 @@ Render PNG das páginas (comparação visual): `/root/.cursor/docs/tri-docuras/r
 | `TdChip` | Filtro de categoria; selecionado = dark + texto branco; inativo = peach + texto dark. |
 | `TdSearchField` | Campo pill branco com sombra; ícone de busca em sky. |
 | `TdPhotoFrame` | Moldura assinatura: círculo com dois anéis marrons (`CustomPaint`) + coração rosa no centro; preenchimento peach. Aceita `imageUrl` opcional. |
+| `TdIconButton` | Botão circular (header menu, voltar, favorito, carrinho). |
+| `TdQuantityStepper` | Seletor `−` / quantidade / `+` com círculos outline brown. |
 
 ### Tela 1 — Catálogo (`home_screen.dart`)
 
-Implementada conforme página 4 do PDF:
+Implementada conforme página 4 do PDF (lado esquerdo):
 
-- **Header:** menu (círculo peach) | wordmark Lora Italic centralizado | carrinho (círculo peach) + badge `2`
+- **Header:** menu (círculo peach) | wordmark Lora Italic centralizado | carrinho (círculo peach) + badge dinâmico (`CartController.itemCount`)
 - **Busca:** `TdSearchField` — placeholder "Buscar brownie..."
 - **Chips:** Todos / Brownies / Combos
-- **Grade:** 2 colunas fixas, `mainAxisExtent: 268`, cards off-white com moldura circular
+- **Grade:** 2 colunas fixas, cards off-white com moldura circular
+- **Navegação:** toque no card ou em "Adicionar" abre a tela de produto
 - **Bottom nav:** dentro do `body` (Column), não `Scaffold.bottomNavigationBar`
-  - Início: pinkDeep (ativo)
-  - Pedidos: sky
-  - Favoritos / Perfil: tan
 
-### Pendente (PDF telas 2–6)
+### Tela 2 — Produto (`product_screen.dart`)
 
-Detalhe do produto, carrinho, checkout, Pix Mercado Pago, confirmação.
+Implementada conforme página 4 do PDF (lado direito):
+
+- **Header:** voltar (←) e favorito (♥) em círculos peach
+- **Moldura** grande, nome (Lora), preço `/ unidade`, descrição
+- **Opções** (brownies): chips `9x9cm` / `Fatia grande` + toggle `Sem lactose +R$3`
+- **Combos:** sem chips de tamanho/extra
+- **Quantidade:** stepper (default 2)
+- **Rodapé:** `TdButton` "Adicionar" + total dinâmico; grava em `CartController` e volta ao catálogo
+
+### Tela 3 — Carrinho (`cart_screen.dart`)
+
+Implementada conforme página 5 do PDF (lado esquerdo):
+
+- **Header:** voltar + título "Seu carrinho" (Lora)
+- **Linhas:** moldura pequena, nome, preço unitário, stepper compacto
+- **ENTREGA:** `Retirar na loja` / `Receber em casa` (chips pill)
+- **Resumo:** Subtotal, Retirada/Entrega (Grátis), Total
+- **Rodapé:** `Finalizar pedido` + total → navega ao checkout (placeholder)
+- Ícone do carrinho no catálogo abre esta tela
+
+### Pendente (PDF telas 4–6)
+
+Checkout completo, Pix Mercado Pago, confirmação.
 
 ## Desenvolvimento
 

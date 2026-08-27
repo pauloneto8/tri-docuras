@@ -35,7 +35,15 @@ Lora Italic (wordmark `displayMedium`, produtos `titleMedium`), Lora (headings),
 
 ### Catálogo (`home_screen.dart`)
 
-Header: menu peach | wordmark central Lora Italic | carrinho peach + badge. Grade 2 colunas, cards Card `#FFFBF6`. Nav no `body`, cores: Início pinkDeep, Pedidos sky, Favoritos/Perfil tan.
+Header, busca, chips, grade 2 colunas, bottom nav. Badge do carrinho via `CartScope`. Card/Adicionar abre `ProductScreen`.
+
+### Produto (`product_screen.dart`)
+
+Voltar/favorito, moldura, opções (brownies), stepper qty=2, botão Adicionar + total. Combos sem opções. `cart.add()` + pop.
+
+### Carrinho (`cart_screen.dart`)
+
+Linhas com stepper compacto, ENTREGA (retirar/receber), resumo, Finalizar pedido → checkout placeholder. Ícone carrinho no catálogo abre a tela.
 
 ## Layout web
 
@@ -67,4 +75,4 @@ Teste no domínio configurado em `APP1_DOMAIN` (hard refresh após deploy).
 
 ## Pendente (PDF)
 
-Telas 2–6: produto, carrinho, checkout, Pix, confirmação.
+Telas 4–6: checkout completo, Pix, confirmação.

@@ -1,0 +1,4 @@
+enum DeliveryMode {
+  pickup,
+  delivery,
+}

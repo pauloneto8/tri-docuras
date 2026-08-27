@@ -58,17 +58,20 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 | Tokens e tema | `frontend/lib/theme/` |
 | Widgets base | `frontend/lib/widgets/` |
 | Tela catálogo | `frontend/lib/screens/home_screen.dart` |
+| Tela produto | `frontend/lib/screens/product_screen.dart` |
+| Carrinho (memória) | `frontend/lib/cart/` |
 
-### Implementado (tela 1 — Catálogo)
+### Implementado
 
-- Wordmark Lora Italic, header com menu/carrinho em círculos peach
-- Busca pill, chips (dark/peach), grade 2 colunas
-- Moldura circular assinatura (anéis + coração)
-- Botões pill sem uppercase, bottom nav com cores por ícone
+**Tela 1 — Catálogo:** wordmark, busca, chips, grade 2 colunas, bottom nav, navegação para produto.
 
-### Pendente (telas 2–6)
+**Tela 2 — Produto:** opções de tamanho/extra, quantidade, total dinâmico, adicionar ao carrinho em memória (badge atualiza no catálogo).
 
-Produto, carrinho, checkout, Pix Mercado Pago, confirmação.
+**Tela 3 — Carrinho:** lista de itens, entrega, resumo, finalizar pedido (checkout placeholder).
+
+### Pendente (telas 4–6)
+
+Checkout completo, Pix Mercado Pago, confirmação.
 
 ## Mobile
 
