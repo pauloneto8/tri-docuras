@@ -10,7 +10,7 @@ AssistFin é finanças pessoais multiusuário com chat híbrido (regras + Groq +
 
 1. Leia o [README.md](README.md) e a skill relevante em `.cursor/skills/`.
 2. Mudança no agente → `assistfin-ai-agent` + `assistfin-agent-tests`.
-3. Mudança financeira → `assistfin-finance-domain` + testes em `tests/test_summary.py`, `tests/test_transfers.py`.
+3. Mudança financeira → `assistfin-finance-domain` + testes em `tests/test_summary.py`, `tests/test_transfers.py`, `tests/test_planned_transactions.py`.
 4. Deploy → `assistfin-deploy-nginx` + `assistfin-implementation`.
 
 ## Regras de ouro
@@ -44,6 +44,15 @@ Dashboard: `get_summary()` com `period` + `ref_date`. Saldos por conta usam `acc
 
 Wizard de transação (`transaction_slots.py`): após tipo e status, pergunta datas antes de valor/descrição/conta/categoria.
 
+### UI Movimentos (`/transactions`)
+
+| Seção | Conteúdo |
+|-------|----------|
+| **A realizar** | `status = planned` pendente (`not is_realized`); vencimento; ação **Realizar** |
+| **Extrato** | Somente `status = actual`; data de pagamento; “de previsto” quando `source_planned_id` |
+
+Previstos liquidados **não** listados (evita duplicata). Pares previsto/realizado no dashboard (`plan_vs_actual`). Consultas separadas: `ListTransactionsInput(status="planned")` e `status="actual"`.
+
 ## Checklist de feature
 
 1. Modelo + migração Alembic (se persistir)
@@ -60,6 +69,7 @@ Wizard de transação (`transaction_slots.py`): após tipo e status, pergunta da
 | Cálculos | `app/services/finance.py` |
 | Agente | `app/agent/runner.py`, `app/services/tools.py` |
 | Wizards | `transaction_wizard.py`, `transaction_slots.py`, `account_wizard.py`, `category_wizard.py`, `transfer_slots.py` |
+| UI movimentos | `templates/transactions.html`, `routers/pages.py` (`_transactions_page_context`) |
 | UI chat | `templates/partials/agent_*.html` |
 | Auth | `app/auth.py`, `app/routers/auth.py`, `app/main.py` |
 

@@ -26,6 +26,7 @@ docker compose exec -T app2 python -m pytest \
   tests/test_transaction_slots.py \
   tests/test_transaction_dates.py \
   tests/test_parse_date.py \
+  tests/test_planned_transactions.py \
   tests/test_account_wizard.py \
   tests/test_category_wizard.py \
   tests/test_runner_wizard_escape.py \
@@ -46,6 +47,7 @@ docker compose exec -T app2 python -m pytest \
 | `test_transaction_wizard.py` | wizard despesa/receita + slots de data |
 | `test_transaction_slots.py` | slots (status, datas, conta, categoria) |
 | `test_transaction_dates.py` | competência, vencimento, pagamento, orçamento |
+| `test_planned_transactions.py` | previsto/realizado, filtro `status`, projeção, `realize_planned` |
 | `test_parse_date.py` | `parse_date`, `parse_user_date` |
 | `test_account_wizard.py` | wizard conta |
 | `test_category_wizard.py` | wizard categoria, normalização nome |

@@ -91,16 +91,22 @@ async def dashboard(
     )
 
 
-@router.get("/transactions", response_class=HTMLResponse)
-async def transactions_page(
+def _transactions_page_context(
     request: Request,
-    user: User = Depends(require_user),
-    db: Session = Depends(get_db),
-):
-    templates = get_templates(request)
+    user: User,
+    db: Session,
+    *,
+    success: str | None = None,
+) -> dict:
     scope = read_scope_id(user)
     finance.seed_defaults(db, user.id)
-    txs = finance.list_transactions(db, scope, ListTransactionsInput(limit=50))
+    planned = finance.list_transactions(
+        db, scope, ListTransactionsInput(limit=50, status="planned")
+    )
+    pending_transactions = [tx for tx in planned if not tx["is_realized"]]
+    actual_transactions = finance.list_transactions(
+        db, scope, ListTransactionsInput(limit=50, status="actual")
+    )
     categories = (
         db.query(Category)
         .filter(Category.user_id == user.id)
@@ -113,17 +119,29 @@ async def transactions_page(
         .order_by(Account.name)
         .all()
     )
+    return {
+        "request": request,
+        "user": user,
+        "is_root": user.is_root,
+        "pending_transactions": pending_transactions,
+        "actual_transactions": actual_transactions,
+        "categories": categories,
+        "accounts": accounts,
+        "success": success,
+        "today": local_today().isoformat(),
+    }
+
+
+@router.get("/transactions", response_class=HTMLResponse)
+async def transactions_page(
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    templates = get_templates(request)
     return templates.TemplateResponse(
         "transactions.html",
-        {
-            "request": request,
-            "user": user,
-            "is_root": user.is_root,
-            "transactions": txs,
-            "categories": categories,
-            "accounts": accounts,
-            "today": local_today().isoformat(),
-        },
+        _transactions_page_context(request, user, db),
     )
 
 
@@ -252,15 +270,14 @@ async def create_transaction_form(
     type: str = Form(...),
     amount: str = Form(...),
     description: str = Form(""),
-    competence_date: date = Form(...),
-    due_date: date = Form(...),
+    competence_date: str | None = Form(None),
+    due_date: str | None = Form(None),
     payment_date: str | None = Form(None),
     is_planned: str | None = Form(None),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     templates = get_templates(request)
-    scope = read_scope_id(user)
 
     if type == "transfer":
         from_acc = db.get(Account, from_account_id)
@@ -269,7 +286,11 @@ async def create_transaction_form(
             raise ValueError("Contas de origem e destino inválidas.")
         from app.schemas import RegisterTransferInput
 
-        pay_date = date.fromisoformat(payment_date) if payment_date else competence_date
+        pay_date = (
+            date.fromisoformat(payment_date)
+            if payment_date
+            else local_today()
+        )
         finance.register_transfer(
             db,
             user.id,
@@ -278,8 +299,6 @@ async def create_transaction_form(
                 from_account_name=from_acc.name,
                 to_account_name=to_acc.name,
                 description=description or None,
-                competence_date=competence_date,
-                due_date=due_date,
                 payment_date=pay_date,
             ),
         )
@@ -288,7 +307,20 @@ async def create_transaction_form(
         if account_id is None:
             raise ValueError("Conta é obrigatória.")
         planned = is_planned == "on"
-        pay = date.fromisoformat(payment_date) if payment_date and not planned else None
+        if planned:
+            if not competence_date or not due_date:
+                raise ValueError("Competência e vencimento são obrigatórios para previsto.")
+            comp = date.fromisoformat(competence_date)
+            due = date.fromisoformat(due_date)
+            pay = None
+        else:
+            pay = (
+                date.fromisoformat(payment_date)
+                if payment_date
+                else local_today()
+            )
+            comp = date.fromisoformat(competence_date) if competence_date else None
+            due = date.fromisoformat(due_date) if due_date else None
         finance.create_transaction(
             db,
             user.id,
@@ -298,42 +330,20 @@ async def create_transaction_form(
                 type=type,
                 amount_cents=decimal_to_cents(amount),
                 description=description or "Lançamento",
-                competence_date=competence_date,
-                due_date=due_date,
+                competence_date=comp,
+                due_date=due,
                 payment_date=pay,
                 status="planned" if planned else "actual",
             ),
         )
         success = (
             "Previsão registrada com sucesso."
-            if is_planned == "on"
+            if planned
             else "Transação registrada com sucesso."
         )
-    txs = finance.list_transactions(db, scope, ListTransactionsInput(limit=50))
-    categories = (
-        db.query(Category)
-        .filter(Category.user_id == user.id)
-        .order_by(Category.name)
-        .all()
-    )
-    accounts = (
-        db.query(Account)
-        .filter(Account.user_id == user.id, Account.is_active.is_(True))
-        .order_by(Account.name)
-        .all()
-    )
     return templates.TemplateResponse(
         "transactions.html",
-        {
-            "request": request,
-            "user": user,
-            "is_root": user.is_root,
-            "transactions": txs,
-            "categories": categories,
-            "accounts": accounts,
-            "success": success,
-            "today": local_today().isoformat(),
-        },
+        _transactions_page_context(request, user, db, success=success),
     )
 
 
@@ -341,53 +351,28 @@ async def create_transaction_form(
 async def realize_planned_form(
     planned_id: int,
     request: Request,
-    amount: str = Form(...),
-    competence_date: date = Form(...),
-    due_date: date = Form(...),
+    amount: str | None = Form(None),
     payment_date: date = Form(...),
     description: str = Form(""),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     templates = get_templates(request)
-    scope = read_scope_id(user)
     finance.realize_planned(
         db,
         user.id,
         RealizePlannedInput(
             planned_id=planned_id,
-            amount=amount,
-            competence_date=competence_date,
-            due_date=due_date,
+            amount=amount if amount and amount.strip() else None,
             payment_date=payment_date,
             description=description or None,
         ),
     )
-    txs = finance.list_transactions(db, scope, ListTransactionsInput(limit=50))
-    categories = (
-        db.query(Category)
-        .filter(Category.user_id == user.id)
-        .order_by(Category.name)
-        .all()
-    )
-    accounts = (
-        db.query(Account)
-        .filter(Account.user_id == user.id, Account.is_active.is_(True))
-        .order_by(Account.name)
-        .all()
-    )
     return templates.TemplateResponse(
         "transactions.html",
-        {
-            "request": request,
-            "user": user,
-            "is_root": user.is_root,
-            "transactions": txs,
-            "categories": categories,
-            "accounts": accounts,
-            "success": "Previsto realizado com sucesso.",
-            "today": local_today().isoformat(),
-        },
+        _transactions_page_context(
+            request, user, db, success="Previsto realizado com sucesso."
+        ),
     )
 
 

@@ -172,6 +172,7 @@ class RealizePlannedInput(BaseModel):
 class ListTransactionsInput(BaseModel):
     limit: int = Field(default=10, ge=1, le=100)
     type: Literal["expense", "income", "transfer", "all"] = "all"
+    status: Literal["actual", "planned", "all"] = "all"
 
 
 class RegisterTransferInput(BaseModel):

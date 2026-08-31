@@ -30,7 +30,7 @@
 | `update_transaction` | transaction_id?, amount?, description?, account_name?, category_name?, transaction_date?, competence_date?, due_date?, payment_date? |
 | `delete_transaction` | transaction_id?, amount?, description? |
 | `update_account` | account_id?, account_name?, opening_balance?, opening_balance_date?, … |
-| `list_transactions` | limit?, type? |
+| `list_transactions` | limit?, type?, status? (`actual` \| `planned` \| `all`) |
 | `list_accounts` | {} |
 | `list_categories` | {} |
 | `get_summary` | year?, month? |
@@ -57,6 +57,7 @@ docker compose exec -T app2 python -m pytest \
   tests/test_transaction_slots.py \
   tests/test_transaction_dates.py \
   tests/test_parse_date.py \
+  tests/test_planned_transactions.py \
   tests/test_account_wizard.py \
   tests/test_category_wizard.py \
   tests/test_list_accounts.py \

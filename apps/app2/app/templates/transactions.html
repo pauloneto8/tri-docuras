@@ -5,92 +5,121 @@
 <p class="mb-4 rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-2 text-emerald-300 text-sm">{{ success }}</p>
 {% endif %}
 <div class="grid lg:grid-cols-3 gap-6">
-  <section class="lg:col-span-2 rounded-xl bg-slate-900 border border-slate-800 p-5">
-    <h2 class="text-lg font-semibold mb-4">Movimentos</h2>
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="text-slate-400 border-b border-slate-800">
-          <tr>
-            <th class="text-left py-2">Datas</th>
-            <th class="text-left py-2">Tipo</th>
-            <th class="text-left py-2">Status</th>
-            <th class="text-left py-2">Descrição</th>
-            <th class="text-left py-2">Conta</th>
-            <th class="text-right py-2">Valor</th>
-            <th class="text-right py-2">Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for tx in transactions %}
-          <tr class="border-b border-slate-800/60 {% if tx.status == 'planned' %}bg-amber-950/10{% elif tx.source_planned_id %}bg-emerald-950/10{% endif %}">
-            <td class="py-2 text-xs leading-relaxed">
-              <div><span class="text-slate-500">Comp.</span> {{ tx.competence_date_label or tx.competence_date }}</div>
-              <div><span class="text-slate-500">Venc.</span> {{ tx.due_date_label or tx.due_date }}</div>
-              <div><span class="text-slate-500">Pag.</span> {{ tx.payment_date_label or '—' }}</div>
-            </td>
-            <td class="py-2 text-slate-400">{{ tx.type_label }}</td>
-            <td class="py-2">
-              {% if tx.status == 'planned' %}
-                <span class="inline-flex rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-xs text-amber-300">Previsto</span>
-                {% if tx.is_realized %}
-                <span class="inline-flex rounded-full border border-emerald-700/60 bg-emerald-950/40 px-2 py-0.5 text-xs text-emerald-300 ml-1">Realizado</span>
+  <div class="lg:col-span-2 space-y-6">
+    {# Seção: A realizar #}
+    <section class="rounded-xl bg-slate-900 border border-amber-800/40 p-5">
+      <h2 class="text-lg font-semibold mb-1">A realizar</h2>
+      <p class="text-xs text-slate-500 mb-4">Previsões pendentes — não alteram o saldo até serem realizadas.</p>
+      {% if pending_transactions %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-slate-400 border-b border-slate-800">
+            <tr>
+              <th class="text-left py-2">Data</th>
+              <th class="text-left py-2">Tipo</th>
+              <th class="text-left py-2">Descrição</th>
+              <th class="text-left py-2">Conta</th>
+              <th class="text-right py-2">Valor</th>
+              <th class="text-right py-2">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tx in pending_transactions %}
+            <tr class="border-b border-slate-800/60 bg-amber-950/10">
+              <td class="py-2 text-xs">
+                <div><span class="text-slate-500">Vence</span> {{ tx.due_date_label or tx.due_date }}</div>
+                {% if tx.competence_date != tx.due_date %}
+                <div class="text-slate-500">Comp. {{ tx.competence_date_label or tx.competence_date }}</div>
                 {% endif %}
-              {% elif tx.source_planned_id %}
-                <span class="inline-flex rounded-full border border-emerald-700/60 bg-emerald-950/40 px-2 py-0.5 text-xs text-emerald-300">Realizado</span>
-              {% else %}
-                <span class="inline-flex rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 text-xs text-slate-300">Realizado</span>
-              {% endif %}
-            </td>
-            <td class="py-2">
-              {{ tx.description }}
-              {% if tx.type in ['transfer_out', 'transfer_in'] and tx.counterparty_account %}
-              <span class="text-slate-500 text-xs block">↔ {{ tx.counterparty_account }}</span>
-              {% endif %}
-            </td>
-            <td class="py-2">{{ tx.account or '—' }}</td>
-            <td class="py-2 text-right font-mono {% if tx.type in ['expense', 'transfer_out'] %}text-rose-400{% elif tx.type in ['income', 'transfer_in'] %}text-emerald-400{% else %}text-slate-300{% endif %}">
-              {% if tx.type in ['expense', 'transfer_out'] %}-{% elif tx.type in ['income', 'transfer_in'] %}+{% endif %}R$ {{ tx.amount }}
-            </td>
-            <td class="py-2 text-right">
-              {% if tx.status == 'planned' and not tx.is_realized %}
-              <details class="inline-block text-left">
-                <summary class="cursor-pointer text-emerald-400 hover:text-emerald-300 text-xs">Realizar</summary>
-                <form method="post" action="/transactions/{{ tx.id }}/realize" class="mt-2 space-y-2 min-w-[14rem] rounded border border-slate-700 bg-slate-950 p-3">
-                  <div>
-                    <label class="block text-xs text-slate-400 mb-1">Valor (R$)</label>
-                    <input name="amount" type="text" value="{{ tx.amount }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm" required>
-                  </div>
-                  <div>
-                    <label class="block text-xs text-slate-400 mb-1">Competência</label>
-                    <input name="competence_date" type="date" value="{{ tx.competence_date }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm" required>
-                  </div>
-                  <div>
-                    <label class="block text-xs text-slate-400 mb-1">Vencimento</label>
-                    <input name="due_date" type="date" value="{{ tx.due_date }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm" required>
-                  </div>
-                  <div>
-                    <label class="block text-xs text-slate-400 mb-1">Data de pagamento</label>
-                    <input name="payment_date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm" required>
-                  </div>
-                  <div>
-                    <label class="block text-xs text-slate-400 mb-1">Descrição</label>
-                    <input name="description" type="text" value="{{ tx.description }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm">
-                  </div>
-                  <button class="w-full rounded bg-emerald-600 hover:bg-emerald-500 px-2 py-1 text-xs font-medium">Confirmar</button>
-                </form>
-              </details>
-              {% else %}
-              <span class="text-slate-600 text-xs">—</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% else %}
-          <tr><td colspan="7" class="py-4 text-slate-400">Nenhum movimento.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </section>
+              </td>
+              <td class="py-2">
+                <span class="text-slate-400">{{ tx.type_label }}</span>
+                <span class="inline-flex rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-xs text-amber-300 ml-1">Previsto</span>
+              </td>
+              <td class="py-2">{{ tx.description }}</td>
+              <td class="py-2">{{ tx.account or '—' }}</td>
+              <td class="py-2 text-right font-mono {% if tx.type == 'expense' %}text-rose-400{% elif tx.type == 'income' %}text-emerald-400{% else %}text-slate-300{% endif %}">
+                {% if tx.type == 'expense' %}-{% elif tx.type == 'income' %}+{% endif %}R$ {{ tx.amount }}
+              </td>
+              <td class="py-2 text-right">
+                <details class="inline-block text-left">
+                  <summary class="cursor-pointer text-emerald-400 hover:text-emerald-300 text-xs">Realizar</summary>
+                  <form method="post" action="/transactions/{{ tx.id }}/realize" class="mt-2 space-y-2 min-w-[14rem] rounded border border-slate-700 bg-slate-950 p-3">
+                    <div>
+                      <label class="block text-xs text-slate-400 mb-1">Data de pagamento</label>
+                      <input name="payment_date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm" required>
+                    </div>
+                    <div>
+                      <label class="block text-xs text-slate-400 mb-1">Valor (R$) <span class="text-slate-600">opcional</span></label>
+                      <input name="amount" type="text" value="{{ tx.amount }}" placeholder="{{ tx.amount }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm">
+                    </div>
+                    <div>
+                      <label class="block text-xs text-slate-400 mb-1">Descrição</label>
+                      <input name="description" type="text" value="{{ tx.description }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm">
+                    </div>
+                    <button class="w-full rounded bg-emerald-600 hover:bg-emerald-500 px-2 py-1 text-xs font-medium">Confirmar</button>
+                  </form>
+                </details>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-slate-400 text-sm">Nenhuma previsão pendente.</p>
+      {% endif %}
+    </section>
+
+    {# Seção: Extrato #}
+    <section class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+      <h2 class="text-lg font-semibold mb-1">Extrato</h2>
+      <p class="text-xs text-slate-500 mb-4">Lançamentos realizados que já movimentaram o saldo.</p>
+      {% if actual_transactions %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-slate-400 border-b border-slate-800">
+            <tr>
+              <th class="text-left py-2">Data</th>
+              <th class="text-left py-2">Tipo</th>
+              <th class="text-left py-2">Descrição</th>
+              <th class="text-left py-2">Conta</th>
+              <th class="text-right py-2">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tx in actual_transactions %}
+            <tr class="border-b border-slate-800/60">
+              <td class="py-2 text-xs">
+                <div><span class="text-slate-500">Pago</span> {{ tx.payment_date_label or tx.transaction_date }}</div>
+              </td>
+              <td class="py-2">
+                <span class="text-slate-400">{{ tx.type_label }}</span>
+                <span class="inline-flex rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 text-xs text-slate-300 ml-1">Realizado</span>
+              </td>
+              <td class="py-2">
+                {{ tx.description }}
+                {% if tx.source_planned_id %}
+                <span class="text-slate-500 text-xs block">de previsto</span>
+                {% endif %}
+                {% if tx.type in ['transfer_out', 'transfer_in'] and tx.counterparty_account %}
+                <span class="text-slate-500 text-xs block">↔ {{ tx.counterparty_account }}</span>
+                {% endif %}
+              </td>
+              <td class="py-2">{{ tx.account or '—' }}</td>
+              <td class="py-2 text-right font-mono {% if tx.type in ['expense', 'transfer_out'] %}text-rose-400{% elif tx.type in ['income', 'transfer_in'] %}text-emerald-400{% else %}text-slate-300{% endif %}">
+                {% if tx.type in ['expense', 'transfer_out'] %}-{% elif tx.type in ['income', 'transfer_in'] %}+{% endif %}R$ {{ tx.amount }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-slate-400 text-sm">Nenhum lançamento realizado.</p>
+      {% endif %}
+    </section>
+  </div>
 
   <section class="rounded-xl bg-slate-900 border border-slate-800 p-5 h-fit">
     <h2 class="text-lg font-semibold mb-4">Novo lançamento</h2>
@@ -155,20 +184,25 @@
         <label class="block text-sm text-slate-400 mb-1">Descrição</label>
         <input name="description" id="tx-description" type="text" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
       </div>
-      <div id="date-fields" class="space-y-3">
+
+      <div id="planned-date-fields" class="hidden space-y-3">
         <div>
           <label class="block text-sm text-slate-400 mb-1">Competência</label>
-          <input name="competence_date" id="competence-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+          <input name="competence_date" id="competence-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
         </div>
         <div>
           <label class="block text-sm text-slate-400 mb-1">Vencimento</label>
-          <input name="due_date" id="due-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+          <input name="due_date" id="due-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
         </div>
-        <div id="payment-date-field">
-          <label class="block text-sm text-slate-400 mb-1">Pagamento</label>
+      </div>
+
+      <div id="actual-date-fields" class="space-y-3">
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Data da realização</label>
           <input name="payment_date" id="payment-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
         </div>
       </div>
+
       <button class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium">Registrar</button>
     </form>
   </section>
@@ -178,24 +212,29 @@
   const txType = document.getElementById('tx-type');
   const singleFields = document.getElementById('single-account-fields');
   const transferFields = document.getElementById('transfer-fields');
-  const categoryField = document.getElementById('category-field');
   const accountId = document.getElementById('account-id');
   const description = document.getElementById('tx-description');
   const plannedCheckbox = document.getElementById('planned-checkbox');
   const isPlanned = document.getElementById('is-planned');
-  const paymentDateField = document.getElementById('payment-date-field');
+  const plannedDateFields = document.getElementById('planned-date-fields');
+  const actualDateFields = document.getElementById('actual-date-fields');
   const paymentDate = document.getElementById('payment-date');
   const competenceDate = document.getElementById('competence-date');
   const dueDate = document.getElementById('due-date');
 
-  function syncPaymentField() {
-    const planned = isPlanned.checked;
-    paymentDateField.classList.toggle('hidden', planned);
+  function syncDateFields() {
+    const isTransfer = txType.value === 'transfer';
+    const planned = isPlanned.checked && !isTransfer;
+
+    plannedDateFields.classList.toggle('hidden', !planned);
+    actualDateFields.classList.toggle('hidden', planned);
+
+    competenceDate.required = planned;
+    dueDate.required = planned;
     paymentDate.required = !planned;
+
     if (planned) {
       paymentDate.value = '';
-    } else if (!paymentDate.value) {
-      paymentDate.value = dueDate.value || competenceDate.value;
     }
   }
 
@@ -207,15 +246,13 @@
     description.required = !isTransfer;
     plannedCheckbox.classList.toggle('hidden', isTransfer);
     if (isTransfer) {
-      paymentDateField.classList.remove('hidden');
-      paymentDate.required = true;
-    } else {
-      syncPaymentField();
+      isPlanned.checked = false;
     }
+    syncDateFields();
   }
 
   txType.addEventListener('change', syncFormMode);
-  isPlanned.addEventListener('change', syncPaymentField);
+  isPlanned.addEventListener('change', syncDateFields);
   syncFormMode();
 </script>
 {% endblock %}

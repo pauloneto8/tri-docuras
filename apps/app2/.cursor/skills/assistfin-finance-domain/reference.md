@@ -14,7 +14,7 @@
 | `update_account` | Editar conta (saldo inicial, data, apelido…) |
 | `create_account` / `create_category` | Cadastros |
 | `complete_onboarding` | Primeira conta |
-| `list_transactions` | Movimentos |
+| `list_transactions` | Movimentos (`limit`, `type`, `status?`) |
 | `list_user_categories` | Categorias do usuário |
 | `get_budget_status` | Orçamentos vs gasto |
 | `_account_balance_at` | Saldo de uma conta em uma data |

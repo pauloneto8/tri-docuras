@@ -16,6 +16,7 @@
 | "despesa" → "realizado" | pergunta data da realização | `test_transaction_wizard.py` |
 | previsto: competência + vencimento | `competence_date` + `due_date` | `test_transaction_slots.py` |
 | realizado: "hoje" | replica em payment/competence/due | `test_transaction_dates.py` |
+| `list_transactions(status="actual")` | sem previstos na lista | `test_planned_transactions.py` |
 
 ## Imports comuns
 

@@ -42,7 +42,7 @@ mensagem
 
 ## WRITE_TOOLS (confirmação obrigatória)
 
-`register_expense`, `register_income`, `register_transfer`, `update_transaction`, `update_account`, `delete_transaction`, `create_account`, `create_category`
+`register_expense`, `register_income`, `register_transfer`, `realize_planned`, `update_transaction`, `update_account`, `delete_transaction`, `create_account`, `create_category`
 
 ## Chips de resposta
 

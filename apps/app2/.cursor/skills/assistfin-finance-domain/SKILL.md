@@ -5,7 +5,7 @@ description: >-
   transferências, orçamentos e regras de negócio. Use ao alterar dashboard,
   finance.py, modelos, onboarding, contas, movimentos, resumos por período
   ou saldo inicial com data.
-paths: app/services/finance.py, app/models.py, app/schemas.py, app/templates/dashboard.html, app/templates/accounts.html, app/templates/transactions.html, app/templates/budgets.html, app/routers/pages.py, tests/test_summary.py, tests/test_transfers.py
+paths: app/services/finance.py, app/models.py, app/schemas.py, app/templates/dashboard.html, app/templates/accounts.html, app/templates/transactions.html, app/templates/budgets.html, app/routers/pages.py, tests/test_summary.py, tests/test_transfers.py, tests/test_planned_transactions.py
 ---
 
 # AssistFin — Domínio financeiro
@@ -34,7 +34,18 @@ Transferências são pares vinculados por `transfer_group_id` (origem + destino)
 | `planned` | `NULL` | Nenhum | Previstos no dashboard (projeção) |
 | `actual` | Obrigatório | Sim (`transaction_date`) | Sim |
 
-Realizar: `realize_planned()` cria lançamento `actual` com `source_planned_id`.
+Realizar: `realize_planned()` cria lançamento `actual` com `source_planned_id`. O previsto permanece no banco para o dashboard.
+
+## UI Movimentos (`/transactions`)
+
+| Seção | Query / regra | Exibição |
+|-------|---------------|----------|
+| **A realizar** | `status=planned`, `not is_realized` | Vencimento; selo Previsto; ação Realizar |
+| **Extrato** | `status=actual` | Pagamento; selo Realizado; “de previsto” se `source_planned_id` |
+
+Previstos liquidados **não** aparecem na lista. `ListTransactionsInput.status`: `actual` | `planned` | `all` (default `all` — chat/API inalterados).
+
+Formulário manual: realizado → data da realização; previsto → competência + vencimento. **Realizar**: pagamento obrigatório; valor/descrição opcionais.
 
 ## Datas de movimento
 
@@ -78,13 +89,14 @@ Realizar: `realize_planned()` cria lançamento `actual` com `source_planned_id`.
 1. `finance.py` (fonte da verdade)
 2. `format_tool_result` se o agente expõe
 3. Templates com rótulos claros
-4. Testes (`test_summary.py`, `test_transfers.py`)
+4. Testes (`test_summary.py`, `test_transfers.py`, `test_planned_transactions.py`)
 
 ## Armadilhas
 
 - `list_accounts` ≠ `list_transactions` (intents)
 - Transferência ≠ despesa/receita nos cards do período
 - Página `/accounts` = saldo **atual**; dashboard = saldo **histórico** ao fim do período
+- Página `/transactions` = **A realizar** + **Extrato**; não misturar previsto liquidado com realizado na lista
 - Lançamentos exigem confirmação no agente
 
 ## Referência

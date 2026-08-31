@@ -33,7 +33,7 @@ Internet :80/:443
 ### Finanças
 
 - **Contas** — corrente, poupança, carteira, cartão; saldo inicial com data (`opening_balance_date`)
-- **Movimentos** — despesa (`expense`), receita (`income`), **transferência** (par `transfer_out` + `transfer_in`)
+- **Movimentos** — despesa (`expense`), receita (`income`), **transferência** (par `transfer_out` + `transfer_in`); tela em duas seções (**A realizar** / **Extrato**)
 - **Previsto vs realizado** — `status` `planned` ou `actual`; realização via `realize_planned`
 - **Datas por movimento** — competência (`competence_date`), vencimento (`due_date`), pagamento/realização (`payment_date`); `transaction_date` espelha a data de caixa
 - **Categorias** — padrão no seed + cadastro manual; nomes normalizados (primeira letra maiúscula, acentos)
@@ -72,6 +72,13 @@ No assistente, ao lançar movimento o wizard pergunta **realizado ou previsto** 
 - **Previsão** → competência e vencimento (duas perguntas).
 - **Realizado** → data da realização (replicada em competência e vencimento).
 
+Na página **Movimentos** (`/transactions`), o formulário manual segue a mesma lógica:
+- **A realizar** — previstos pendentes (vencimento; ação **Realizar** com data de pagamento).
+- **Extrato** — somente realizados (data de pagamento; “de previsto” quando aplicável).
+- Previstos já liquidados não aparecem na lista (o par previsto/realizado fica no dashboard).
+
+`list_transactions` aceita filtro `status` (`actual` | `planned` | `all`).
+
 ### Assistente de IA
 
 - Balão flutuante em todas as telas autenticadas
@@ -96,7 +103,7 @@ No assistente, ao lançar movimento o wizard pergunta **realizado ou previsto** 
 | `/onboarding` | Primeira conta (apelido + saldo inicial + data) |
 | `/` | Dashboard com visão por período |
 | `/accounts` | Contas e saldos atuais |
-| `/transactions` | Movimentos e formulário manual |
+| `/transactions` | Movimentos: **A realizar**, **Extrato** e formulário manual |
 | `/budgets` | Orçamentos |
 | `/admin` | Aprovação de usuários (root) |
 | `/agent/chat` | Chat HTMX do assistente |
@@ -113,7 +120,7 @@ No assistente, ao lançar movimento o wizard pergunta **realizado ou previsto** 
 | `update_transaction` | Editar lançamento existente |
 | `delete_transaction` | Excluir (par de transferência junto) |
 | `update_account` | Editar conta (saldo inicial, data, apelido…) |
-| `list_transactions` | Últimos movimentos |
+| `list_transactions` | Últimos movimentos (`limit`, `type`, `status`) |
 | `list_accounts` / `list_categories` | Listar cadastros |
 | `get_summary` | Resumo financeiro |
 | `get_budget_status` | Status dos orçamentos |
@@ -166,13 +173,13 @@ Operações (reset de dados, migrações, debug): [docs/OPERATIONS.md](docs/OPER
 
 ## Testes
 
-Suite completa no container (`145+` testes):
+Suite completa no container (`180` testes):
 
 ```bash
 docker compose exec -T app2 python -m pytest -q
 ```
 
-Áreas cobertas: finanças, transferências, dashboard por período, agente, wizards, intents, segurança, onboarding, isolamento multiusuário.
+Áreas cobertas: finanças, transferências, previstos/realizados, dashboard por período, agente, wizards, intents, segurança, onboarding, isolamento multiusuário.
 
 ## Migrações (Alembic)
 

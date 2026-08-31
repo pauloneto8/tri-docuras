@@ -39,6 +39,7 @@ docker compose exec -T app2 python -m pytest -q
 # Área específica
 docker compose exec -T app2 python -m pytest tests/test_transfers.py -q
 docker compose exec -T app2 python -m pytest tests/test_summary.py -q
+docker compose exec -T app2 python -m pytest tests/test_planned_transactions.py -q
 ```
 
 ## Zerar dados de teste (manter usuários)
@@ -59,7 +60,9 @@ UPDATE users SET onboarding_completed = false;
 "
 ```
 
-Usuários e senhas são preservados.
+Usuários e senhas são preservados. Após o reset, faça **logout e login** se a sessão ou o onboarding parecerem inconsistentes.
+
+O que é removido: movimentos, contas, categorias, orçamentos, conversas do agente. O que permanece: usuários, aprovações e credenciais.
 
 ## Logs
 
@@ -100,4 +103,5 @@ curl -s http://localhost/api/health
 | Erro de migração | `alembic current` + logs do container |
 | Chat timeout | Nginx `/agent/` timeout 120s; verificar Groq/Ollama |
 | Sessão/onboarding inconsistente | Logout + login após reset de DB |
+| Lista de Movimentos confusa após realizar previsto | Deploy recente separa “A realizar” e “Extrato”; previsto liquidado some da lista (normal) |
 | 502 | `docker compose ps app2` |

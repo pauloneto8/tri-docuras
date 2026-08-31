@@ -9,6 +9,7 @@ from app.auth import create_user
 from app.models import Account, Category, Transaction, User
 from app.schemas import (
     CreateAccountInput,
+    ListTransactionsInput,
     RealizePlannedInput,
     RegisterExpenseInput,
     SummaryInput,
@@ -320,6 +321,71 @@ def test_get_summary_includes_planned_totals():
         summary = finance.get_summary(db, user.id, SummaryInput(ref_date=today, period="month"))
         assert summary["planned_expense_cents"] == 8000
         assert summary["expense_cents"] == 0
+    finally:
+        db.query(Transaction).filter(Transaction.user_id == user.id).delete(synchronize_session=False)
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+def test_list_transactions_filters_by_status():
+    from app.config import settings
+
+    engine = create_engine(settings.database_url)
+    SessionLocal = sessionmaker(bind=engine)
+    db = SessionLocal()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"filter_{suffix}@test.com",
+        password="secret1",
+        name="Filter User",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        account = _create_account(db, user.id, f"Conta_{suffix}", opening_balance="1000")
+        today = local_today()
+
+        planned = finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="100",
+                description="Previsto filtro",
+                account_name=account["name"],
+                category_name="Alimentação",
+                transaction_date=today,
+                status="planned",
+            ),
+        )
+        finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="50",
+                description="Realizado filtro",
+                account_name=account["name"],
+                category_name="Alimentação",
+                transaction_date=today,
+                status="actual",
+            ),
+        )
+
+        planned_only = finance.list_transactions(
+            db, user.id, ListTransactionsInput(limit=50, status="planned")
+        )
+        actual_only = finance.list_transactions(
+            db, user.id, ListTransactionsInput(limit=50, status="actual")
+        )
+
+        assert all(tx["status"] == "planned" for tx in planned_only)
+        assert any(tx["id"] == planned["id"] for tx in planned_only)
+        assert all(tx["status"] == "actual" for tx in actual_only)
+        assert not any(tx["status"] == "planned" for tx in actual_only)
+        assert any(tx["description"] == "Realizado filtro" for tx in actual_only)
     finally:
         db.query(Transaction).filter(Transaction.user_id == user.id).delete(synchronize_session=False)
         db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)

@@ -69,7 +69,7 @@ Ver [docs/SECURITY.md](../../docs/SECURITY.md). Resumo:
 
 ## Reset de dados de teste
 
-Ver [docs/OPERATIONS.md](../../docs/OPERATIONS.md) — preserva usuários, apaga movimentos/contas/categorias.
+Ver [docs/OPERATIONS.md](../../docs/OPERATIONS.md) — preserva usuários; remove movimentos, contas, categorias, orçamentos e conversas; reseta onboarding.
 
 ## Checklist de feature
 

@@ -655,6 +655,8 @@ def list_transactions(
             stmt = stmt.where(Transaction.type.in_(("transfer_out", "transfer_in")))
         else:
             stmt = stmt.where(Transaction.type == payload.type)
+    if payload.status != "all":
+        stmt = stmt.where(Transaction.status == payload.status)
     rows = db.scalars(stmt).unique().all()
     include_user = user_id is None
     planned_ids = [tx.id for tx in rows if tx.status == "planned"]

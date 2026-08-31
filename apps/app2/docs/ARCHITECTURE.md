@@ -33,6 +33,7 @@
 - Templates Jinja2 com Tailwind CDN
 - HTMX para chat do assistente e confirmações sem reload completo
 - Sidebar: Dashboard, Contas, Movimentos, Orçamentos, Admin (root)
+- **Movimentos** (`/transactions`): duas seções — **A realizar** (previstos pendentes) e **Extrato** (realizados); formulário manual alinhado ao wizard (datas conforme status)
 
 ### API / rotas
 
@@ -104,9 +105,29 @@ transaction_date → espelho de caixa (= due ou payment)
 ```
 
 - `resolve_transaction_dates()` em `finance.py` valida e normaliza as três datas.
-- Realizar previsão: `realize_planned()` cria `actual` com `source_planned_id`.
+- Realizar previsão: `realize_planned()` cria `actual` com `source_planned_id`; o previsto permanece no banco para o dashboard.
 - Saldos: só `status = actual` e `transaction_date <= as_of`.
 - Orçamentos: despesas somadas por `competence_date`.
+- `list_transactions()` aceita filtro opcional `status` (`actual` | `planned` | `all`, default `all`) em `ListTransactionsInput`.
+
+### Página Movimentos vs dashboard
+
+| Onde | O que mostra |
+|------|----------------|
+| **A realizar** | `status = planned` e ainda sem realização (`is_realized = false`) |
+| **Extrato** | Somente `status = actual` (inclui realizados de previsto, com rótulo “de previsto”) |
+| **Dashboard** | Previstos do período, pendentes, projeção e tabela **previsto vs realizado** (pares via `source_planned_id`) |
+
+Previstos já liquidados **não** aparecem na lista de Movimentos (evita duplicata com o lançamento realizado). O par previsto/realizado continua disponível no dashboard.
+
+Consultas da página usam duas chamadas: `ListTransactionsInput(status="planned")` e `ListTransactionsInput(status="actual")`, para que um extrato longo não oculte previsões pendentes.
+
+### Formulário manual em Movimentos
+
+- **Realizado** (padrão): um campo “Data da realização”; competência e vencimento são replicados no backend.
+- **Previsto** (checkbox): competência + vencimento; sem data de pagamento.
+- **Realizar** (ação na linha): data de pagamento obrigatória; valor e descrição opcionais (herdam do previsto).
+- **Transferência**: sempre realizada; uma data de realização.
 
 ### Wizard de transação (slots)
 

@@ -2,6 +2,17 @@
 
 Registro das principais evoluções do projeto (App 2).
 
+## 2026-08 — Tela de Movimentos (previstos vs realizados)
+
+- Página `/transactions` dividida em **A realizar** (previstos pendentes) e **Extrato** (somente realizados)
+- Previstos já liquidados deixam de aparecer na lista (o par previsto/realizado permanece no dashboard)
+- Uma data principal por linha: vencimento no previsto, pagamento no realizado
+- Um selo de status por linha; realizados de previsto exibem “de previsto” em vez de duplicar badges
+- `ListTransactionsInput` com filtro `status` (`actual` | `planned` | `all`)
+- Formulário manual alinhado ao wizard: realizado pede só data da realização; previsto pede competência e vencimento
+- Ação **Realizar** simplificada: pagamento obrigatório; valor e descrição opcionais
+- Teste `test_list_transactions_filters_by_status` em `tests/test_planned_transactions.py`
+
 ## 2026-08 — Competência, vencimento e datas no assistente
 
 - Campos `competence_date`, `due_date`, `payment_date` em transações
@@ -57,6 +68,7 @@ Registro das principais evoluções do projeto (App 2).
 
 - Menu "Extrato" renomeado para **Movimentos**
 - Lista de movimentos com tipo (despesa, receita, transferência)
+- Reorganização da tela Movimentos: seções **A realizar** e **Extrato** (ver entrada acima)
 
 ## Anterior
 
