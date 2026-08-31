@@ -28,6 +28,7 @@ docker compose exec -T app2 python -m pytest \
   tests/test_parse_date.py \
   tests/test_planned_transactions.py \
   tests/test_recurrence.py \
+  tests/test_realize_planned_wizard.py \
   tests/test_multi_movements.py \
   tests/test_account_wizard.py \
   tests/test_category_wizard.py \
@@ -51,6 +52,7 @@ docker compose exec -T app2 python -m pytest \
 | `test_transaction_dates.py` | competência, vencimento, pagamento, orçamento |
 | `test_planned_transactions.py` | previsto/realizado, filtro `status`, projeção, `realize_planned` |
 | `test_recurrence.py` | lançamentos fixos, horizonte, encerrar série, wizard não cancela em "não" |
+| `test_realize_planned_wizard.py` | realizar previsto: pagamento, mesma/outra conta |
 | `test_multi_movements.py` | vários lançamentos numa mensagem; data isolada **não** vira multi |
 | `test_parse_date.py` | `parse_date`, `parse_user_date`, `is_date_only_message` |
 | `test_account_wizard.py` | wizard conta |

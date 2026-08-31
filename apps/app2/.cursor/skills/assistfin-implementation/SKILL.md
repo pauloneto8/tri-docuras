@@ -17,15 +17,15 @@ Documentação completa: [README.md](../../README.md), [AGENTS.md](../../AGENTS.
 app/
   main.py          # FastAPI, middleware, CSP, onboarding gate
   auth.py          # sessão, root, escopo, bcrypt
-  models.py        # SQLAlchemy (transfer_group_id, status, datas de competência)
+  models.py        # SQLAlchemy (transfer_group_id, status, recurrence_id)
   schemas.py       # Pydantic, ToolCall, format_brl
   routers/         # pages (HTML), api (JSON), auth
-  services/        # finance, wizards, transaction_slots, tools, intents, transfer_slots
+  services/        # finance, recurrence, wizards, transaction_slots, tools, intents, transfer_slots
   agent/           # runner, llm, groq, ollama, prompt
   security/        # csrf, rate_limit
   templates/       # Jinja2 + HTMX + agent partials
-tests/             # pytest (rodar no container)
-alembic/           # migrações 001–012
+tests/             # pytest (194 testes no container)
+alembic/           # migrações 001–013
 docs/              # ARCHITECTURE, OPERATIONS, SECURITY, CHANGELOG
 ```
 

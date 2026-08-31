@@ -5,7 +5,7 @@ description: >-
   Ollama, ferramentas, chips e chat HTMX. Use ao alterar assistente, chat, LLM,
   prompt, confirmação, transferências, wizards ou quando o agente não entender
   intenção do usuário.
-paths: app/agent/**, app/services/account_wizard.py, app/services/category_wizard.py, app/services/transaction_wizard.py, app/services/transaction_slots.py, app/services/recurrence.py, app/services/transfer_slots.py, app/services/multi_movements.py, app/services/multi_movement_flow.py, app/services/intents.py, app/services/tools.py, app/services/agent_suggestions.py, app/services/agent_state.py, app/templates/partials/agent_*.html, app/routers/pages.py
+paths: app/agent/**, app/services/account_wizard.py, app/services/category_wizard.py, app/services/transaction_wizard.py, app/services/transaction_slots.py, app/services/realize_planned_slots.py, app/services/recurrence.py, app/services/transfer_slots.py, app/services/multi_movements.py, app/services/multi_movement_flow.py, app/services/intents.py, app/services/tools.py, app/services/agent_suggestions.py, app/services/agent_state.py, app/templates/partials/agent_*.html, app/routers/pages.py
 ---
 
 # AssistFin — Agente de IA
@@ -22,7 +22,8 @@ paths: app/agent/**, app/services/account_wizard.py, app/services/category_wizar
 mensagem
   → multi-movimento em andamento (pending_movements)?
   → wizard transferência?
-  → wizard transação? (datas antes de multi-lançamento)
+  → wizard realizar previsto?
+  → wizard transação? (datas/recorrência antes de multi-lançamento)
   → try_begin_from_message (vários valores na mensagem)?
   → wizard conta / categoria?
   → exclusão pendente?
@@ -58,6 +59,7 @@ mensagem
 | Wizard | Arquivo | Campos |
 |--------|---------|--------|
 | Transação | `transaction_wizard.py` + `transaction_slots.py` | tipo, status, datas, recorrência (fixo/frequência/término), valor, descrição, conta, categoria |
+| Realizar previsto | `realize_planned_slots.py` | previsto, pagamento, mesma conta?, conta |
 | Transferência | `transfer_slots.py` | valor, origem, destino |
 | Conta | `account_wizard.py` | apelido, tipo, instituição, saldo |
 | Categoria | `category_wizard.py` | nome, tipo |

@@ -34,7 +34,7 @@ Transferências são pares vinculados por `transfer_group_id` (origem + destino)
 | `planned` | `NULL` | Nenhum | Previstos no dashboard (projeção) |
 | `actual` | Obrigatório | Sim (`transaction_date`) | Sim |
 
-Realizar: `realize_planned()` cria lançamento `actual` com `source_planned_id`. O previsto permanece no banco para o dashboard.
+Realizar: `realize_planned()` cria lançamento `actual` com `source_planned_id`. O previsto permanece no banco para o dashboard. Se a conta informada difere, atualiza `planned.account_id`.
 
 ## UI Movimentos (`/transactions`)
 
@@ -45,7 +45,7 @@ Realizar: `realize_planned()` cria lançamento `actual` com `source_planned_id`.
 
 Previstos liquidados **não** aparecem na lista. `ListTransactionsInput.status`: `actual` | `planned` | `all` (default `all` — chat/API inalterados).
 
-Formulário manual: realizado → data da realização; previsto → competência + vencimento; **fixo** → frequência + término opcional. **Realizar**: pagamento obrigatório; valor/descrição opcionais.
+Formulário manual: realizado → data da realização; previsto → competência + vencimento; **fixo** → frequência + término opcional. **Realizar**: pagamento obrigatório; valor/descrição opcionais; mesma conta ou outra conta.
 
 ## Lançamentos fixos
 

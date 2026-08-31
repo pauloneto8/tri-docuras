@@ -19,6 +19,7 @@
 | após datas: "não" em fixo | continua wizard (não cancela) | `test_transaction_wizard.py` |
 | aluguel mensal fixo | `frequency=monthly`, previstos no horizonte | `test_recurrence.py` |
 | encerrar série | remove previstos pendentes | `test_recurrence.py` |
+| realizar previsto em outra conta | wizard pergunta mesma conta → conta | `test_realize_planned_wizard.py` |
 | "Ontem despesas 54... e 30 recarga" | fluxo multi-lançamento | `test_multi_movements.py` |
 | realizado: "hoje" | replica em payment/competence/due | `test_transaction_dates.py` |
 | `list_transactions(status="actual")` | sem previstos na lista | `test_planned_transactions.py` |

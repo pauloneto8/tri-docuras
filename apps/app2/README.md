@@ -34,8 +34,8 @@ Internet :80/:443
 
 - **Contas** — corrente, poupança, carteira, cartão; saldo inicial com data (`opening_balance_date`)
 - **Movimentos** — despesa (`expense`), receita (`income`), **transferência** (par `transfer_out` + `transfer_in`); tela em duas seções (**A realizar** / **Extrato**)
-- **Previsto vs realizado** — `status` `planned` ou `actual`; realização via `realize_planned`
-- **Lançamentos fixos** — recorrência diária, semanal ou mensal; gera previstos automaticamente (~3 meses à frente)
+- **Previsto vs realizado** — `status` `planned` ou `actual`; realização via `realize_planned` (UI e wizard no assistente)
+- **Lançamentos fixos** — recorrência diária, semanal ou mensal; gera previstos automaticamente (~3 meses à frente); encerrar série remove pendentes
 - **Datas por movimento** — competência (`competence_date`), vencimento (`due_date`), pagamento/realização (`payment_date`); `transaction_date` espelha a data de caixa
 - **Categorias** — padrão no seed + cadastro manual; nomes normalizados (primeira letra maiúscula, acentos)
 - **Orçamentos** — limite mensal por categoria
@@ -69,14 +69,31 @@ Uma transferência cria duas linhas vinculadas por `transfer_group_id` (saída n
 - **Saldos** consideram só movimentos **realizados** (`status = actual`), pela data de caixa.
 - **Previstos pendentes** entram na projeção do dashboard pelo vencimento.
 
-No assistente, ao lançar movimento o wizard pergunta **realizado ou previsto** e depois as datas:
+No assistente, ao lançar movimento o wizard pergunta **realizado ou previsto**, depois as datas e se **repete (fixo)**:
 - **Previsão** → competência e vencimento (duas perguntas).
 - **Realizado** → data da realização (replicada em competência e vencimento).
+- **Fixo** → frequência (diária/semanal/mensal) e término opcional; gera série de previstos.
 
 Na página **Movimentos** (`/transactions`), o formulário manual segue a mesma lógica:
-- **A realizar** — previstos pendentes (vencimento; ação **Realizar** com data de pagamento).
+- **A realizar** — previstos pendentes (vencimento; selo `Fixo · …` quando recorrente; ações **Realizar** e **Encerrar série**).
 - **Extrato** — somente realizados (data de pagamento; “de previsto” quando aplicável).
 - Previstos já liquidados não aparecem na lista (o par previsto/realizado fica no dashboard).
+
+**Realizar previsto:** na UI, escolha mesma conta ou outra conta; no assistente, wizard pergunta pagamento → mesma conta? → conta (se diferente).
+
+### Lançamentos fixos (recorrência)
+
+| Aspecto | Comportamento |
+|---------|---------------|
+| Frequências | Diária, semanal, mensal |
+| Horizonte | Previstos gerados até `min(data_término, hoje + 3 meses)` |
+| Primeira ocorrência | Segue o status informado (`planned` ou `actual`) |
+| Demais ocorrências | Sempre `planned` |
+| Realizar uma ocorrência | Não encerra a série; reabastece o horizonte |
+| Encerrar série | Desativa a regra; remove previstos pendentes (realizados permanecem) |
+| Transferências | Não suportam recorrência |
+
+Motor: `app/services/recurrence.py` (`ensure_recurring_horizon`, `deactivate_recurring_rule`).
 
 `list_transactions` aceita filtro `status` (`actual` | `planned` | `all`).
 
@@ -106,7 +123,7 @@ Datas digitadas no wizard (`10/08/2026`, `hoje`, etc.) preenchem o slot de compe
 | `/onboarding` | Primeira conta (apelido + saldo inicial + data) |
 | `/` | Dashboard com visão por período |
 | `/accounts` | Contas e saldos atuais |
-| `/transactions` | Movimentos: **A realizar**, **Extrato** e formulário manual |
+| `/transactions` | Movimentos: **A realizar**, **Extrato**, formulário manual e encerrar série |
 | `/budgets` | Orçamentos |
 | `/admin` | Aprovação de usuários (root) |
 | `/agent/chat` | Chat HTMX do assistente |
@@ -117,9 +134,9 @@ Datas digitadas no wizard (`10/08/2026`, `hoje`, etc.) preenchem o slot de compe
 
 | Ferramenta | Descrição |
 |------------|-----------|
-| `register_expense` / `register_income` | Novo lançamento (wizard: status + datas + confirmação) |
+| `register_expense` / `register_income` | Novo lançamento (wizard: status + datas + fixo? + confirmação); aceita `frequency`, `recurrence_end_date` |
 | `register_transfer` | Transferência entre contas |
-| `realize_planned` | Converter previsão em lançamento realizado |
+| `realize_planned` | Converter previsão em realizado (wizard: pagamento, mesma/outra conta) |
 | `update_transaction` | Editar lançamento existente |
 | `delete_transaction` | Excluir (par de transferência junto) |
 | `update_account` | Editar conta (saldo inicial, data, apelido…) |
@@ -182,7 +199,7 @@ Suite completa no container (**194** testes):
 docker compose exec -T app2 python -m pytest -q
 ```
 
-Áreas cobertas: finanças, transferências, previstos/realizados, dashboard por período, agente, wizards, multi-lançamentos vs datas, intents, segurança, onboarding, isolamento multiusuário.
+Áreas cobertas: finanças, transferências, previstos/realizados, recorrência, dashboard por período, agente, wizards (transação, realizar previsto), multi-lançamentos vs datas, intents, segurança, onboarding, isolamento multiusuário.
 
 ## Migrações (Alembic)
 
@@ -222,7 +239,7 @@ app/
   models.py         # SQLAlchemy
   schemas.py          # Pydantic, ToolCall, formatação BRL
   routers/          # pages (HTML), api (JSON), auth
-  services/         # finance, wizards, tools, intents
+  services/         # finance, recurrence, wizards, tools, intents
   agent/            # runner, llm, groq, ollama, prompt
   security/         # csrf, rate_limit
   templates/        # Jinja2 + partials HTMX

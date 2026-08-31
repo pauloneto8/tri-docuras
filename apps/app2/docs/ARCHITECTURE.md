@@ -44,6 +44,7 @@
 ### Domínio
 
 - `services/finance.py` — única fonte de verdade para cálculos
+- `services/recurrence.py` — regras fixas e horizonte de previstos
 - `schemas.py` — validação Pydantic, `ToolCall`, formatação BRL
 
 ### Agente (híbrido)
@@ -52,7 +53,8 @@
 mensagem do usuário
   → multi-movimento em andamento (pending_movements)?
   → wizard transferência?
-  → wizard transação? (slots de data têm prioridade sobre multi-lançamento)
+  → wizard realizar previsto?
+  → wizard transação? (slots de data/recorrência têm prioridade sobre multi-lançamento)
   → try_begin_from_message (nova mensagem com vários valores)?
   → wizard conta / categoria?
   → exclusão pendente?
@@ -107,7 +109,7 @@ transaction_date → espelho de caixa (= due ou payment)
 ```
 
 - `resolve_transaction_dates()` em `finance.py` valida e normaliza as três datas.
-- Realizar previsão: `realize_planned()` cria `actual` com `source_planned_id`; o previsto permanece no banco para o dashboard.
+- Realizar previsão: `realize_planned()` cria `actual` com `source_planned_id`; o previsto permanece no banco para o dashboard. Se a conta informada difere, atualiza `planned.account_id`. Com `recurrence_id`, reabastece o horizonte após a realização.
 - Saldos: só `status = actual` e `transaction_date <= as_of`.
 - Orçamentos: despesas somadas por `competence_date`.
 - `list_transactions()` aceita filtro opcional `status` (`actual` | `planned` | `all`, default `all`) em `ListTransactionsInput`.
@@ -128,7 +130,7 @@ Consultas da página usam duas chamadas: `ListTransactionsInput(status="planned"
 
 - **Realizado** (padrão): um campo “Data da realização”; competência e vencimento são replicados no backend.
 - **Previsto** (checkbox): competência + vencimento; sem data de pagamento.
-- **Realizar** (ação na linha): data de pagamento obrigatória; valor e descrição opcionais (herdam do previsto).
+- **Realizar** (ação na linha): data de pagamento obrigatória; valor e descrição opcionais (herdam do previsto); escolha mesma conta ou outra conta.
 - **Lançamento fixo** (checkbox): frequência diária/semanal/mensal e data de término opcional; cria regra em `recurring_rules` e previstos até o horizonte.
 - **Encerrar série** (previstos com `recurrence_id`): desativa a regra e remove previstos pendentes da série.
 - **Transferência**: sempre realizada; uma data de realização.
@@ -171,6 +173,18 @@ Mensagens com **vários valores monetários** (ex.: "gastei 54 de passagem e 30 
 - Narrativas com palavras de despesa/receita e múltiplos valores (ex.: "Ontem tive as despesas de 54...")
 
 Ordem no `runner.py`: wizard de transação processa a mensagem **antes** de tentar iniciar multi-lançamento.
+
+### Wizard de realizar previsto
+
+Arquivo: `realize_planned_slots.py`. Ordem:
+
+1. identificar previsto (`planned_id` ou descrição)
+2. data de pagamento
+3. mesma conta do previsto? (sim/não)
+4. conta (se outra)
+5. confirmação (`realize_planned`)
+
+Processado no `runner.py` **antes** do wizard de transação genérico.
 
 ## Isolamento multiusuário
 

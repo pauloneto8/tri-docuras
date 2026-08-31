@@ -16,6 +16,7 @@
 | `app/services/multi_movement_flow.py` | Fluxo guiado de confirmação multi |
 | `app/services/transaction_slots.py` | Slots de transação (status, datas, recorrência, conta, categoria) |
 | `app/services/recurrence.py` | Regras fixas, horizonte de previstos, encerrar série |
+| `app/services/realize_planned_slots.py` | Wizard de realizar previsto (pagamento, mesma/outra conta) |
 | `app/services/transfer_slots.py` | Wizard de transferência |
 | `app/services/agent_suggestions.py` | Chips clicáveis |
 | `app/services/agent_state.py` | Limpar estado ao cancelar |
@@ -62,6 +63,7 @@ docker compose exec -T app2 python -m pytest \
   tests/test_parse_date.py \
   tests/test_planned_transactions.py \
   tests/test_recurrence.py \
+  tests/test_realize_planned_wizard.py \
   tests/test_multi_movements.py \
   tests/test_account_wizard.py \
   tests/test_category_wizard.py \

@@ -8,10 +8,19 @@ Registro das principais evoluções do projeto (App 2).
 - Nova tabela `recurring_rules` e campo `recurrence_id` em transações (migração `013`)
 - Geração automática de previstos até `min(data_término, hoje + 3 meses)`; horizonte reabastecido ao acessar Movimentos/Dashboard e após realizar ocorrência
 - Formulário em Movimentos: checkbox **Lançamento fixo**, frequência e término opcional
-- Selo `Fixo · mensal/semanal/diária` na lista **A realizar**; ação **Encerrar série**
-- Wizard do assistente: pergunta se repete, frequência e data de término
+- Selo `Fixo · mensal/semanal/diária` na lista **A realizar**; ação **Encerrar série** (`POST /transactions/recurring/{id}/stop`)
+- Wizard do assistente: pergunta se repete, frequência e data de término (após datas, antes do valor)
+- Correção: responder **não** no slot de recorrência não cancela mais o wizard
 - Testes em `tests/test_recurrence.py`
 - Suite: **194** testes
+
+## 2026-08-31 — Realizar previsto com escolha de conta
+
+- Ao realizar uma previsão, pergunta se será na **mesma conta** do previsto ou em **outra conta**
+- UI em Movimentos: radio mesma/outra conta no formulário **Realizar**
+- Wizard `realize_planned_slots.py` no assistente (pagamento → mesma conta? → conta)
+- `realize_planned()` atualiza `planned.account_id` quando a conta informada difere
+- Testes em `tests/test_realize_planned_wizard.py` e `tests/test_planned_transactions.py`
 
 ## 2026-08-31 — Correção: data no wizard vs multi-lançamentos
 

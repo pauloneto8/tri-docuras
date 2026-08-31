@@ -10,7 +10,7 @@ AssistFin é finanças pessoais multiusuário com chat híbrido (regras + Groq +
 
 1. Leia o [README.md](README.md) e a skill relevante em `.cursor/skills/`.
 2. Mudança no agente → `assistfin-ai-agent` + `assistfin-agent-tests`.
-3. Mudança financeira → `assistfin-finance-domain` + testes em `tests/test_summary.py`, `tests/test_transfers.py`, `tests/test_planned_transactions.py`.
+3. Mudança financeira → `assistfin-finance-domain` + testes em `tests/test_summary.py`, `tests/test_transfers.py`, `tests/test_planned_transactions.py`, `tests/test_recurrence.py`.
 4. Deploy → `assistfin-deploy-nginx` + `assistfin-implementation`.
 
 ## Regras de ouro
@@ -42,20 +42,29 @@ Dashboard: `get_summary()` com `period` + `ref_date`. Saldos por conta usam `acc
 | `payment_date` | Quando o caixa se moveu (somente `actual`) |
 | `transaction_date` | Data de caixa no sistema (= `due_date` ou `payment_date`) |
 
-Wizard de transação (`transaction_slots.py`): após tipo e status, pergunta datas antes de valor/descrição/conta/categoria.
+Wizard de transação (`transaction_slots.py`): após tipo e status, pergunta datas, depois **recorrência** (fixo/frequência/término), então valor/descrição/conta/categoria.
+
+Wizard de realizar previsto (`realize_planned_slots.py`): identifica previsto → data de pagamento → mesma conta? → conta (se diferente).
+
+### Lançamentos fixos
+
+- Tabela `recurring_rules`; transações geradas têm `recurrence_id`
+- Motor: `app/services/recurrence.py` — horizonte 3 meses, idempotente
+- Encerrar série: `deactivate_recurring_rule()` + rota `POST /transactions/recurring/{rule_id}/stop`
+- Responder **não** no slot `is_recurring` **não** cancela o wizard
 
 ### UI Movimentos (`/transactions`)
 
 | Seção | Conteúdo |
 |-------|----------|
-| **A realizar** | `status = planned` pendente (`not is_realized`); vencimento; ação **Realizar** |
+| **A realizar** | `status = planned` pendente (`not is_realized`); vencimento; selo `Fixo · …` se recorrente; **Realizar** / **Encerrar série** |
 | **Extrato** | Somente `status = actual`; data de pagamento; “de previsto” quando `source_planned_id` |
 
 Previstos liquidados **não** listados (evita duplicata). Pares previsto/realizado no dashboard (`plan_vs_actual`). Consultas separadas: `ListTransactionsInput(status="planned")` e `status="actual"`.
 
 ### Wizard vs multi-lançamentos
 
-- Slots de data (`competence_date`, `due_date`, `payment_date`) têm prioridade sobre `parse_multi_movements`
+- Slots de data (`competence_date`, `due_date`, `payment_date`) e recorrência (`RECURRENCE_SLOTS`) têm prioridade sobre `parse_multi_movements`
 - `is_date_only_message()` — data isolada (`10/08/2026`) não vira vários lançamentos
 - Testes: `tests/test_multi_movements.py`
 
@@ -72,9 +81,9 @@ Previstos liquidados **não** listados (evita duplicata). Pares previsto/realiza
 
 | Área | Arquivos |
 |------|----------|
-| Cálculos | `app/services/finance.py` |
+| Cálculos | `app/services/finance.py`, `app/services/recurrence.py` |
 | Agente | `app/agent/runner.py`, `app/services/tools.py` |
-| Wizards | `transaction_wizard.py`, `transaction_slots.py`, `account_wizard.py`, `category_wizard.py`, `transfer_slots.py` |
+| Wizards | `transaction_wizard.py`, `transaction_slots.py`, `realize_planned_slots.py`, `account_wizard.py`, `category_wizard.py`, `transfer_slots.py` |
 | UI movimentos | `templates/transactions.html`, `routers/pages.py` (`_transactions_page_context`) |
 | UI chat | `templates/partials/agent_*.html` |
 | Auth | `app/auth.py`, `app/routers/auth.py`, `app/main.py` |

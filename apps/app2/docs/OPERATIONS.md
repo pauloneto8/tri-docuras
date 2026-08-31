@@ -33,19 +33,21 @@ docker compose exec -T app2 alembic revision -m "descricao" --autogenerate
 ## Testes
 
 ```bash
-# Suite completa
+# Suite completa (194 testes)
 docker compose exec -T app2 python -m pytest -q
 
 # Área específica
 docker compose exec -T app2 python -m pytest tests/test_transfers.py -q
 docker compose exec -T app2 python -m pytest tests/test_summary.py -q
 docker compose exec -T app2 python -m pytest tests/test_planned_transactions.py -q
+docker compose exec -T app2 python -m pytest tests/test_recurrence.py -q
+docker compose exec -T app2 python -m pytest tests/test_realize_planned_wizard.py -q
 docker compose exec -T app2 python -m pytest tests/test_multi_movements.py -q
 ```
 
 ## Zerar dados de teste (manter usuários)
 
-Remove movimentos, contas, categorias, conversas e reseta onboarding:
+Remove movimentos, contas, categorias, conversas, regras de recorrência e reseta onboarding:
 
 ```bash
 cd /opt/hosting
@@ -54,6 +56,7 @@ docker compose exec -T app2-db psql -U "$(grep APP2_DB_USER .env | cut -d= -f2)"
 DELETE FROM conversation_messages;
 DELETE FROM conversations;
 DELETE FROM transactions;
+DELETE FROM recurring_rules;
 DELETE FROM budgets;
 DELETE FROM accounts;
 DELETE FROM categories;
@@ -63,7 +66,7 @@ UPDATE users SET onboarding_completed = false;
 
 Usuários e senhas são preservados. Após o reset, faça **logout e login** se a sessão ou o onboarding parecerem inconsistentes.
 
-O que é removido: movimentos, contas, categorias, orçamentos, conversas do agente. O que permanece: usuários, aprovações e credenciais.
+O que é removido: movimentos, regras de recorrência, contas, categorias, orçamentos, conversas do agente. O que permanece: usuários, aprovações e credenciais.
 
 ## Logs
 
@@ -106,4 +109,6 @@ curl -s http://localhost/api/health
 | Sessão/onboarding inconsistente | Logout + login após reset de DB |
 | Lista de Movimentos confusa após realizar previsto | Deploy recente separa “A realizar” e “Extrato”; previsto liquidado some da lista (normal) |
 | Wizard criou várias despesas ao digitar data (`10/08/2026`) | Corrigido em 2026-08-31 — rebuild `app2`; ver `CHANGELOG.md` |
+| Responder "não" no slot de recorrência cancelou o wizard | Corrigido em 2026-08-31 — rebuild `app2` |
+| Previstos fixos não aparecem à frente | Acesse Dashboard ou Movimentos (`ensure_recurring_horizon`); verifique regra ativa |
 | 502 | `docker compose ps app2` |

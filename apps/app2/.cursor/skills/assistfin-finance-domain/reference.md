@@ -8,7 +8,7 @@
 | `get_summary(db, user_id, SummaryInput)` | Receitas/despesas/resultado do período + saldos + previstos/projeção |
 | `account_balances(db, user_id, as_of=date)` | Saldos por conta em uma data (só `actual`) |
 | `register_expense` / `register_income` | Lançamentos (planned ou actual); com `frequency` cria `recurring_rules` |
-| `realize_planned` | Converter previsão em realizado; reabastece horizonte se `recurrence_id` |
+| `realize_planned` | Converter previsão em realizado; atualiza conta do previsto se diferente; reabastece horizonte se `recurrence_id` |
 | `register_transfer` | Par transfer_out + transfer_in |
 | `update_transaction` / `delete_transaction` | Editar/excluir (par em transferências) |
 | `update_account` | Editar conta (saldo inicial, data, apelido…) |
