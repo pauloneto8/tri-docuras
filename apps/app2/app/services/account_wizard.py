@@ -3,7 +3,7 @@ import re
 from app.schemas import AgentResponse, CreateAccountInput, ToolCall
 from app.services.agent_suggestions import for_account_wizard_field
 from app.services.intents import wants_account_creation
-from app.services.tools import parse_amount
+from app.services.tools import parse_amount, parse_opening_balance_date
 from app.services.wizard_slots import is_complex_message, is_short_slot_message
 
 WIZARD_KEY = "account_wizard"
@@ -67,6 +67,7 @@ QUESTIONS = {
     "account_type": "Qual o tipo da conta? Opções: corrente, poupança, carteira ou cartão.",
     "institution": "Qual a instituição financeira? (opcional — responda 'pular' para ignorar)",
     "opening_balance": "Qual o saldo inicial? (opcional — responda 'pular' ou '0' para ignorar)",
+    "opening_balance_date": "A partir de qual data esse saldo inicial vale? (ex.: hoje, 01/08/2026)",
 }
 
 TYPE_LABELS = {
@@ -99,18 +100,34 @@ def start_wizard(session: dict, initial: dict | None = None) -> None:
         "institution": None,
         "account_type": None,
         "opening_balance": None,
+        "opening_balance_date": None,
         "institution_asked": False,
         "opening_balance_asked": False,
+        "opening_balance_date_asked": False,
     }
     if initial:
-        for key in ("name", "institution", "account_type", "opening_balance"):
+        for key in ("name", "institution", "account_type", "opening_balance", "opening_balance_date"):
             if initial.get(key):
                 data[key] = initial[key]
         if initial.get("institution"):
             data["institution_asked"] = True
         if initial.get("opening_balance") is not None:
             data["opening_balance_asked"] = True
+        if initial.get("opening_balance_date"):
+            data["opening_balance_date_asked"] = True
     session[WIZARD_KEY] = data
+
+
+def _has_positive_opening_balance(wizard: dict) -> bool:
+    balance = wizard.get("opening_balance")
+    if not balance:
+        return False
+    try:
+        from app.schemas import decimal_to_cents
+
+        return decimal_to_cents(balance) > 0
+    except (ValueError, Exception):
+        return False
 
 
 def parse_account_type(text: str) -> str | None:
@@ -253,6 +270,8 @@ def _next_field(wizard: dict) -> str | None:
         return "institution"
     if not wizard.get("opening_balance_asked"):
         return "opening_balance"
+    if _has_positive_opening_balance(wizard) and not wizard.get("opening_balance_date_asked"):
+        return "opening_balance_date"
     return None
 
 
@@ -285,15 +304,31 @@ def _fill_field(wizard: dict, field: str, message: str) -> str | None:
         wizard["opening_balance_asked"] = True
         if is_skip(message):
             wizard["opening_balance"] = None
+            wizard["opening_balance_date_asked"] = True
         else:
             amount = parse_amount(message) or message.strip()
             try:
                 from app.schemas import decimal_to_cents
 
-                decimal_to_cents(amount)
-                wizard["opening_balance"] = amount
+                cents = decimal_to_cents(amount)
+                if cents <= 0:
+                    wizard["opening_balance"] = None
+                    wizard["opening_balance_date_asked"] = True
+                else:
+                    wizard["opening_balance"] = amount
             except (ValueError, Exception):
                 return "Valor inválido. Informe um saldo como '500' ou '1.250,00', ou responda 'pular'."
+        return None
+
+    if field == "opening_balance_date":
+        wizard["opening_balance_date_asked"] = True
+        parsed = parse_opening_balance_date(message)
+        if not parsed:
+            return (
+                "Data inválida. Informe quando o saldo inicial passa a valer "
+                "(ex.: hoje, ontem, 01/08/2026)."
+            )
+        wizard["opening_balance_date"] = parsed
         return None
 
     return "Campo desconhecido."
@@ -309,6 +344,13 @@ def _wizard_summary(wizard: dict) -> str:
     balance = wizard.get("opening_balance")
     if balance:
         lines.append(f"Saldo inicial: R$ {balance}")
+        balance_date = wizard.get("opening_balance_date")
+        if balance_date:
+            from datetime import date
+
+            lines.append(
+                f"Data do saldo inicial: {date.fromisoformat(balance_date).strftime('%d/%m/%Y')}"
+            )
     else:
         lines.append("Saldo inicial: R$ 0,00")
     return "Confirme o cadastro da conta:\n" + "\n".join(lines)
@@ -350,6 +392,8 @@ def is_slot_answer(message: str, field: str) -> bool:
         return is_skip(message) or is_short_slot_message(message, max_words=6)
     if field == "opening_balance":
         return is_skip(message) or looks_like_amount(message)
+    if field == "opening_balance_date":
+        return parse_opening_balance_date(message) is not None
     return False
 
 
@@ -365,21 +409,22 @@ def get_wizard_context(session: dict) -> str | None:
         "account_type": "tipo da conta (corrente, poupança, carteira ou cartão)",
         "institution": "instituição financeira",
         "opening_balance": "saldo inicial",
+        "opening_balance_date": "data do saldo inicial",
     }
     return f"Wizard de conta aguardando: {labels.get(field, field)}"
 
 
 
 def wizard_to_tool_call(wizard: dict) -> ToolCall:
-    return ToolCall(
-        tool="create_account",
-        arguments={
-            "name": wizard["name"],
-            "account_type": wizard["account_type"],
-            "institution": wizard.get("institution"),
-            "opening_balance": wizard.get("opening_balance"),
-        },
-    )
+    args = {
+        "name": wizard["name"],
+        "account_type": wizard["account_type"],
+        "institution": wizard.get("institution"),
+        "opening_balance": wizard.get("opening_balance"),
+    }
+    if wizard.get("opening_balance_date"):
+        args["opening_balance_date"] = wizard["opening_balance_date"]
+    return ToolCall(tool="create_account", arguments=args)
 
 
 def _ask_field(field: str, message: str | None = None) -> AgentResponse:

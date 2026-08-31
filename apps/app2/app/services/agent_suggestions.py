@@ -61,6 +61,8 @@ def for_account_wizard_field(field: str) -> list[str]:
         return _with_cancel(["Pular"])
     if field == "opening_balance":
         return _with_cancel(["0", "Pular"])
+    if field == "opening_balance_date":
+        return _with_cancel(["Hoje", "Ontem"])
     return _with_cancel([])
 
 

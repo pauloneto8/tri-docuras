@@ -155,10 +155,14 @@ def test_wizard_full_flow():
     assert r3 is not None
     r4 = process_wizard_message(session, "1000")
     assert r4 is not None
-    assert r4.needs_confirmation
-    assert r4.pending_action["tool"] == "create_account"
-    assert r4.pending_action["arguments"]["name"] == "Itaú Poupança"
-    assert r4.pending_action["arguments"]["account_type"] == "poupanca"
+    assert "data" in r4.message.lower() and "saldo" in r4.message.lower()
+    r5 = process_wizard_message(session, "hoje")
+    assert r5 is not None
+    assert r5.needs_confirmation
+    assert r5.pending_action["tool"] == "create_account"
+    assert r5.pending_action["arguments"]["name"] == "Itaú Poupança"
+    assert r5.pending_action["arguments"]["account_type"] == "poupanca"
+    assert r5.pending_action["arguments"]["opening_balance_date"]
 
 
 def test_wizard_same_name_and_institution_does_not_reask_nickname():
@@ -170,10 +174,27 @@ def test_wizard_same_name_and_institution_does_not_reask_nickname():
     process_wizard_message(session, "Mercado Pago")
     result = process_wizard_message(session, "889,63")
     assert result is not None
+    assert "data" in result.message.lower() and "saldo" in result.message.lower()
+    assert not result.needs_confirmation
+    confirmed = process_wizard_message(session, "1 de agosto de 2026")
+    assert confirmed is not None
+    assert confirmed.needs_confirmation
+    assert confirmed.pending_action["arguments"]["name"] == "Mercado Pago"
+    assert confirmed.pending_action["arguments"]["institution"] == "Mercado Pago"
+    assert confirmed.pending_action["arguments"]["opening_balance"] in {"889.63", "889,63"}
+    assert confirmed.pending_action["arguments"]["opening_balance_date"] == "2026-08-01"
+
+
+def test_wizard_skips_opening_balance_date_when_no_balance():
+    session = {}
+    begin_account_wizard(session, "cadastrar conta")
+    process_wizard_message(session, "Carteira")
+    process_wizard_message(session, "carteira")
+    process_wizard_message(session, "pular")
+    result = process_wizard_message(session, "pular")
+    assert result is not None
     assert result.needs_confirmation
-    assert result.pending_action["arguments"]["name"] == "Mercado Pago"
-    assert result.pending_action["arguments"]["institution"] == "Mercado Pago"
-    assert result.pending_action["arguments"]["opening_balance"] in {"889.63", "889,63"}
+    assert "opening_balance_date" not in result.pending_action["arguments"]
 
 
 def test_format_create_account():

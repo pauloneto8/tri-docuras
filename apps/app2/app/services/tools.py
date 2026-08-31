@@ -702,6 +702,8 @@ def format_pending_confirmation(tool_call) -> str:
             lines.append(f"Instituição: {args.get('institution')}.")
         balance = args.get("opening_balance")
         lines.append(f"Saldo inicial: R$ {balance if balance else '0,00'}.")
+        if args.get("opening_balance_date"):
+            lines.append(f"Data do saldo inicial: {args.get('opening_balance_date')}.")
         lines.append("Clique em Confirmar para cadastrar.")
         return " ".join(lines)
     if tool_call.tool == "create_category":
