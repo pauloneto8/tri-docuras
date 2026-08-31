@@ -209,6 +209,7 @@ async def onboarding_submit(
                 "user": user,
                 "error": "Informe um nome com pelo menos 2 caracteres.",
                 "csrf_token": ensure_csrf_token(request),
+                "today": local_today().isoformat(),
             },
             status_code=400,
         )

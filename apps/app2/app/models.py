@@ -128,8 +128,37 @@ class Category(Base):
     budgets: Mapped[list["Budget"]] = relationship(back_populates="category")
 
 
+class RecurringRule(Base):
+    __tablename__ = "recurring_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False)
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
+    type: Mapped[str] = mapped_column(String(20), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    description: Mapped[str] = mapped_column(String(255), nullable=False)
+    frequency: Mapped[str] = mapped_column(String(20), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date | None] = mapped_column(Date)
+    anchor_day: Mapped[int | None] = mapped_column(Integer)
+    anchor_weekday: Mapped[int | None] = mapped_column(Integer)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship()
+    account: Mapped["Account"] = relationship()
+    category: Mapped["Category | None"] = relationship()
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="recurrence")
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (
+        UniqueConstraint("recurrence_id", "due_date", name="uq_transactions_recurrence_due_date"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -148,6 +177,9 @@ class Transaction(Base):
     source_planned_id: Mapped[int | None] = mapped_column(
         ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
     )
+    recurrence_id: Mapped[int | None] = mapped_column(
+        ForeignKey("recurring_rules.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -160,6 +192,7 @@ class Transaction(Base):
         remote_side="Transaction.id",
         foreign_keys=[source_planned_id],
     )
+    recurrence: Mapped["RecurringRule | None"] = relationship(back_populates="transactions")
 
 
 class Budget(Base):

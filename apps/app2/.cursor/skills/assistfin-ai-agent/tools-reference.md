@@ -11,8 +11,11 @@
 | `app/agent/prompt.py` | SYSTEM_PROMPT + `extract_json` |
 | `app/agent/tool_parse.py` | KNOWN_TOOLS, unsupported_action |
 | `app/services/intents.py` | listar/cadastrar conta/categoria, transferência |
-| `app/services/tools.py` | Regras, execute, formatação, `parse_user_date` |
-| `app/services/transaction_slots.py` | Slots de transação (status, datas, conta, categoria) |
+| `app/services/tools.py` | Regras, execute, formatação, `parse_user_date`, `is_date_only_message` |
+| `app/services/multi_movements.py` | Parser de vários lançamentos em uma mensagem |
+| `app/services/multi_movement_flow.py` | Fluxo guiado de confirmação multi |
+| `app/services/transaction_slots.py` | Slots de transação (status, datas, recorrência, conta, categoria) |
+| `app/services/recurrence.py` | Regras fixas, horizonte de previstos, encerrar série |
 | `app/services/transfer_slots.py` | Wizard de transferência |
 | `app/services/agent_suggestions.py` | Chips clicáveis |
 | `app/services/agent_state.py` | Limpar estado ao cancelar |
@@ -23,7 +26,7 @@
 
 | Ferramenta | Argumentos principais |
 |------------|----------------------|
-| `register_expense` | amount, description, account_name?, category_name?, competence_date?, due_date?, payment_date?, transaction_date? — **sem** `status` (wizard pergunta) |
+| `register_expense` | amount, description, account_name?, category_name?, competence_date?, due_date?, payment_date?, transaction_date?, frequency?, recurrence_end_date? — **sem** `status` (wizard pergunta) |
 | `register_income` | idem |
 | `register_transfer` | amount, from_account_name?, to_account_name?, description?, transaction_date? |
 | `realize_planned` | planned_id?, description?, amount?, account_name?, category_name?, competence_date?, due_date?, payment_date?, transaction_date? |
@@ -58,6 +61,8 @@ docker compose exec -T app2 python -m pytest \
   tests/test_transaction_dates.py \
   tests/test_parse_date.py \
   tests/test_planned_transactions.py \
+  tests/test_recurrence.py \
+  tests/test_multi_movements.py \
   tests/test_account_wizard.py \
   tests/test_category_wizard.py \
   tests/test_list_accounts.py \

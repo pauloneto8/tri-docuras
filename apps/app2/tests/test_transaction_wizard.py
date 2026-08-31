@@ -6,6 +6,7 @@ from app.services.transaction_wizard import (
     try_process_transaction_wizard,
 )
 from app.timezone import local_today
+from tests.wizard_helpers import decline_recurring
 
 
 def test_login_prompt_starts_wizard():
@@ -40,9 +41,11 @@ def test_actual_realization_date_fills_competence_and_due():
     try_process_transaction_wizard(session, "despesa")
     try_process_transaction_wizard(session, "realizado")
     result = try_process_transaction_wizard(session, "hoje")
-    assert result is not None
-    assert "valor" in result.message.lower()
+    decline_recurring(session)
     wizard = get_wizard(session)
+    from app.services.transaction_wizard import _next_field
+
+    assert _next_field(wizard) == "amount"
     today = local_today().isoformat()
     assert wizard["payment_date"] == today
     assert wizard["competence_date"] == today
@@ -72,6 +75,7 @@ def test_keeps_wizard_on_invalid_amount():
     try_process_transaction_wizard(session, "despesa")
     try_process_transaction_wizard(session, "realizado")
     try_process_transaction_wizard(session, "hoje")
+    decline_recurring(session)
     result = try_process_transaction_wizard(session, "abc")
     assert result is None
     assert get_wizard(session) is None
@@ -86,6 +90,20 @@ def test_cancel_clears_wizard():
     assert get_wizard(session) is None
 
 
+def test_nao_on_recurring_slot_does_not_cancel():
+    session = {}
+    start_wizard(session)
+    try_process_transaction_wizard(session, "despesa")
+    try_process_transaction_wizard(session, "realizado")
+    try_process_transaction_wizard(session, "hoje")
+    result = try_process_transaction_wizard(session, "Não")
+    assert result is not None
+    assert get_wizard(session) is not None
+    from app.services.transaction_wizard import _next_field
+
+    assert _next_field(get_wizard(session)) == "amount"
+
+
 def test_wizard_accepts_ontem_during_account_step():
     from datetime import timedelta
 
@@ -94,6 +112,7 @@ def test_wizard_accepts_ontem_during_account_step():
     try_process_transaction_wizard(session, "despesa")
     try_process_transaction_wizard(session, "realizado")
     try_process_transaction_wizard(session, "hoje")
+    decline_recurring(session)
     try_process_transaction_wizard(session, "50")
     try_process_transaction_wizard(session, "mercado")
 
@@ -124,7 +143,11 @@ def test_planned_asks_competence_then_due():
 
     result = try_process_transaction_wizard(session, "10/08/2026")
     assert result is not None
-    assert "valor" in result.message.lower()
+    assert "fixo" in result.message.lower() or "recorr" in result.message.lower()
+    decline_recurring(session)
+    result = try_process_transaction_wizard(session, "50")
+    assert result is not None
+    assert "conta" in result.message.lower() or "descrição" in result.message.lower() or get_wizard(session).get("amount")
     wizard = get_wizard(session)
     assert wizard["competence_date"] == f"{local_today().year}-08-01"
     assert wizard["due_date"] == "2026-08-10"
@@ -141,6 +164,7 @@ def test_description_mercado_ontem_sets_yesterday():
     try_process_transaction_wizard(session, "previsto")
     try_process_transaction_wizard(session, "hoje")
     try_process_transaction_wizard(session, "amanhã")
+    decline_recurring(session)
     try_process_transaction_wizard(session, "50")
     result = try_process_transaction_wizard(session, "mercado ontem")
     assert result is not None

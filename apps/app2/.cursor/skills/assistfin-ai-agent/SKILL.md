@@ -5,7 +5,7 @@ description: >-
   Ollama, ferramentas, chips e chat HTMX. Use ao alterar assistente, chat, LLM,
   prompt, confirmação, transferências, wizards ou quando o agente não entender
   intenção do usuário.
-paths: app/agent/**, app/services/account_wizard.py, app/services/category_wizard.py, app/services/transaction_wizard.py, app/services/transfer_slots.py, app/services/intents.py, app/services/tools.py, app/services/agent_suggestions.py, app/services/agent_state.py, app/templates/partials/agent_*.html, app/routers/pages.py
+paths: app/agent/**, app/services/account_wizard.py, app/services/category_wizard.py, app/services/transaction_wizard.py, app/services/transaction_slots.py, app/services/recurrence.py, app/services/transfer_slots.py, app/services/multi_movements.py, app/services/multi_movement_flow.py, app/services/intents.py, app/services/tools.py, app/services/agent_suggestions.py, app/services/agent_state.py, app/templates/partials/agent_*.html, app/routers/pages.py
 ---
 
 # AssistFin — Agente de IA
@@ -20,9 +20,10 @@ paths: app/agent/**, app/services/account_wizard.py, app/services/category_wizar
 
 ```
 mensagem
-  → multi-movimento pendente?
+  → multi-movimento em andamento (pending_movements)?
   → wizard transferência?
-  → wizard transação?
+  → wizard transação? (datas antes de multi-lançamento)
+  → try_begin_from_message (vários valores na mensagem)?
   → wizard conta / categoria?
   → exclusão pendente?
   → _resolve_intent (regras → Groq → Ollama)
@@ -56,7 +57,7 @@ mensagem
 
 | Wizard | Arquivo | Campos |
 |--------|---------|--------|
-| Transação | `transaction_wizard.py` + `transaction_slots.py` | tipo, status, datas, valor, descrição, conta, categoria |
+| Transação | `transaction_wizard.py` + `transaction_slots.py` | tipo, status, datas, recorrência (fixo/frequência/término), valor, descrição, conta, categoria |
 | Transferência | `transfer_slots.py` | valor, origem, destino |
 | Conta | `account_wizard.py` | apelido, tipo, instituição, saldo |
 | Categoria | `category_wizard.py` | nome, tipo |
@@ -71,8 +72,23 @@ Após `status`, o wizard pergunta datas **antes** de valor/descrição:
 | `actual` | `payment_date` | Uma pergunta; replica em competência e vencimento |
 
 - Parsing: `parse_slot_date()` → `parse_user_date()` (`hoje`, `ontem`, `amanhã`, `DD/MM/AAAA`, `agosto`, etc.)
+- `is_date_only_message()` evita que datas isoladas (`10/08/2026`) sejam interpretadas como múltiplos valores em `parse_multi_movements`
+- Com wizard ativo em slot de data, `try_begin_from_message` **não** inicia fluxo multi
 - LLM **não** envia `status` nem inventa datas — só extrai se o usuário citou na mensagem
 - Inferência de "ontem"/"hoje" na mensagem original pula a pergunta de data (realizado)
+
+### Slots de recorrência
+
+Após as datas, antes de valor:
+
+| Slot | Pergunta | Respostas |
+|------|----------|-----------|
+| `is_recurring` | É fixo/repete? | sim/não — **não** aqui não cancela o wizard |
+| `frequency` | Frequência | diária, semanal, mensal |
+| `recurrence_end_date` | Tem término? | não ou data |
+
+- `RECURRENCE_SLOTS` entram nas guardas anti-multi em `multi_movement_flow.py`
+- LLM pode inferir `frequency` de frases como "aluguel todo mês"
 
 Escape: intenção diferente → `clear_wizard` + `None` (delega ao runner).
 

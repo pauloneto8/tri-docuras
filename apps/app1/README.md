@@ -2,6 +2,8 @@
 
 Doceria online especializada em brownies. Cliente multiplataforma (Android, iOS, web) com API Dart e PostgreSQL isolados.
 
+**Produção:** https://tridocuras.com.br
+
 ## Componentes
 
 | Serviço | Container | Descrição |
@@ -17,7 +19,7 @@ Doceria online especializada em brownies. Cliente multiplataforma (Android, iOS,
 | `/` | Flutter web (`app1-web`) |
 | `/api/*` | Dart Frog (`app1:8080`) |
 
-Domínio configurado em `/opt/hosting/.env` → `APP1_DOMAIN`.
+Domínio configurado em `/opt/hosting/.env` → `APP1_DOMAIN` (`tridocuras.com.br`).
 
 ## API
 
@@ -57,24 +59,22 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 | Renders PNG (6 páginas) | `/root/.cursor/docs/tri-docuras/render/` |
 | Tokens e tema | `frontend/lib/theme/` |
 | Widgets base | `frontend/lib/widgets/` |
-| Tela catálogo | `frontend/lib/screens/home_screen.dart` |
-| Tela produto | `frontend/lib/screens/product_screen.dart` |
-| Tela carrinho | `frontend/lib/screens/cart_screen.dart` |
-| Tela checkout | `frontend/lib/screens/checkout_screen.dart` |
-| Pix (placeholder) | `frontend/lib/screens/pix_screen.dart` |
+| Telas | `frontend/lib/screens/` |
 | Carrinho (memória) | `frontend/lib/cart/` |
-| Validadores checkout | `frontend/lib/checkout/` |
+| Checkout / endereço | `frontend/lib/checkout/` |
 
-### Implementado
+### Implementado (telas 1–6)
 
 | # | Tela | Resumo |
 |---|------|--------|
-| 1 | Catálogo | Wordmark, busca, chips, grade 2 colunas, bottom nav no body, badge dinâmico no carrinho |
-| 2 | Produto | Moldura, opções (brownies), quantidade, total no botão Adicionar, grava em `CartController` |
-| 3 | Carrinho | Linhas com stepper compacto, ENTREGA (retirar/receber), resumo, Finalizar pedido |
-| 4 | Checkout | Nome, WhatsApp (validado), retirada, card Pix visual, Gerar Pix → tela 5 |
-| 5 | Pagamento Pix | Timer, QR placeholder, aguardando pagamento, confirmação manual |
+| 1 | Catálogo | Busca, chips, grade, badge do carrinho, balão ao adicionar item |
+| 2 | Produto | Opções, quantidade, Adicionar → catálogo com confirmação |
+| 3 | Carrinho | Stepper, **Remover** item, entrega (retirar / receber R$ 6,00) |
+| 4 | Checkout | Nome, WhatsApp, endereço (entrega), Pix visual, Gerar Pix |
+| 5 | Pagamento Pix | QR placeholder, timer 10 min, confirmação manual |
 | 6 | Confirmação | Resumo do pedido, status Pago, voltar à loja |
+
+**Entrega:** apenas Nazaré da Mata - PE (CEP 55.800-000); taxa R$ 6,00 para receber em casa.
 
 **Navegação:** catálogo → produto → carrinho → checkout → Pix → confirmação.
 
@@ -86,7 +86,7 @@ Pix Mercado Pago real (QR + webhook), `POST /api/orders`, rastreamento de pedido
 
 - **Android:** abrir `frontend/` no Android Studio e build APK/AAB
 - **iOS:** requer Mac + Xcode (projeto em `frontend/ios/`)
-- API mobile: configurar em `frontend/lib/config.dart`
+- API mobile: `https://tridocuras.com.br/api` em `frontend/lib/config.dart`
 
 ## Documentação
 

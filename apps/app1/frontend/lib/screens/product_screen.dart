@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tri_docuras/cart/cart_added_result.dart';
 import 'package:tri_docuras/cart/cart_item.dart';
 import 'package:tri_docuras/cart/cart_scope.dart';
 import 'package:tri_docuras/models/product.dart';
@@ -55,7 +56,12 @@ class _ProductScreenState extends State<ProductScreen> {
         lactoseFree: _isCombo ? false : _lactoseFree,
       ),
     );
-    Navigator.of(context).pop();
+    Navigator.of(context).pop(
+      CartAddedResult(
+        productName: widget.product.name,
+        quantity: _quantity,
+      ),
+    );
   }
 
   @override

@@ -17,10 +17,11 @@ lib/
 ├── main.dart              # MaterialApp + CartScope + tema
 ├── config.dart            # apiBaseUrl (web: /api, mobile: host)
 ├── cart/
-│   ├── cart_controller.dart   # itens, deliveryMode, subtotal/total
+│   ├── cart_controller.dart   # itens, deliveryMode, taxa entrega, removeAt
 │   ├── cart_item.dart
-│   ├── cart_scope.dart        # InheritedWidget para CartController
-│   └── delivery_mode.dart     # retirar na loja / receber em casa
+│   ├── cart_scope.dart
+│   ├── cart_added_result.dart # balão "Adicionado ao carrinho"
+│   └── delivery_mode.dart
 ├── theme/
 │   ├── app_colors.dart    # paleta do design system
 │   └── app_theme.dart     # ThemeData + tipografia
@@ -36,6 +37,8 @@ lib/
 ├── checkout/
 │   ├── checkout_draft.dart
 │   ├── checkout_validators.dart
+│   ├── delivery_address.dart
+│   ├── delivery_address_validators.dart
 │   ├── order_summary.dart
 │   └── whatsapp_input_formatter.dart
 └── widgets/
@@ -106,6 +109,7 @@ Implementada conforme página 4 do PDF (lado esquerdo):
 - **Chips:** Todos / Brownies / Combos
 - **Grade:** 2 colunas fixas, cards off-white com moldura circular
 - **Navegação:** toque no card ou em "Adicionar" abre a tela de produto
+- **Balão ao adicionar:** volta ao catálogo + `CartAddedBanner` (5 s) com link **Ver carrinho**
 - **Bottom nav:** dentro do `body` (Column), não `Scaffold.bottomNavigationBar`
 
 ### Tela 2 — Produto (`product_screen.dart`)
@@ -117,16 +121,16 @@ Implementada conforme página 4 do PDF (lado direito):
 - **Opções** (brownies): chips `9x9cm` / `Fatia grande` + toggle `Sem lactose +R$3`
 - **Combos:** sem chips de tamanho/extra
 - **Quantidade:** stepper (default 2)
-- **Rodapé:** `TdButton` "Adicionar" + total dinâmico; grava em `CartController` e volta ao catálogo
+- **Rodapé:** `TdButton` "Adicionar" + total dinâmico; grava em `CartController`, volta ao catálogo com balão de confirmação
 
 ### Tela 3 — Carrinho (`cart_screen.dart`)
 
 Implementada conforme página 5 do PDF (lado esquerdo):
 
 - **Header:** voltar + título "Seu carrinho" (Lora)
-- **Linhas:** moldura pequena, nome, preço unitário, stepper compacto
-- **ENTREGA:** `Retirar na loja` / `Receber em casa` (chips pill)
-- **Resumo:** Subtotal, Retirada/Entrega (Grátis), Total
+- **Linhas:** moldura pequena, nome, preço unitário, link **Remover**, stepper compacto
+- **ENTREGA:** retirar na loja (grátis) ou receber em casa (**R$ 6,00** — só Nazaré da Mata - PE, CEP 55.800-000; endereço no checkout)
+- **Resumo:** Subtotal, Retirada/Entrega, Total
 - **Rodapé:** `Finalizar pedido` + total → navega ao checkout
 - Ícone do carrinho no catálogo abre esta tela
 - Carrinho vazio: mensagem orientando adicionar produtos
@@ -137,7 +141,8 @@ Implementada conforme página 5 do PDF (lado direito), com validação no client
 
 - **Header:** voltar + título "Finalizar" (Lora)
 - **NOME COMPLETO** / **WHATSAPP** — `TdTextField` + validadores (`checkout_validators.dart`); máscara `(11) 91234-5678`
-- **RETIRADA / ENTREGA** — card somente leitura (sem formulário de endereço)
+- Label `ENTREGA` — Nazaré da Mata - PE, CEP 55.800-000, taxa R$ 6,00
+- **ENDEREÇO DE ENTREGA** (se receber em casa): rua, número, complemento, bairro, ponto de referência
 - **PAGAMENTO** — card visual "Pix via Mercado Pago" (sem integração)
 - **Resumo:** Subtotal e Total a pagar via `CartController`
 - **Rodapé:** `Gerar Pix` + total — desabilitado até formulário válido; abre tela 5
@@ -162,16 +167,18 @@ Implementada conforme página 6 do PDF (lado direito):
 ### Fluxo de navegação
 
 ```
-HomeScreen ──► ProductScreen ──(Adicionar)──► pop → HomeScreen
-HomeScreen ──(ícone carrinho)──► CartScreen ──(Finalizar)──► CheckoutScreen
+HomeScreen ──► ProductScreen ──(Adicionar)──► catálogo + balão (5 s, Ver carrinho)
+HomeScreen ──(ícone carrinho / Ver carrinho)──► CartScreen ──(Finalizar)──► CheckoutScreen
 CheckoutScreen ──(Gerar Pix)──► PixScreen ──(Já realizei o pagamento)──► ConfirmationScreen
+ConfirmationScreen ──(Voltar à loja)──► HomeScreen (carrinho limpo)
 ```
 
-Estado do carrinho: `CartController` em memória (sem persistência). Badge do header = `itemCount`. Carrinho é limpo na confirmação.
+Estado do carrinho: `CartController` em memória (`add`, `updateQuantity`, `removeAt`, `deliveryFeeAmount = 6`). Badge do header = `itemCount`.
 
 ### Pendente (integração)
 
-Pix Mercado Pago real (QR + copia-e-cola via API), webhook de confirmação automática, `POST /api/orders`, rastreamento de pedidos.
+Pix Mercado Pago real (QR + copia-e-cola via API), webhook automático, `POST /api/orders`, rastreamento de pedidos.
+
 ## Desenvolvimento
 
 ```bash
@@ -217,8 +224,8 @@ Invocar: `/flutter-build-responsive-layout` ou `@tri-docuras-project`
 ## Teste
 
 ```bash
-curl -s https://tridocuras.example.com/api/products
-# Abrir no navegador: https://tridocuras.example.com/
+curl -s https://tridocuras.com.br/api/products
+# Abrir no navegador: https://tridocuras.com.br/
 ```
 
 Após deploy, use hard refresh (`Ctrl+Shift+R`) para evitar cache do build anterior.

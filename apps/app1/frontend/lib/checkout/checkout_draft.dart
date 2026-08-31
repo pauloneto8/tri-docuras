@@ -1,4 +1,5 @@
 import 'package:tri_docuras/cart/delivery_mode.dart';
+import 'package:tri_docuras/checkout/delivery_address.dart';
 import 'package:tri_docuras/checkout/order_summary.dart';
 
 /// Rascunho de checkout em memória — não persistir (PII).
@@ -8,6 +9,7 @@ class CheckoutDraft {
     required this.whatsappDigits,
     required this.total,
     required this.deliveryMode,
+    this.deliveryAddress,
   });
 
   /// Nome já sanitizado (trim + espaços normalizados).
@@ -21,6 +23,9 @@ class CheckoutDraft {
 
   final DeliveryMode deliveryMode;
 
+  /// Preenchido quando [deliveryMode] é entrega em casa.
+  final DeliveryAddress? deliveryAddress;
+
   String get formattedTotal =>
       'R\$ ${total.toStringAsFixed(2).replaceAll('.', ',')}';
 
@@ -29,5 +34,6 @@ class CheckoutDraft {
         customerName: customerName,
         total: total,
         deliveryMode: deliveryMode,
+        deliveryAddress: deliveryAddress,
       );
 }

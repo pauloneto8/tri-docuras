@@ -53,6 +53,12 @@ Wizard de transação (`transaction_slots.py`): após tipo e status, pergunta da
 
 Previstos liquidados **não** listados (evita duplicata). Pares previsto/realizado no dashboard (`plan_vs_actual`). Consultas separadas: `ListTransactionsInput(status="planned")` e `status="actual"`.
 
+### Wizard vs multi-lançamentos
+
+- Slots de data (`competence_date`, `due_date`, `payment_date`) têm prioridade sobre `parse_multi_movements`
+- `is_date_only_message()` — data isolada (`10/08/2026`) não vira vários lançamentos
+- Testes: `tests/test_multi_movements.py`
+
 ## Checklist de feature
 
 1. Modelo + migração Alembic (se persistir)

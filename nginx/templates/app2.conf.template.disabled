@@ -1,18 +1,15 @@
 server {
-    listen 443 ssl http2;
-    server_name ${APP2_DOMAIN} www.${APP2_DOMAIN};
-
-    ssl_certificate /etc/letsencrypt/live/${APP2_DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${APP2_DOMAIN}/privkey.pem;
-    ssl_session_timeout 1d;
-    ssl_session_cache shared:SSL:50m;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers off;
+    listen 80;
+    server_name ${APP2_DOMAIN} www.${APP2_DOMAIN} 143.95.165.99;
 
     add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; img-src 'self' data:; connect-src 'self'; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
 
     location = /login {
         limit_req zone=auth_limit burst=3 nodelay;
@@ -53,18 +50,5 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-
-server {
-    listen 80;
-    server_name ${APP2_DOMAIN} www.${APP2_DOMAIN};
-
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-
-    location / {
-        return 301 https://$host$request_uri;
     }
 }

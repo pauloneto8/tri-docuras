@@ -14,7 +14,7 @@ O frontend consome o catálogo na tela 1; carrinho e checkout usam estado local 
 ### Exemplo — health
 
 ```bash
-curl https://tridocuras.example.com/api/health
+curl https://tridocuras.com.br/api/health
 ```
 
 ```json

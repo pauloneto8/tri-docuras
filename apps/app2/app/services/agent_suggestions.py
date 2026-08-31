@@ -39,6 +39,12 @@ def for_transaction_wizard_field(
         return _with_cancel(["Hoje"])
     if field == "due_date":
         return _with_cancel(["Hoje", "Amanhã"])
+    if field == "is_recurring":
+        return _with_cancel(["Sim", "Não"])
+    if field == "frequency":
+        return _with_cancel(["Diária", "Semanal", "Mensal"])
+    if field == "recurrence_end_date":
+        return _with_cancel(["Não", "Hoje"])
     if field == "account_name" and db is not None and user_id is not None:
         names = list_active_account_names(db, user_id)[:MAX_CHIPS]
         return _with_cancel(names) if names else _with_cancel([])
@@ -69,6 +75,31 @@ def for_account_wizard_field(field: str) -> list[str]:
 def for_category_wizard_field(field: str) -> list[str]:
     if field == "category_type":
         return _with_cancel(["Despesa", "Receita"])
+    return _with_cancel([])
+
+
+def for_realize_planned_field(
+    field: str,
+    db: Session,
+    user_id: int,
+    wizard: dict,
+) -> list[str]:
+    from app.services.realize_planned_slots import _pending_planned_labels
+    from app.services.transaction_slots import list_active_account_names
+
+    if field == "planned":
+        labels = [label for _, label in _pending_planned_labels(db, user_id)]
+        return _with_cancel(labels[:MAX_CHIPS]) if labels else _with_cancel([])
+    if field == "payment_date":
+        return _with_cancel(["Hoje", "Ontem"])
+    if field == "same_account":
+        return _with_cancel(["Sim", "Outra conta"])
+    if field == "account_name":
+        planned = wizard.get("planned_account_name")
+        names = [
+            n for n in list_active_account_names(db, user_id) if n != planned
+        ][:MAX_CHIPS]
+        return _with_cancel(names) if names else _with_cancel([])
     return _with_cancel([])
 
 

@@ -165,6 +165,26 @@ def is_relative_date_message(message: str) -> bool:
     return len(strip_relative_date_tokens(message)) < 2
 
 
+def is_date_only_message(message: str) -> bool:
+    """True when the user message is only a date (not an expense narrative)."""
+    stripped = message.strip()
+    if not stripped or parse_user_date(stripped) is None:
+        return False
+    lower = stripped.lower()
+    if any(h in lower for h in EXPENSE_HINTS + INCOME_HINTS):
+        return False
+    if "despesa" in lower or "receita" in lower:
+        return False
+    if BR_DATE_RE.fullmatch(stripped) or ISO_DATE_RE.fullmatch(stripped):
+        return True
+    if is_relative_date_message(stripped):
+        return True
+    # Month name or short phrase without amounts (agosto, 1 de agosto de 2026)
+    if len(list(AMOUNT_RE.finditer(stripped))) >= 2:
+        return False
+    return len(stripped.split()) <= 6
+
+
 _RELATIVE_DATE_TOKEN_RE = re.compile(r"\b(?:ontem|hoje|amanh[ãa])\b", re.IGNORECASE)
 _RELATIVE_DATE_PHRASE_RE = re.compile(
     r"^\s*(?:foi|era|é|e|no dia|a despesa foi|despesa foi)\s+",
@@ -536,10 +556,11 @@ def format_tool_result(action: str, result) -> str:
     if action == "realize_planned":
         planned = result["planned"]
         actual = result["actual"]
+        account_part = f" na conta {actual['account']}" if actual.get("account") else ""
         return (
             f"Previsto realizado: '{planned['description']}' — "
             f"previsto R$ {planned['amount']} em {planned['transaction_date']}, "
-            f"realizado R$ {actual['amount']} em {actual['transaction_date']}."
+            f"realizado R$ {actual['amount']} em {actual['transaction_date']}{account_part}."
         )
     if action == "update_transaction":
         tx = result
@@ -648,6 +669,18 @@ def format_pending_confirmation(tool_call) -> str:
         payment = args.get("payment_date") or args.get("transaction_date") or "hoje"
         return f"Data da realização: {payment}"
 
+    def _format_recurrence() -> str:
+        freq = args.get("frequency")
+        if not freq:
+            return ""
+        from app.services.recurrence import FREQUENCY_LABELS
+
+        label = FREQUENCY_LABELS.get(freq, freq)
+        end = args.get("recurrence_end_date")
+        if end:
+            return f"Lançamento fixo ({label}) até {end}\n"
+        return f"Lançamento fixo ({label})\n"
+
     if tool_call.tool == "register_expense":
         kind = "previsão de despesa" if args.get("status") == "planned" else "despesa"
         return (
@@ -656,6 +689,7 @@ def format_pending_confirmation(tool_call) -> str:
             f"Conta: {args.get('account_name')}\n"
             f"Categoria: {args.get('category_name')}\n"
             f"{_format_dates(args.get('status', 'actual'))}\n"
+            f"{_format_recurrence()}"
             f"Clique em Confirmar para registrar."
         )
     if tool_call.tool == "register_income":
@@ -666,6 +700,7 @@ def format_pending_confirmation(tool_call) -> str:
             f"Conta: {args.get('account_name')}\n"
             f"Categoria: {args.get('category_name')}\n"
             f"{_format_dates(args.get('status', 'actual'))}\n"
+            f"{_format_recurrence()}"
             f"Clique em Confirmar para registrar."
         )
     if tool_call.tool == "realize_planned":
@@ -676,6 +711,8 @@ def format_pending_confirmation(tool_call) -> str:
             lines.append(f"Descrição: {args.get('description')}")
         if args.get("amount"):
             lines.append(f"Valor realizado: R$ {args.get('amount')}")
+        if args.get("account_name"):
+            lines.append(f"Conta: {args.get('account_name')}")
         payment = args.get("payment_date") or args.get("transaction_date") or "hoje"
         lines.append(f"Data de pagamento: {payment}")
         if args.get("competence_date"):

@@ -65,6 +65,36 @@ def test_single_expense_not_multi():
     assert parse_multi_movements(message) is None
 
 
+def test_date_only_not_multi():
+    assert parse_multi_movements("10/08/2026") is None
+    assert parse_multi_movements("03/09/2026") is None
+    assert parse_multi_movements("31-08-2026") is None
+
+
+@pytest.mark.asyncio
+async def test_runner_due_date_does_not_spawn_multi_expenses():
+    session = {}
+    begin_login_prompt(session)
+    from app.services.transaction_wizard import try_process_transaction_wizard
+
+    try_process_transaction_wizard(session, "despesa")
+    try_process_transaction_wizard(session, "previsto")
+    try_process_transaction_wizard(session, "agosto")
+    assert get_wizard(session) is not None
+
+    db = MagicMock()
+    with patch("app.agent.runner.call_intent_llm", new_callable=AsyncMock) as mock_llm:
+        result = await process_message(db, 1, "10/08/2026", session=session)
+
+    mock_llm.assert_not_called()
+    assert result.source == "wizard"
+    if "fixo" in result.message.lower() or "recorr" in result.message.lower():
+        result = await process_message(db, 1, "Não", session=session)
+    assert "valor" in result.message.lower()
+    assert get_wizard(session)["due_date"] == "2026-08-10"
+    assert "pending_movements" not in session or session.get("pending_movements") is None
+
+
 @pytest.mark.asyncio
 async def test_runner_multi_skips_llm():
     session = {}

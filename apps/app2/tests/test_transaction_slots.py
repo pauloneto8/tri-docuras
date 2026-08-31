@@ -16,6 +16,7 @@ from app.services.transaction_slots import (
     resolve_transaction_date,
 )
 from app.timezone import local_today
+from tests.wizard_helpers import decline_recurring_slot
 
 
 def _setup_user(db, user):
@@ -107,6 +108,7 @@ async def test_two_accounts_asks_account_one_account_auto():
         assert session["transaction_wizard"]["status"] is None
 
         status_slot = process_slot_answer(db, user.id, session, "realizado")
+        status_slot = decline_recurring_slot(session, db, user.id) or status_slot
         assert status_slot.question is not None
         assert "conta" in status_slot.question.lower()
         assert session["transaction_wizard"]["category_name"] == "Transporte"
@@ -164,6 +166,7 @@ async def test_ontem_preserves_yesterday_date_through_account_slot():
         assert "realizado" in result.question.lower() or "previsto" in result.question.lower()
 
         status_slot = process_slot_answer(db, user.id, session, "realizado")
+        status_slot = decline_recurring_slot(session, db, user.id) or status_slot
         assert status_slot.question is not None
 
         slot = process_slot_answer(db, user.id, session, f"Mercado_{suffix}")
@@ -219,6 +222,7 @@ async def test_single_account_auto_fills():
         assert filled.question is not None
         assert "realização" in filled.question.lower() or "realizacao" in filled.question.lower()
         filled = process_slot_answer(db, user.id, session, "hoje")
+        filled = decline_recurring_slot(session, db, user.id) or filled
         assert filled.tool_call is not None
         assert filled.tool_call.arguments["account_name"] == f"Nubank_{suffix}"
         assert filled.tool_call.arguments["category_name"] == "Transporte"
@@ -334,6 +338,8 @@ async def test_runner_asks_account_for_passagens_with_two_accounts():
         assert "realizado" in result.message.lower() or "previsto" in result.message.lower()
 
         result_status = await process_message(db, user.id, "realizado", session=session)
+        if "fixo" in result_status.message.lower():
+            result_status = await process_message(db, user.id, "Não", session=session)
         assert "conta" in result_status.message.lower()
         assert "Transporte" in result_status.message or session["transaction_wizard"]["category_name"] == "Transporte"
 
@@ -389,8 +395,12 @@ async def test_planned_slots_ask_competence_then_due():
         assert session["transaction_wizard"]["competence_date"] == "2026-08-01"
 
         due_slot = process_slot_answer(db, user.id, session, "10/08/2026")
-        assert due_slot.tool_call is not None
-        args = due_slot.tool_call.arguments
+        assert due_slot.question is not None
+        assert "fixo" in due_slot.question.lower() or "recorr" in due_slot.question.lower()
+
+        recur_slot = process_slot_answer(db, user.id, session, "Não")
+        assert recur_slot.tool_call is not None
+        args = recur_slot.tool_call.arguments
         assert args["status"] == "planned"
         assert args["competence_date"] == "2026-08-01"
         assert args["due_date"] == "2026-08-10"

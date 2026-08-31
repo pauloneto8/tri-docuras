@@ -61,6 +61,7 @@ class CartScreen extends StatelessWidget {
                                     item: item,
                                     onQuantityChanged: (qty) =>
                                         cart.updateQuantity(index, qty),
+                                    onRemove: () => cart.removeAt(index),
                                   ),
                                 );
                               }),
@@ -175,10 +176,12 @@ class _CartLineCard extends StatelessWidget {
   const _CartLineCard({
     required this.item,
     required this.onQuantityChanged,
+    required this.onRemove,
   });
 
   final CartItem item;
   final ValueChanged<int> onQuantityChanged;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -195,8 +198,9 @@ class _CartLineCard extends StatelessWidget {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
               width: 64,
@@ -219,9 +223,26 @@ class _CartLineCard extends StatelessWidget {
                     item.formattedUnitPrice,
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: onRemove,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Text(
+                        'Remover',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.pinkDeep,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
+            const SizedBox(width: 4),
             TdQuantityStepper(
               value: item.quantity,
               compact: true,

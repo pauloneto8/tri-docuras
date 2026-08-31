@@ -7,8 +7,8 @@
 | `resolve_transaction_dates(status, …)` | Normaliza competência, vencimento, pagamento e `transaction_date` |
 | `get_summary(db, user_id, SummaryInput)` | Receitas/despesas/resultado do período + saldos + previstos/projeção |
 | `account_balances(db, user_id, as_of=date)` | Saldos por conta em uma data (só `actual`) |
-| `register_expense` / `register_income` | Lançamentos (planned ou actual) |
-| `realize_planned` | Converter previsão em realizado |
+| `register_expense` / `register_income` | Lançamentos (planned ou actual); com `frequency` cria `recurring_rules` |
+| `realize_planned` | Converter previsão em realizado; reabastece horizonte se `recurrence_id` |
 | `register_transfer` | Par transfer_out + transfer_in |
 | `update_transaction` / `delete_transaction` | Editar/excluir (par em transferências) |
 | `update_account` | Editar conta (saldo inicial, data, apelido…) |
@@ -40,6 +40,7 @@
 | 010 | `transfer_group_id`, `counterparty_account_id`, tipos transfer |
 | 011 | `status` (planned/actual), `source_planned_id` |
 | 012 | `competence_date`, `due_date`, `payment_date` |
+| 013 | `recurring_rules`, `transactions.recurrence_id`, unique `(recurrence_id, due_date)` |
 
 ## Formatação BRL
 

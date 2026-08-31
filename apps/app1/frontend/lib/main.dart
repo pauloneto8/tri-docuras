@@ -3,6 +3,7 @@ import 'package:tri_docuras/cart/cart_controller.dart';
 import 'package:tri_docuras/cart/cart_scope.dart';
 import 'package:tri_docuras/config.dart';
 import 'package:tri_docuras/screens/home_screen.dart';
+import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
 
 void main() {
@@ -23,6 +24,15 @@ class TriDocurasApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         home: const HomeScreen(),
+        builder: (context, child) {
+          return ColoredBox(
+            color: AppColors.cream,
+            child: Scaffold(
+              backgroundColor: AppColors.cream,
+              body: child,
+            ),
+          );
+        },
       ),
     );
   }

@@ -5,7 +5,7 @@ description: >-
   transferências, orçamentos e regras de negócio. Use ao alterar dashboard,
   finance.py, modelos, onboarding, contas, movimentos, resumos por período
   ou saldo inicial com data.
-paths: app/services/finance.py, app/models.py, app/schemas.py, app/templates/dashboard.html, app/templates/accounts.html, app/templates/transactions.html, app/templates/budgets.html, app/routers/pages.py, tests/test_summary.py, tests/test_transfers.py, tests/test_planned_transactions.py
+paths: app/services/finance.py, app/models.py, app/schemas.py, app/services/recurrence.py, app/templates/dashboard.html, app/templates/accounts.html, app/templates/transactions.html, app/templates/budgets.html, app/routers/pages.py, tests/test_summary.py, tests/test_transfers.py, tests/test_planned_transactions.py, tests/test_recurrence.py
 ---
 
 # AssistFin — Domínio financeiro
@@ -40,12 +40,19 @@ Realizar: `realize_planned()` cria lançamento `actual` com `source_planned_id`.
 
 | Seção | Query / regra | Exibição |
 |-------|---------------|----------|
-| **A realizar** | `status=planned`, `not is_realized` | Vencimento; selo Previsto; ação Realizar |
+| **A realizar** | `status=planned`, `not is_realized` | Vencimento; selo Previsto ou `Fixo · mensal/semanal/diária`; ação Realizar / Encerrar série |
 | **Extrato** | `status=actual` | Pagamento; selo Realizado; “de previsto” se `source_planned_id` |
 
 Previstos liquidados **não** aparecem na lista. `ListTransactionsInput.status`: `actual` | `planned` | `all` (default `all` — chat/API inalterados).
 
-Formulário manual: realizado → data da realização; previsto → competência + vencimento. **Realizar**: pagamento obrigatório; valor/descrição opcionais.
+Formulário manual: realizado → data da realização; previsto → competência + vencimento; **fixo** → frequência + término opcional. **Realizar**: pagamento obrigatório; valor/descrição opcionais.
+
+## Lançamentos fixos
+
+- Tabela `recurring_rules`; transações geradas têm `recurrence_id`.
+- Frequências: `daily`, `weekly`, `monthly`. Horizonte: `min(end_date, hoje + 3 meses)`.
+- `ensure_recurring_horizon()` idempotente; `deactivate_recurring_rule()` encerra série e apaga previstos pendentes.
+- Realizar uma ocorrência **não** encerra a série; reabastece o horizonte se necessário.
 
 ## Datas de movimento
 
@@ -89,7 +96,7 @@ Formulário manual: realizado → data da realização; previsto → competênci
 1. `finance.py` (fonte da verdade)
 2. `format_tool_result` se o agente expõe
 3. Templates com rótulos claros
-4. Testes (`test_summary.py`, `test_transfers.py`, `test_planned_transactions.py`)
+4. Testes (`test_summary.py`, `test_transfers.py`, `test_planned_transactions.py`, `test_recurrence.py`)
 
 ## Armadilhas
 

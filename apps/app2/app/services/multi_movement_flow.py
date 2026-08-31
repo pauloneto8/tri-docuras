@@ -259,13 +259,14 @@ def try_begin_from_message(
     session: dict,
     message: str,
 ) -> AgentResponse | None:
+    from app.services.transaction_slots import DATE_SLOTS, RECURRENCE_SLOTS
     from app.services.transaction_wizard import get_wizard as get_tx_wizard
     from app.services.transaction_wizard import _next_field
 
     wizard = get_tx_wizard(session)
     if wizard:
         field = _next_field(wizard)
-        if field in {"account_name", "category_name"}:
+        if field in {"account_name", "category_name"} | DATE_SLOTS | RECURRENCE_SLOTS:
             return None
     tx_type_hint = wizard.get("tx_type") if wizard else None
     movements = parse_multi_movements(message, tx_type_hint=tx_type_hint)

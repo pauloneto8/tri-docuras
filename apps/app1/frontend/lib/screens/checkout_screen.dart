@@ -5,6 +5,8 @@ import 'package:tri_docuras/cart/cart_scope.dart';
 import 'package:tri_docuras/cart/delivery_mode.dart';
 import 'package:tri_docuras/checkout/checkout_draft.dart';
 import 'package:tri_docuras/checkout/checkout_validators.dart';
+import 'package:tri_docuras/checkout/delivery_address.dart';
+import 'package:tri_docuras/checkout/delivery_address_validators.dart';
 import 'package:tri_docuras/checkout/whatsapp_input_formatter.dart';
 import 'package:tri_docuras/screens/pix_screen.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
@@ -24,6 +26,11 @@ class CheckoutScreen extends StatefulWidget {
 class _CheckoutScreenState extends State<CheckoutScreen> {
   final _nameController = TextEditingController();
   final _whatsappController = TextEditingController();
+  final _streetController = TextEditingController();
+  final _numberController = TextEditingController();
+  final _complementController = TextEditingController();
+  final _neighborhoodController = TextEditingController();
+  final _referenceController = TextEditingController();
 
   bool _submitted = false;
 
@@ -31,12 +38,57 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void dispose() {
     _nameController.dispose();
     _whatsappController.dispose();
+    _streetController.dispose();
+    _numberController.dispose();
+    _complementController.dispose();
+    _neighborhoodController.dispose();
+    _referenceController.dispose();
     super.dispose();
   }
 
-  bool get _formValid =>
-      CheckoutValidators.isNameValid(_nameController.text) &&
-      CheckoutValidators.isWhatsAppValid(_whatsappController.text);
+  bool _isFormValid(DeliveryMode deliveryMode) {
+    final baseValid = CheckoutValidators.isNameValid(_nameController.text) &&
+        CheckoutValidators.isWhatsAppValid(_whatsappController.text);
+    if (deliveryMode == DeliveryMode.pickup) return baseValid;
+    return baseValid &&
+        DeliveryAddressValidators.isValid(
+          street: _streetController.text,
+          number: _numberController.text,
+          complement: _complementController.text,
+          neighborhood: _neighborhoodController.text,
+          reference: _referenceController.text,
+        );
+  }
+
+  String? _streetError(bool showAddress) {
+    if (!showAddress) return null;
+    if (!_submitted && _streetController.text.isEmpty) return null;
+    return DeliveryAddressValidators.validateStreet(_streetController.text);
+  }
+
+  String? _numberError(bool showAddress) {
+    if (!showAddress) return null;
+    if (!_submitted && _numberController.text.isEmpty) return null;
+    return DeliveryAddressValidators.validateNumber(_numberController.text);
+  }
+
+  String? _complementError(bool showAddress) {
+    if (!showAddress) return null;
+    if (_complementController.text.isEmpty) return null;
+    return DeliveryAddressValidators.validateComplement(_complementController.text);
+  }
+
+  String? _neighborhoodError(bool showAddress) {
+    if (!showAddress) return null;
+    if (!_submitted && _neighborhoodController.text.isEmpty) return null;
+    return DeliveryAddressValidators.validateNeighborhood(_neighborhoodController.text);
+  }
+
+  String? _referenceError(bool showAddress) {
+    if (!showAddress) return null;
+    if (!_submitted && _referenceController.text.isEmpty) return null;
+    return DeliveryAddressValidators.validateReference(_referenceController.text);
+  }
 
   String? get _nameError {
     if (!_submitted && _nameController.text.isEmpty) return null;
@@ -57,13 +109,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       Navigator.of(context).pop();
       return;
     }
-    if (!_formValid) return;
+    if (!_isFormValid(cart.deliveryMode)) return;
+
+    final deliveryAddress = cart.deliveryMode == DeliveryMode.delivery
+        ? DeliveryAddressValidators.buildIfValid(
+            street: _streetController.text,
+            number: _numberController.text,
+            complement: _complementController.text,
+            neighborhood: _neighborhoodController.text,
+            reference: _referenceController.text,
+          )
+        : null;
 
     final draft = CheckoutDraft(
       customerName: CheckoutValidators.sanitizeName(_nameController.text),
       whatsappDigits: CheckoutValidators.digitsOnly(_whatsappController.text),
       total: cart.total,
       deliveryMode: cart.deliveryMode,
+      deliveryAddress: deliveryAddress,
     );
 
     Navigator.of(context).push(
@@ -86,6 +149,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
 
     final isPickup = cart.deliveryMode == DeliveryMode.pickup;
+    final formValid = _isFormValid(cart.deliveryMode);
 
     return ColoredBox(
       color: AppColors.cream,
@@ -169,7 +233,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 child: Text(
                                   isPickup
                                       ? 'Hoje, entre 16h e 17h · Loja Tri Doçuras'
-                                      : 'Receber em casa · ${cart.deliveryFeeLabel}',
+                                      : 'Entrega em ${DeliveryAddress.cityLabel} · CEP ${DeliveryAddress.postalCodeLabel} · ${cart.deliveryFeeLabel}',
                                   style: GoogleFonts.poppins(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w400,
@@ -178,6 +242,92 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                   ),
                                 ),
                               ),
+                              if (!isPickup) ...[
+                                const SizedBox(height: 20),
+                                Text(
+                                  'ENDEREÇO DE ENTREGA',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(letterSpacing: 0.8),
+                                ),
+                                const SizedBox(height: 8),
+                                _FieldLabel(label: 'RUA'),
+                                TdTextField(
+                                  controller: _streetController,
+                                  hintText: 'Nome da rua',
+                                  errorText: _streetError(true),
+                                  textInputAction: TextInputAction.next,
+                                  autofillHints: const [AutofillHints.streetAddressLine1],
+                                  maxLength: DeliveryAddressValidators.streetMaxLength,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.deny(
+                                      RegExp(r'[\x00-\x1F\x7F]'),
+                                    ),
+                                  ],
+                                  onChanged: _onFieldChanged,
+                                ),
+                                const SizedBox(height: 12),
+                                _FieldLabel(label: 'NÚMERO'),
+                                TdTextField(
+                                  controller: _numberController,
+                                  hintText: 'Número da casa',
+                                  errorText: _numberError(true),
+                                  textInputAction: TextInputAction.next,
+                                  maxLength: DeliveryAddressValidators.numberMaxLength,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.deny(
+                                      RegExp(r'[\x00-\x1F\x7F]'),
+                                    ),
+                                  ],
+                                  onChanged: _onFieldChanged,
+                                ),
+                                const SizedBox(height: 12),
+                                _FieldLabel(label: 'COMPLEMENTO'),
+                                TdTextField(
+                                  controller: _complementController,
+                                  hintText: 'Opcional — apto, bloco, casa',
+                                  errorText: _complementError(true),
+                                  textInputAction: TextInputAction.next,
+                                  maxLength: DeliveryAddressValidators.complementMaxLength,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.deny(
+                                      RegExp(r'[\x00-\x1F\x7F]'),
+                                    ),
+                                  ],
+                                  onChanged: _onFieldChanged,
+                                ),
+                                const SizedBox(height: 12),
+                                _FieldLabel(label: 'BAIRRO'),
+                                TdTextField(
+                                  controller: _neighborhoodController,
+                                  hintText: 'Bairro',
+                                  errorText: _neighborhoodError(true),
+                                  textInputAction: TextInputAction.next,
+                                  maxLength: DeliveryAddressValidators.neighborhoodMaxLength,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.deny(
+                                      RegExp(r'[\x00-\x1F\x7F]'),
+                                    ),
+                                  ],
+                                  onChanged: _onFieldChanged,
+                                ),
+                                const SizedBox(height: 12),
+                                _FieldLabel(label: 'PONTO DE REFERÊNCIA'),
+                                TdTextField(
+                                  controller: _referenceController,
+                                  hintText: 'Ex.: casa amarela, perto da padaria',
+                                  errorText: _referenceError(true),
+                                  textInputAction: TextInputAction.done,
+                                  maxLength: DeliveryAddressValidators.referenceMaxLength,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.deny(
+                                      RegExp(r'[\x00-\x1F\x7F]'),
+                                    ),
+                                  ],
+                                  onChanged: _onFieldChanged,
+                                ),
+                              ],
                               const SizedBox(height: 20),
                               Text(
                                 'PAGAMENTO',
@@ -193,6 +343,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 label: 'Subtotal',
                                 value: cart.formattedSubtotal,
                               ),
+                              if (!isPickup) ...[
+                                const SizedBox(height: 8),
+                                _SummaryRow(
+                                  label: 'Entrega',
+                                  value: cart.deliveryFeeLabel,
+                                ),
+                              ],
                               const SizedBox(height: 12),
                               _SummaryRow(
                                 label: 'Total a pagar',
@@ -209,10 +366,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       child: TdButton(
                         label: 'Gerar Pix',
                         trailing: Text(cart.formattedTotal),
-                        variant: _formValid && cart.items.isNotEmpty
+                        variant: formValid && cart.items.isNotEmpty
                             ? TdButtonVariant.primary
                             : TdButtonVariant.disabled,
-                        onPressed: _formValid && cart.items.isNotEmpty
+                        onPressed: formValid && cart.items.isNotEmpty
                             ? _generatePix
                             : null,
                       ),
@@ -223,6 +380,26 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _FieldLabel extends StatelessWidget {
+  const _FieldLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              letterSpacing: 0.6,
+              fontSize: 11,
+            ),
       ),
     );
   }

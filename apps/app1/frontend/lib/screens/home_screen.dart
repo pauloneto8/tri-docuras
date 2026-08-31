@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:tri_docuras/cart/cart_added_result.dart';
 import 'package:tri_docuras/cart/cart_scope.dart';
 import 'package:tri_docuras/config.dart';
 import 'package:tri_docuras/models/product.dart';
@@ -29,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _categoryFilter = 'todos';
   String _searchQuery = '';
   late Future<List<Product>> _productsFuture;
+  CartAddedResult? _cartAddedNotice;
 
   static const _categories = [
     ('todos', 'Todos'),
@@ -71,13 +73,32 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _navIndex = index);
   }
 
-  void _openProduct(Product product) {
+  Future<void> _openProduct(Product product) async {
     if (!product.available) return;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
+    final result = await Navigator.of(context).push<CartAddedResult>(
+      MaterialPageRoute(
         builder: (_) => ProductScreen(product: product),
       ),
     );
+    if (!mounted || result == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _presentCartAddedNotice(result);
+    });
+  }
+
+  void _presentCartAddedNotice(CartAddedResult result) {
+    setState(() => _cartAddedNotice = result);
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted && _cartAddedNotice == result) {
+        setState(() => _cartAddedNotice = null);
+      }
+    });
+  }
+
+  void _openCartFromNotice() {
+    setState(() => _cartAddedNotice = null);
+    _openCart();
   }
 
   void _openCart() {
@@ -89,38 +110,55 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final cartCount = CartScope.of(context).itemCount;
-    return ColoredBox(
-      color: AppColors.cream,
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _CatalogHeader(
-              cartCount: cartCount,
-              onCartTap: _openCart,
+    return Stack(
+      children: [
+        ColoredBox(
+          color: AppColors.cream,
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _CatalogHeader(
+                  cartCount: cartCount,
+                  onCartTap: _openCart,
+                ),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final contentWidth =
+                          constraints.maxWidth.clamp(0, AppTheme.maxContentWidth);
+                      return Align(
+                        alignment: Alignment.topCenter,
+                        child: SizedBox(
+                          width: contentWidth.toDouble(),
+                          height: constraints.maxHeight,
+                          child: _navIndex == 0
+                              ? _buildCatalog()
+                              : _buildPlaceholderTab(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                _BottomNav(
+                  currentIndex: _navIndex,
+                  onTap: _onNavTap,
+                ),
+              ],
             ),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final contentWidth = constraints.maxWidth.clamp(0, AppTheme.maxContentWidth);
-                  return Align(
-                    alignment: Alignment.topCenter,
-                    child: SizedBox(
-                      width: contentWidth.toDouble(),
-                      height: constraints.maxHeight,
-                      child: _navIndex == 0 ? _buildCatalog() : _buildPlaceholderTab(),
-                    ),
-                  );
-                },
-              ),
-            ),
-            _BottomNav(
-              currentIndex: _navIndex,
-              onTap: _onNavTap,
-            ),
-          ],
+          ),
         ),
-      ),
+        if (_cartAddedNotice != null)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: MediaQuery.of(context).padding.bottom + 72,
+            child: CartAddedBanner(
+              result: _cartAddedNotice!,
+              onViewCart: _openCartFromNotice,
+            ),
+          ),
+      ],
     );
   }
 

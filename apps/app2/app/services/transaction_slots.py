@@ -42,11 +42,24 @@ SLOT_QUESTIONS = {
         "Qual a *data da realização*?\n\n"
         "Ex.: *hoje*, *ontem* ou *30/08/2026*."
     ),
+    "is_recurring": (
+        "É um lançamento **fixo** que se repete?\n\n"
+        "Responda com *sim* ou *não*."
+    ),
+    "frequency": (
+        "Com que frequência esse lançamento se repete?\n\n"
+        "Responda com *diária*, *semanal* ou *mensal*."
+    ),
+    "recurrence_end_date": (
+        "Tem *data de término* para essa série?\n\n"
+        "Responda *não* ou informe a data (ex.: *31/12/2026*)."
+    ),
     "amount": "Qual o valor? (ex.: 45,90)",
     "description": "Qual a descrição? (ex.: mercado, salário, transporte)",
 }
 
 DATE_SLOTS = frozenset({"competence_date", "due_date", "payment_date"})
+RECURRENCE_SLOTS = frozenset({"is_recurring", "frequency", "recurrence_end_date"})
 _DAY_ONLY_RE = re.compile(r"^(?:dia\s+)?(\d{1,2})$", re.IGNORECASE)
 
 YES_WORDS = {"sim", "s", "ok", "confirmo", "isso", "essa", "esse"}
@@ -288,11 +301,15 @@ def _wizard_from_tool_call(tool_call: ToolCall, source_message: str) -> dict:
             source_message,
             args.get("transaction_date"),
         ),
-        "competence_date": args.get("competence_date"),
-        "due_date": args.get("due_date"),
-        "payment_date": args.get("payment_date"),
-        # Sempre perguntar; não herdar status do LLM/regras.
+        # Sempre perguntar; não herdar datas nem status do LLM/regras.
+        "competence_date": None,
+        "due_date": None,
+        "payment_date": None,
         "status": None,
+        "is_recurring": None,
+        "frequency": args.get("frequency"),
+        "recurrence_end_date": args.get("recurrence_end_date"),
+        "recurrence_end_asked": bool(args.get("recurrence_end_date")),
         "source_message": source_message,
         "suggested_category": None,
     }
@@ -310,6 +327,10 @@ def _tool_call_from_wizard(wizard: dict) -> ToolCall:
     for key in ("competence_date", "due_date", "payment_date", "transaction_date"):
         if wizard.get(key):
             args[key] = wizard[key]
+    if wizard.get("is_recurring") and wizard.get("frequency"):
+        args["frequency"] = wizard["frequency"]
+        if wizard.get("recurrence_end_date"):
+            args["recurrence_end_date"] = wizard["recurrence_end_date"]
     return correct_tool_call_descriptions(ToolCall(tool=tool, arguments=args))
 
 
@@ -326,6 +347,12 @@ def _next_slot(wizard: dict) -> str | None:
     elif wizard.get("status") == "actual":
         if not wizard.get("payment_date"):
             return "payment_date"
+    if wizard.get("is_recurring") is None:
+        return "is_recurring"
+    if wizard.get("is_recurring") and not wizard.get("frequency"):
+        return "frequency"
+    if wizard.get("is_recurring") and not wizard.get("recurrence_end_asked"):
+        return "recurrence_end_date"
     if not wizard.get("amount"):
         return "amount"
     if not wizard.get("description"):
@@ -398,6 +425,15 @@ def _question_for_slot(
     return "Informe o dado solicitado."
 
 
+def parse_is_recurring_answer(message: str) -> bool | None:
+    lower = message.strip().lower()
+    if lower in {"sim", "s", "yes", "fixo", "fixa", "repete", "recorrente"}:
+        return True
+    if lower in {"não", "nao", "n", "no", "único", "unico", "avulso"}:
+        return False
+    return None
+
+
 def fill_slot(wizard: dict, slot: str, message: str, db: Session, user_id: int) -> str | None:
     tx_type = wizard.get("tx_type") or "expense"
     if slot == "status":
@@ -417,6 +453,36 @@ def fill_slot(wizard: dict, slot: str, message: str, db: Session, user_id: int) 
             wizard["competence_date"] = parsed
             wizard["due_date"] = parsed
             wizard["transaction_date"] = parsed
+        return None
+    if slot == "is_recurring":
+        parsed = parse_is_recurring_answer(message)
+        if parsed is None:
+            return "Responda com *sim* ou *não*."
+        wizard["is_recurring"] = parsed
+        if not parsed:
+            wizard["frequency"] = None
+            wizard["recurrence_end_date"] = None
+            wizard["recurrence_end_asked"] = True
+        return None
+    if slot == "frequency":
+        from app.services.recurrence import parse_frequency
+
+        parsed = parse_frequency(message)
+        if not parsed:
+            return "Frequência inválida. Use *diária*, *semanal* ou *mensal*."
+        wizard["frequency"] = parsed
+        return None
+    if slot == "recurrence_end_date":
+        lower = message.strip().lower()
+        if lower in {"não", "nao", "n", "no", "sem", "nunca"}:
+            wizard["recurrence_end_date"] = None
+            wizard["recurrence_end_asked"] = True
+            return None
+        parsed = parse_slot_date(message, wizard)
+        if not parsed:
+            return "Data inválida. Responda *não* ou informe a data."
+        wizard["recurrence_end_date"] = parsed
+        wizard["recurrence_end_asked"] = True
         return None
     if slot == "account_name":
         choices = list_active_account_names(db, user_id)
@@ -477,7 +543,7 @@ def process_slot_answer(
         return SlotResult()
 
     slot = _next_slot(wizard)
-    if slot in {"status", "account_name", "category_name"} | DATE_SLOTS:
+    if slot in {"status", "account_name", "category_name"} | DATE_SLOTS | RECURRENCE_SLOTS:
         error = fill_slot(wizard, slot, message, db, user_id)
         if error:
             return SlotResult(

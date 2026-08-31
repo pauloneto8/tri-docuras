@@ -203,10 +203,12 @@ async def test_wizard_account_name_stays_in_wizard():
     session = {}
     start_wizard(session)
     from app.services.transaction_wizard import try_process_transaction_wizard
+    from tests.wizard_helpers import decline_recurring
 
     try_process_transaction_wizard(session, "despesa")
     try_process_transaction_wizard(session, "realizado")
     try_process_transaction_wizard(session, "hoje")
+    decline_recurring(session)
     try_process_transaction_wizard(session, "40,50")
     try_process_transaction_wizard(session, "passagem")
 

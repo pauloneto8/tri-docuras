@@ -71,24 +71,48 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # --- App 2 (stack isolada) ---
+  # --- AssistFin (App 2) ---
   app2:
     build: ./apps/app2
     container_name: hosting-app2
     environment:
-      APP_NAME: app2
+      APP_NAME: assistfin
+      PORT: "8000"
       DATABASE_URL: postgresql://${APP2_DB_USER}:${APP2_DB_PASSWORD}@app2-db:5432/${APP2_DB_NAME}
       DB_HOST: app2-db
       DB_PORT: "5432"
       DB_USER: ${APP2_DB_USER}
       DB_PASSWORD: ${APP2_DB_PASSWORD}
       DB_NAME: ${APP2_DB_NAME}
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: qwen3:1.7b
+      GROQ_API_KEY: ${APP2_GROQ_API_KEY:-}
+      GROQ_MODEL: ${APP2_GROQ_MODEL:-openai/gpt-oss-120b}
+      SECRET_KEY: ${APP2_SECRET_KEY}
+      TRUSTED_HOSTS: ${APP2_DOMAIN},www.${APP2_DOMAIN},143.95.165.99,localhost,127.0.0.1
+      ALLOW_REGISTRATION: ${APP2_ALLOW_REGISTRATION:-true}
+      ROOT_EMAILS: ${APP2_ROOT_EMAILS:-pauloneto8@gmail.com}
+      TZ: America/Recife
+      APP_TIMEZONE: America/Recife
     networks:
       - proxy
       - app2_internal
     depends_on:
       app2-db:
         condition: service_healthy
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: hosting-ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: 24h
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - app2_internal
     restart: unless-stopped
 
   app2-db:
@@ -98,6 +122,7 @@ services:
       POSTGRES_USER: ${APP2_DB_USER}
       POSTGRES_PASSWORD: ${APP2_DB_PASSWORD}
       POSTGRES_DB: ${APP2_DB_NAME}
+      TZ: America/Recife
     volumes:
       - app2_db_data:/var/lib/postgresql/data
     networks:
@@ -135,3 +160,5 @@ volumes:
     name: app1_db_data
   app2_db_data:
     name: app2_db_data
+  ollama_models:
+    name: ollama_models

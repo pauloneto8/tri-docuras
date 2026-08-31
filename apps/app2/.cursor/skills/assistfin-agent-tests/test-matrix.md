@@ -15,6 +15,11 @@
 | "despesa" → "previsto" | pergunta competência | `test_transaction_wizard.py` |
 | "despesa" → "realizado" | pergunta data da realização | `test_transaction_wizard.py` |
 | previsto: competência + vencimento | `competence_date` + `due_date` | `test_transaction_slots.py` |
+| previsto: vencimento `10/08/2026` | um slot preenchido, sem multi | `test_multi_movements.py` |
+| após datas: "não" em fixo | continua wizard (não cancela) | `test_transaction_wizard.py` |
+| aluguel mensal fixo | `frequency=monthly`, previstos no horizonte | `test_recurrence.py` |
+| encerrar série | remove previstos pendentes | `test_recurrence.py` |
+| "Ontem despesas 54... e 30 recarga" | fluxo multi-lançamento | `test_multi_movements.py` |
 | realizado: "hoje" | replica em payment/competence/due | `test_transaction_dates.py` |
 | `list_transactions(status="actual")` | sem previstos na lista | `test_planned_transactions.py` |
 

@@ -10,9 +10,9 @@ paths: lib/**,web/**,pubspec.yaml,android/**,ios/**
 
 - App: `/opt/hosting/apps/app1/frontend` (`tri_docuras`)
 - API: Dart Frog em `/opt/hosting/apps/app1/api` — `GET /api/products`, `GET /api/health`
+- Produção: https://tridocuras.com.br
 - Web deploy: `docker compose build app1-web` em `/opt/hosting`
 - Design system PDF: `/root/.cursor/docs/tri-docuras/design-system-tri-docuras.pdf`
-- Renders PNG: `/root/.cursor/docs/tri-docuras/render/`
 
 ## Design system (v1)
 
@@ -20,71 +20,52 @@ paths: lib/**,web/**,pubspec.yaml,android/**,ios/**
 
 Dark `#412414`, Brown `#6A3A23`, Tan `#A4653C`, Cream `#FDEFE2`, Pink `#E6A6A4`, Pink Deep `#D67F7C`, Card `#FFFBF6`, Peach `#F7E3D0`, Sky `#99D2F3`, Disabled `#E6D9CC`.
 
-### Tipografia (`lib/theme/app_theme.dart`)
-
-Lora Italic (wordmark `displayMedium`, produtos `titleMedium`), Lora (headings), Poppins (corpo, preços, botões).
-
-**Não** usar `.merge(lora).merge(poppins)` no `TextTheme` — define estilos Lora e Poppins explicitamente.
-
 ### Componentes (`lib/widgets/`)
 
-- `TdButton` — pill; variantes `primary`, `outline`, `soft`, `disabled`; sem uppercase
-- `TdChip` — selecionado dark/white; inativo peach/dark
-- `TdSearchField` — pill branco, ícone sky
-- `TdTextField` — formulário cantos 12px (checkout)
-- `TdPhotoFrame` — moldura circular (dois anéis brown + coração pink), preenchimento peach
-- `TdIconButton` — botão circular (menu, voltar, favorito, carrinho)
-- `TdQuantityStepper` — seletor quantidade; modo `compact` no carrinho
+`TdButton`, `TdChip`, `TdSearchField`, `TdTextField`, `TdPhotoFrame`, `TdIconButton`, `TdQuantityStepper` (modo `compact` no carrinho).
 
 ### Carrinho (`lib/cart/`)
 
-`CartController` (memória), `CartScope`, `DeliveryMode` (pickup/delivery).
+- `CartController` — memória; `deliveryFeeAmount = 6.0` para entrega; `removeAt`, `updateQuantity`
+- `CartScope`, `DeliveryMode` (pickup/delivery)
+- `CartAddedResult` + `CartAddedBanner` — balão 5 s no catálogo, link **Ver carrinho**
 
 ### Checkout (`lib/checkout/`)
 
-`CheckoutValidators` (nome/WhatsApp), `CheckoutDraft` (PII só em memória), `WhatsAppInputFormatter`. Sem persistência, logs ou query params com PII. Sem chaves Mercado Pago no cliente.
+- `CheckoutValidators` (nome/WhatsApp), `DeliveryAddressValidators` (rua, número, bairro, referência)
+- Entrega só Nazaré da Mata - PE (CEP 55.800-000)
+- PII só em memória (`CheckoutDraft`); sem persistência nem Mercado Pago no cliente
 
-### Telas
+### Telas (fluxo completo)
 
-| # | Arquivo | Status |
-|---|---------|--------|
-| 1 | `home_screen.dart` | Catálogo — badge, busca, chips, grade, nav no body |
-| 2 | `product_screen.dart` | Produto — opções, stepper, Adicionar + total |
-| 3 | `cart_screen.dart` | Carrinho — linhas, ENTREGA, resumo, Finalizar |
-| 4 | `checkout_screen.dart` | Nome, WhatsApp, retirada, Pix visual, Gerar Pix |
-| 5 | `pix_screen.dart` | Timer, QR placeholder, aguardando pagamento |
-| 6 | `confirmation_screen.dart` | Pedido confirmado, resumo, voltar à loja |
-
-Navegação: catálogo → carrinho → checkout → Pix → confirmação (fluxo completo; Pix real via API pendente).
+| # | Arquivo | Notas |
+|---|---------|-------|
+| 1 | `home_screen.dart` | Catálogo, balão ao adicionar |
+| 2 | `product_screen.dart` | Adicionar → pop com `CartAddedResult` |
+| 3 | `cart_screen.dart` | Remover item, entrega R$ 6,00 |
+| 4 | `checkout_screen.dart` | Nome, WhatsApp, endereço se entrega |
+| 5 | `pix_screen.dart` | QR placeholder, timer, confirmação manual |
+| 6 | `confirmation_screen.dart` | Limpa carrinho, voltar à loja |
 
 ## Layout web
 
-- Não usar `Scaffold.bottomNavigationBar` — barra inferior no `body` (Column)
-- Fundo cream: `ColoredBox` + `web/index.html` (`#FDEFE2`)
+- Nav inferior no `body` (Column), não `bottomNavigationBar`
+- `MaterialApp.builder` com `Scaffold` cream; balão do carrinho é widget overlay no catálogo
 - `AppTheme.maxContentWidth` = 430px
-- Grade: `SliverGridDelegateWithFixedCrossAxisCount`, `mainAxisExtent` fixo (~268)
 
 ## API no cliente
 
-- Web: `apiBaseUrl` = `/api` (`lib/config.dart`)
-- Mobile: URL do host de produção; alterar para dev local se necessário
+- Web: `apiBaseUrl` = `/api`
+- Mobile: `https://tridocuras.com.br/api` (`lib/config.dart`)
 
 ## Deploy
 
 ```bash
-cd /opt/hosting
-docker compose up -d --build app1-web   # só frontend
-docker compose up -d --build app1      # API
+cd /opt/hosting && docker compose up -d --build app1-web
 ```
 
-Teste no domínio configurado em `APP1_DOMAIN` (hard refresh após deploy).
+Teste em https://tridocuras.com.br (hard refresh após deploy).
 
-## Plataformas
+## Pendente
 
-- Web: build no VPS via Docker (Flutter image)
-- Android: projeto `android/` — build local com Android Studio
-- iOS: projeto `ios/` — requer Mac + Xcode
-
-## Pendente (PDF)
-
-Integração Mercado Pago (QR/copia-e-cola real + webhook), `POST /api/orders`, rastreamento de pedidos.
+Mercado Pago real, `POST /api/orders`, rastreamento de pedidos.

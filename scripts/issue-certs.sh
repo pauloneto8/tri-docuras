@@ -24,12 +24,14 @@ if [[ -z "${APP1_DOMAIN:-}" || -z "${APP2_DOMAIN:-}" ]]; then
   exit 1
 fi
 
-echo "Emitindo certificados para $APP1_DOMAIN e $APP2_DOMAIN..."
+echo "Emitindo certificados para $APP1_DOMAIN (e www) e $APP2_DOMAIN..."
 docker compose --profile certbot run --rm certbot certonly \
   --webroot \
   -w /var/www/certbot \
   -d "$APP1_DOMAIN" \
+  -d "www.$APP1_DOMAIN" \
   -d "$APP2_DOMAIN" \
+  -d "www.$APP2_DOMAIN" \
   --email "$CERTBOT_EMAIL" \
   --agree-tos \
   --no-eff-email \

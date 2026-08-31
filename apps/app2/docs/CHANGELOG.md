@@ -2,6 +2,28 @@
 
 Registro das principais evoluções do projeto (App 2).
 
+## 2026-08-31 — Lançamentos fixos (recorrência)
+
+- Despesas e receitas **fixas** com frequência diária, semanal ou mensal
+- Nova tabela `recurring_rules` e campo `recurrence_id` em transações (migração `013`)
+- Geração automática de previstos até `min(data_término, hoje + 3 meses)`; horizonte reabastecido ao acessar Movimentos/Dashboard e após realizar ocorrência
+- Formulário em Movimentos: checkbox **Lançamento fixo**, frequência e término opcional
+- Selo `Fixo · mensal/semanal/diária` na lista **A realizar**; ação **Encerrar série**
+- Wizard do assistente: pergunta se repete, frequência e data de término
+- Testes em `tests/test_recurrence.py`
+- Suite: **194** testes
+
+## 2026-08-31 — Correção: data no wizard vs multi-lançamentos
+
+- Ao responder **vencimento** ou **competência** com data (`10/08/2026`, `hoje`, `agosto`), o assistente preenchia o slot correto em vez de criar vários lançamentos
+- **Causa:** `parse_multi_movements()` interpretava `10/08/2026` como três valores (`10`, `08`, `2026`) e abria o fluxo multi
+- **Correções:**
+  - `is_date_only_message()` em `tools.py` — distingue data isolada de narrativa com despesas (ex.: "Ontem tive despesas de 54...")
+  - Wizard de transação processado **antes** de `try_begin_from_message` quando o próximo slot é data (`DATE_SLOTS`)
+  - `try_begin_from_message` ignora multi-lançamento com wizard ativo em slot de data, conta ou categoria
+- Testes: `test_date_only_not_multi`, `test_runner_due_date_does_not_spawn_multi_expenses` em `tests/test_multi_movements.py`
+- Suite: **183** testes
+
 ## 2026-08 — Tela de Movimentos (previstos vs realizados)
 
 - Página `/transactions` dividida em **A realizar** (previstos pendentes) e **Extrato** (somente realizados)

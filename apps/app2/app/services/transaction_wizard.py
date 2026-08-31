@@ -67,6 +67,10 @@ def start_wizard(session: dict, *, source_message: str | None = None) -> None:
         "due_date": None,
         "payment_date": None,
         "transaction_date": None,
+        "is_recurring": None,
+        "frequency": None,
+        "recurrence_end_date": None,
+        "recurrence_end_asked": False,
         "source_message": source_message,
         "suggested_category": None,
     }
@@ -179,6 +183,19 @@ def is_slot_answer(
         return parse_slot_date(message, wizard) is not None and is_short_slot_message(
             message, max_words=8
         )
+    if field == "is_recurring":
+        from app.services.transaction_slots import parse_is_recurring_answer
+
+        return parse_is_recurring_answer(message) is not None
+    if field == "frequency":
+        from app.services.recurrence import parse_frequency
+
+        return parse_frequency(message) is not None
+    if field == "recurrence_end_date":
+        lower = message.strip().lower()
+        if lower in {"não", "nao", "n", "no", "sem", "nunca"}:
+            return True
+        return parse_slot_date(message, wizard) is not None
     if field == "amount":
         return parse_amount(message) is not None
     if field == "description":
@@ -212,6 +229,9 @@ def get_wizard_context(session: dict) -> str | None:
         "competence_date": "data de competencia",
         "due_date": "data de vencimento",
         "payment_date": "data da realizacao",
+        "is_recurring": "se e lancamento fixo",
+        "frequency": "frequencia do lancamento fixo",
+        "recurrence_end_date": "data de termino da serie",
         "amount": "valor",
         "description": "descricao",
         "account_name": "conta bancaria",
@@ -267,13 +287,6 @@ def try_process_transaction_wizard(
     if not wizard:
         return None
 
-    if message.strip().lower() in CANCEL_WORDS:
-        clear_wizard(session)
-        return AgentResponse(
-            message="Lançamento cancelado.",
-            source="wizard",
-        )
-
     next_field = _next_field(wizard)
     if next_field is None:
         lower = message.strip().lower()
@@ -282,12 +295,25 @@ def try_process_transaction_wizard(
         clear_wizard(session)
         return None
 
+    lower_msg = message.strip().lower()
+    if lower_msg in CANCEL_WORDS:
+        if lower_msg in {"não", "nao"} and next_field in {
+            "is_recurring",
+            "recurrence_end_date",
+        }:
+            pass
+        else:
+            clear_wizard(session)
+            return AgentResponse(
+                message="Lançamento cancelado.",
+                source="wizard",
+            )
+
     if count_amounts(message) >= 2 and next_field in {
         "tx_type",
         "status",
         "amount",
         "description",
-        *DATE_SLOTS,
     }:
         return None
 
@@ -302,7 +328,31 @@ def try_process_transaction_wizard(
         clear_wizard(session)
         return None
 
-    if next_field in {"status", "account_name", "category_name"} | DATE_SLOTS:
+    from app.services.transaction_slots import RECURRENCE_SLOTS
+
+    if next_field in {"status", "account_name", "category_name"} | DATE_SLOTS | RECURRENCE_SLOTS:
+        if next_field in RECURRENCE_SLOTS:
+            error = fill_slot(wizard, next_field, message, db, user_id)
+            if error:
+                return AgentResponse(
+                    message=error,
+                    suggestions=for_transaction_wizard_field(
+                        next_field, db, user_id, wizard
+                    ),
+                    source="wizard",
+                )
+            session[WIZARD_KEY] = wizard
+            remaining = _next_field(wizard)
+            if remaining is None:
+                return _confirmation_response(wizard)
+            return AgentResponse(
+                message=_question_for_slot(db, user_id, wizard, remaining),
+                suggestions=for_transaction_wizard_field(
+                    remaining, db, user_id, wizard
+                ),
+                source="wizard",
+            )
+
         if next_field in {"account_name", "category_name"} and (db is None or user_id is None):
             return AgentResponse(
                 message=_question_for_slot(db, user_id, wizard, next_field),

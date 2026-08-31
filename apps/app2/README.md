@@ -35,6 +35,7 @@ Internet :80/:443
 - **Contas** — corrente, poupança, carteira, cartão; saldo inicial com data (`opening_balance_date`)
 - **Movimentos** — despesa (`expense`), receita (`income`), **transferência** (par `transfer_out` + `transfer_in`); tela em duas seções (**A realizar** / **Extrato**)
 - **Previsto vs realizado** — `status` `planned` ou `actual`; realização via `realize_planned`
+- **Lançamentos fixos** — recorrência diária, semanal ou mensal; gera previstos automaticamente (~3 meses à frente)
 - **Datas por movimento** — competência (`competence_date`), vencimento (`due_date`), pagamento/realização (`payment_date`); `transaction_date` espelha a data de caixa
 - **Categorias** — padrão no seed + cadastro manual; nomes normalizados (primeira letra maiúscula, acentos)
 - **Orçamentos** — limite mensal por categoria
@@ -78,6 +79,8 @@ Na página **Movimentos** (`/transactions`), o formulário manual segue a mesma 
 - Previstos já liquidados não aparecem na lista (o par previsto/realizado fica no dashboard).
 
 `list_transactions` aceita filtro `status` (`actual` | `planned` | `all`).
+
+Datas digitadas no wizard (`10/08/2026`, `hoje`, etc.) preenchem o slot de competência/vencimento/pagamento — **não** disparam o fluxo de múltiplos lançamentos.
 
 ### Assistente de IA
 
@@ -173,13 +176,13 @@ Operações (reset de dados, migrações, debug): [docs/OPERATIONS.md](docs/OPER
 
 ## Testes
 
-Suite completa no container (`180` testes):
+Suite completa no container (**194** testes):
 
 ```bash
 docker compose exec -T app2 python -m pytest -q
 ```
 
-Áreas cobertas: finanças, transferências, previstos/realizados, dashboard por período, agente, wizards, intents, segurança, onboarding, isolamento multiusuário.
+Áreas cobertas: finanças, transferências, previstos/realizados, dashboard por período, agente, wizards, multi-lançamentos vs datas, intents, segurança, onboarding, isolamento multiusuário.
 
 ## Migrações (Alembic)
 
@@ -197,6 +200,7 @@ docker compose exec -T app2 python -m pytest -q
 | 010 | Transferências (`transfer_group_id`, tipos) |
 | 011 | Previsto vs realizado (`status`, `source_planned_id`) |
 | 012 | Competência, vencimento e pagamento (`competence_date`, `due_date`, `payment_date`) |
+| 013 | Lançamentos fixos (`recurring_rules`, `recurrence_id`) |
 
 ## Documentação para o Cursor
 

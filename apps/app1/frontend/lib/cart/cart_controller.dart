@@ -3,6 +3,8 @@ import 'package:tri_docuras/cart/cart_item.dart';
 import 'package:tri_docuras/cart/delivery_mode.dart';
 
 class CartController extends ChangeNotifier {
+  static const deliveryFeeAmount = 6.0;
+
   final List<CartItem> _items = [];
   DeliveryMode _deliveryMode = DeliveryMode.pickup;
 
@@ -15,7 +17,7 @@ class CartController extends ChangeNotifier {
   double get subtotal => _items.fold(0, (sum, item) => sum + item.lineTotal);
 
   double get deliveryFee =>
-      _deliveryMode == DeliveryMode.pickup ? 0 : 0;
+      _deliveryMode == DeliveryMode.pickup ? 0 : deliveryFeeAmount;
 
   double get total => subtotal + deliveryFee;
 
@@ -23,8 +25,10 @@ class CartController extends ChangeNotifier {
 
   String get formattedTotal => _formatMoney(total);
 
+  String get formattedDeliveryFee => _formatMoney(deliveryFee);
+
   String get deliveryFeeLabel =>
-      _deliveryMode == DeliveryMode.pickup ? 'Grátis' : 'Grátis';
+      _deliveryMode == DeliveryMode.pickup ? 'Grátis' : formattedDeliveryFee;
 
   void add(CartItem item) {
     _items.add(item);
@@ -43,6 +47,12 @@ class CartController extends ChangeNotifier {
     } else {
       _items[index] = _items[index].copyWith(quantity: quantity);
     }
+    notifyListeners();
+  }
+
+  void removeAt(int index) {
+    if (index < 0 || index >= _items.length) return;
+    _items.removeAt(index);
     notifyListeners();
   }
 

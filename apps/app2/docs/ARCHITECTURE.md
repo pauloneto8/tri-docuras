@@ -50,9 +50,10 @@
 
 ```
 mensagem do usuário
-  → wizard multi-movimento? 
+  → multi-movimento em andamento (pending_movements)?
   → wizard transferência?
-  → wizard transação?
+  → wizard transação? (slots de data têm prioridade sobre multi-lançamento)
+  → try_begin_from_message (nova mensagem com vários valores)?
   → wizard conta / categoria?
   → exclusão pendente?
   → _resolve_intent (regras → Groq → Ollama)
@@ -70,7 +71,8 @@ mensagem do usuário
 | `User` | email, is_active, is_root, onboarding_completed |
 | `Account` | name, account_type, opening_balance_cents, opening_balance_date |
 | `Category` | name, type (expense/income), keywords |
-| `Transaction` | type, amount_cents, account_id, category_id?, status (`planned`/`actual`), competence_date, due_date, payment_date, transaction_date, transfer_group_id?, counterparty_account_id?, source_planned_id? |
+| `Transaction` | type, amount_cents, account_id, category_id?, status (`planned`/`actual`), competence_date, due_date, payment_date, transaction_date, transfer_group_id?, counterparty_account_id?, source_planned_id?, recurrence_id? |
+| `RecurringRule` | user_id, account_id, category_id, type, amount_cents, description, frequency (`daily`/`weekly`/`monthly`), start_date, end_date?, is_active, anchor_day, anchor_weekday |
 | `Budget` | category_id, year, month, limit_cents |
 | `Conversation` / `ConversationMessage` | logs do chat |
 
@@ -127,6 +129,8 @@ Consultas da página usam duas chamadas: `ListTransactionsInput(status="planned"
 - **Realizado** (padrão): um campo “Data da realização”; competência e vencimento são replicados no backend.
 - **Previsto** (checkbox): competência + vencimento; sem data de pagamento.
 - **Realizar** (ação na linha): data de pagamento obrigatória; valor e descrição opcionais (herdam do previsto).
+- **Lançamento fixo** (checkbox): frequência diária/semanal/mensal e data de término opcional; cria regra em `recurring_rules` e previstos até o horizonte.
+- **Encerrar série** (previstos com `recurrence_id`): desativa a regra e remove previstos pendentes da série.
 - **Transferência**: sempre realizada; uma data de realização.
 
 ### Wizard de transação (slots)
@@ -136,10 +140,37 @@ Ordem em `transaction_slots.py`:
 1. tipo (despesa/receita)
 2. status (realizado/previsto)
 3. datas — previsto: competência + vencimento; realizado: data da realização
-4. valor, descrição, conta, categoria
-5. confirmação (`WRITE_TOOLS`)
+4. recorrência — fixo? frequência; término opcional (`RECURRENCE_SLOTS`)
+5. valor, descrição, conta, categoria
+6. confirmação (`WRITE_TOOLS`)
 
 O LLM **não** envia `status` nem inventa datas; o runtime pergunta ao usuário.
+
+### Lançamentos fixos (recorrência)
+
+```
+recurring_rules  --ensure_horizon-->  transactions (planned)
+transactions (planned)  --realize_planned-->  transactions (actual)
+```
+
+- Motor em `services/recurrence.py`: `next_occurrence`, `horizon_end` (hoje + 3 meses), `ensure_recurring_horizon`, `deactivate_recurring_rule`.
+- Ao cadastrar com frequência, a primeira ocorrência segue o `status` informado; as demais são sempre `planned`.
+- Unique `(recurrence_id, due_date)` evita duplicatas ao reabastecer o horizonte.
+- `ensure_recurring_horizon` roda na criação da regra, no dashboard/Movimentos e após `realize_planned` com `recurrence_id`.
+- Transferências **não** suportam recorrência no MVP.
+- Resposta **não** no slot `is_recurring` não cancela o wizard (exceção a `CANCEL_WORDS` em `transaction_wizard.py`).
+
+### Multi-lançamentos vs slots de data
+
+Mensagens com **vários valores monetários** (ex.: "gastei 54 de passagem e 30 de recarga") podem abrir o fluxo `multi_movement_flow` (`parse_multi_movements`).
+
+**Não** entram nesse fluxo:
+
+- Respostas de **data isolada** no wizard (`10/08/2026`, `hoje`, `agosto`) — `is_date_only_message()` em `tools.py`
+- Wizard ativo aguardando `competence_date`, `due_date`, `payment_date` ou slots de recorrência (`is_recurring`, `frequency`, `recurrence_end_date`) — `try_begin_from_message` retorna `None`
+- Narrativas com palavras de despesa/receita e múltiplos valores (ex.: "Ontem tive as despesas de 54...")
+
+Ordem no `runner.py`: wizard de transação processa a mensagem **antes** de tentar iniciar multi-lançamento.
 
 ## Isolamento multiusuário
 

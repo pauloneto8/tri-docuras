@@ -21,6 +21,11 @@ from app.services.transfer_slots import (
     get_wizard as get_transfer_wizard,
     try_process_transfer_wizard,
 )
+from app.services.realize_planned_slots import (
+    clear_wizard as clear_realize_planned_wizard,
+    get_wizard as get_realize_planned_wizard,
+    try_process_realize_planned_wizard,
+)
 from app.services.transaction_wizard import (
     clear_wizard as clear_transaction_wizard,
     get_wizard as get_transaction_wizard,
@@ -107,12 +112,29 @@ async def process_message(
         if result:
             return result
 
-    multi_result = try_begin_from_message(db, user_id, session, message)
-    if multi_result:
-        return multi_result
-
     if get_transfer_wizard(session):
         slot = try_process_transfer_wizard(session, message, db=db, user_id=user_id)
+        if slot:
+            if slot.question and not slot.tool_call:
+                return AgentResponse(
+                    message=slot.question,
+                    suggestions=slot.suggestions,
+                    source="wizard",
+                )
+            if slot.tool_call:
+                tool_call = slot.tool_call
+                return AgentResponse(
+                    message=format_pending_confirmation(tool_call),
+                    needs_confirmation=True,
+                    pending_action=tool_call.model_dump(),
+                    tool_used=tool_call.tool,
+                    source="wizard",
+                )
+
+    if get_realize_planned_wizard(session):
+        slot = try_process_realize_planned_wizard(
+            session, message, db=db, user_id=user_id
+        )
         if slot:
             if slot.question and not slot.tool_call:
                 return AgentResponse(
@@ -137,6 +159,10 @@ async def process_message(
         multi_result = try_begin_from_message(db, user_id, session, message)
         if multi_result:
             return multi_result
+
+    multi_result = try_begin_from_message(db, user_id, session, message)
+    if multi_result:
+        return multi_result
 
     if get_wizard(session):
         result = try_process_account_wizard(session, message)
@@ -206,6 +232,19 @@ async def process_message(
                     source=source,
                 )
             tool_call = slot_result.tool_call
+        if tool_call.tool == "realize_planned":
+            from app.services.realize_planned_slots import ensure_realize_planned_slots
+
+            slot_result = ensure_realize_planned_slots(
+                db, user_id, session, tool_call, message
+            )
+            if slot_result.question:
+                return AgentResponse(
+                    message=slot_result.question,
+                    suggestions=slot_result.suggestions,
+                    source=source,
+                )
+            tool_call = slot_result.tool_call
         tool_call = correct_tool_call_descriptions(tool_call)
         if tool_call.tool == "delete_transaction":
             resolved, question = prepare_delete_transaction(
@@ -232,6 +271,7 @@ async def process_message(
         if tool_call.tool in {"register_expense", "register_income", "register_transfer", "realize_planned", "update_transaction", "update_account", "delete_transaction"}:
             clear_transaction_wizard(session)
             clear_transfer_wizard(session)
+            clear_realize_planned_wizard(session)
         if tool_call.tool == "delete_transaction":
             clear_pending_delete(session)
         return AgentResponse(

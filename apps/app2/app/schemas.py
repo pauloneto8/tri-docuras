@@ -44,6 +44,7 @@ class TransactionCreate(BaseModel):
     payment_date: date | None = None
     transaction_date: date | None = None
     status: Literal["actual", "planned"] = "actual"
+    recurrence_id: int | None = None
 
     @field_validator("description")
     @classmethod
@@ -68,6 +69,8 @@ class RegisterExpenseInput(BaseModel):
     payment_date: date | None = None
     transaction_date: date | None = None
     status: Literal["actual", "planned"] = "actual"
+    frequency: Literal["daily", "weekly", "monthly"] | None = None
+    recurrence_end_date: date | None = None
 
     @field_validator("description")
     @classmethod
@@ -91,6 +94,8 @@ class RegisterIncomeInput(BaseModel):
     payment_date: date | None = None
     transaction_date: date | None = None
     status: Literal["actual", "planned"] = "actual"
+    frequency: Literal["daily", "weekly", "monthly"] | None = None
+    recurrence_end_date: date | None = None
 
     @field_validator("description")
     @classmethod

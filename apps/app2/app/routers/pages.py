@@ -49,6 +49,9 @@ async def dashboard(
     templates = get_templates(request)
     scope = read_scope_id(user)
     finance.seed_defaults(db, user.id)
+    from app.services.recurrence import ensure_recurring_horizon
+
+    ensure_recurring_horizon(db, scope)
 
     if period not in {"day", "week", "month"}:
         period = "month"
@@ -97,9 +100,13 @@ def _transactions_page_context(
     db: Session,
     *,
     success: str | None = None,
+    error: str | None = None,
 ) -> dict:
     scope = read_scope_id(user)
     finance.seed_defaults(db, user.id)
+    from app.services.recurrence import ensure_recurring_horizon
+
+    ensure_recurring_horizon(db, scope)
     planned = finance.list_transactions(
         db, scope, ListTransactionsInput(limit=50, status="planned")
     )
@@ -128,6 +135,7 @@ def _transactions_page_context(
         "categories": categories,
         "accounts": accounts,
         "success": success,
+        "error": error,
         "today": local_today().isoformat(),
     }
 
@@ -274,6 +282,9 @@ async def create_transaction_form(
     due_date: str | None = Form(None),
     payment_date: str | None = Form(None),
     is_planned: str | None = Form(None),
+    is_recurring: str | None = Form(None),
+    frequency: str | None = Form(None),
+    recurrence_end_date: str | None = Form(None),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -321,7 +332,13 @@ async def create_transaction_form(
             )
             comp = date.fromisoformat(competence_date) if competence_date else None
             due = date.fromisoformat(due_date) if due_date else None
-        finance.create_transaction(
+        rec_end = None
+        if recurrence_end_date and recurrence_end_date.strip():
+            rec_end = date.fromisoformat(recurrence_end_date.strip())
+        rec_freq = frequency if is_recurring == "on" and frequency else None
+        if rec_freq and not planned:
+            raise ValueError("Lançamento fixo deve ser cadastrado como previsto.")
+        finance.create_user_transaction(
             db,
             user.id,
             TransactionCreate(
@@ -335,11 +352,17 @@ async def create_transaction_form(
                 payment_date=pay,
                 status="planned" if planned else "actual",
             ),
+            frequency=rec_freq,
+            recurrence_end_date=rec_end,
         )
         success = (
-            "Previsão registrada com sucesso."
-            if planned
-            else "Transação registrada com sucesso."
+            "Série fixa registrada com sucesso."
+            if rec_freq
+            else (
+                "Previsão registrada com sucesso."
+                if planned
+                else "Transação registrada com sucesso."
+            )
         )
     return templates.TemplateResponse(
         "transactions.html",
@@ -354,24 +377,75 @@ async def realize_planned_form(
     amount: str | None = Form(None),
     payment_date: date = Form(...),
     description: str = Form(""),
+    same_account: str = Form("yes"),
+    account_name: str = Form(""),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     templates = get_templates(request)
-    finance.realize_planned(
-        db,
-        user.id,
-        RealizePlannedInput(
-            planned_id=planned_id,
-            amount=amount if amount and amount.strip() else None,
-            payment_date=payment_date,
-            description=description or None,
-        ),
-    )
+    realize_kwargs: dict = {
+        "planned_id": planned_id,
+        "amount": amount if amount and amount.strip() else None,
+        "payment_date": payment_date,
+        "description": description or None,
+    }
+    if same_account.strip().lower() in {"no", "não", "nao"} and not account_name.strip():
+        return templates.TemplateResponse(
+            "transactions.html",
+            _transactions_page_context(
+                request,
+                user,
+                db,
+                error="Informe a conta para realização.",
+            ),
+            status_code=400,
+        )
+    if same_account.strip().lower() in {"no", "não", "nao"}:
+        realize_kwargs["account_name"] = account_name.strip()
+    try:
+        finance.realize_planned(
+            db,
+            user.id,
+            RealizePlannedInput(**realize_kwargs),
+        )
+    except ValueError as exc:
+        ctx = _transactions_page_context(request, user, db)
+        ctx["error"] = str(exc)
+        return templates.TemplateResponse(
+            "transactions.html",
+            ctx,
+            status_code=400,
+        )
     return templates.TemplateResponse(
         "transactions.html",
         _transactions_page_context(
             request, user, db, success="Previsto realizado com sucesso."
+        ),
+    )
+
+
+@router.post("/transactions/recurring/{rule_id}/stop", response_class=HTMLResponse)
+async def stop_recurring_rule(
+    rule_id: int,
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    templates = get_templates(request)
+    from app.services.recurrence import deactivate_recurring_rule
+
+    try:
+        deactivate_recurring_rule(db, user.id, rule_id)
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            "transactions.html",
+            _transactions_page_context(request, user, db, error=str(exc)),
+            status_code=400,
+        )
+    return templates.TemplateResponse(
+        "transactions.html",
+        _transactions_page_context(
+            request, user, db, success="Série fixa encerrada. Previstos pendentes removidos."
         ),
     )
 
@@ -664,9 +738,13 @@ async def agent_chat(
             clear_category_wizard(request.session)
         if tool_call.tool in {"register_expense", "register_income", "register_transfer", "realize_planned", "update_transaction", "update_account", "delete_transaction"}:
             clear_transaction_wizard(request.session)
+            from app.services.realize_planned_slots import (
+                clear_wizard as clear_realize_planned_wizard,
+            )
             from app.services.transfer_slots import clear_wizard as clear_transfer_wizard
 
             clear_transfer_wizard(request.session)
+            clear_realize_planned_wizard(request.session)
         _log_chat_exchange(
             db,
             user.id,

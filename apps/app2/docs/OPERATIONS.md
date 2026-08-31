@@ -40,6 +40,7 @@ docker compose exec -T app2 python -m pytest -q
 docker compose exec -T app2 python -m pytest tests/test_transfers.py -q
 docker compose exec -T app2 python -m pytest tests/test_summary.py -q
 docker compose exec -T app2 python -m pytest tests/test_planned_transactions.py -q
+docker compose exec -T app2 python -m pytest tests/test_multi_movements.py -q
 ```
 
 ## Zerar dados de teste (manter usuários)
@@ -104,4 +105,5 @@ curl -s http://localhost/api/health
 | Chat timeout | Nginx `/agent/` timeout 120s; verificar Groq/Ollama |
 | Sessão/onboarding inconsistente | Logout + login após reset de DB |
 | Lista de Movimentos confusa após realizar previsto | Deploy recente separa “A realizar” e “Extrato”; previsto liquidado some da lista (normal) |
+| Wizard criou várias despesas ao digitar data (`10/08/2026`) | Corrigido em 2026-08-31 — rebuild `app2`; ver `CHANGELOG.md` |
 | 502 | `docker compose ps app2` |

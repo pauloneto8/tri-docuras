@@ -8,7 +8,7 @@ Infraestrutura Docker para hospedar duas aplicações isoladas, com Nginx como p
 Internet :80/:443
     └── nginx (hosting-nginx)
             ├── APP1_DOMAIN → app1-web (Flutter) + /api → app1 (Dart Frog)
-            └── APP2_DOMAIN → app2 (placeholder)
+            └── APP2_DOMAIN → app2 (AssistFin + agente IA)
 ```
 
 Cada app tem stack isolada: container web/API, PostgreSQL dedicado, rede interna e volume de dados próprios.
@@ -22,7 +22,7 @@ Cada app tem stack isolada: container web/API, PostgreSQL dedicado, rede interna
 ├── nginx/                  # templates e SSL
 ├── apps/
 │   ├── app1/               # Tri Doçuras (Flutter + Dart Frog)
-│   └── app2/               # segunda app (placeholder)
+│   └── app2/               # AssistFin (FastAPI + agente IA)
 ├── certs/                  # Let's Encrypt
 ├── scripts/
 │   ├── reload-nginx.sh
@@ -34,8 +34,8 @@ Cada app tem stack isolada: container web/API, PostgreSQL dedicado, rede interna
 
 | Variável | Valor atual | Uso |
 |----------|-------------|-----|
-| `APP1_DOMAIN` | `tridocuras.example.com` | Tri Doçuras |
-| `APP2_DOMAIN` | `app2.example.com` | App 2 |
+| `APP1_DOMAIN` | `tridocuras.com.br` | Tri Doçuras |
+| `APP2_DOMAIN` | `assistfin.com.br` | AssistFin |
 
 Configure o DNS do domínio (`APP1_DOMAIN`) para apontar ao servidor antes de usar HTTPS.
 
@@ -73,7 +73,7 @@ Expor apenas as portas necessárias para o app web (`80`, `443`) e SSH conforme 
 
 ## Tri Doçuras (App 1)
 
-Frontend Flutter web alinhado ao Design System v1. Telas implementadas: **catálogo**, **produto**, **carrinho** e **checkout** (Pix em placeholder). Carrinho em memória via `CartController`; API expõe catálogo (`GET /api/products`).
+Frontend Flutter web com fluxo de compra completo (6 telas do design system). Carrinho em memória via `CartController`; entrega em Nazaré da Mata - PE com taxa R$ 6,00. API: `GET /api/products`.
 
 Rebuild após mudanças no UI:
 
@@ -84,6 +84,7 @@ docker compose build app1-web && docker compose up -d app1-web
 ## Documentação por app
 
 - [Tri Doçuras (App 1)](apps/app1/README.md)
+- [AssistFin (App 2)](apps/app2/README.md)
 - [Flutter — frontend](apps/app1/frontend/README.md)
 - [API Dart Frog](apps/app1/api/README.md)
 - [Design system — índice](/root/.cursor/docs/tri-docuras/README.md)

@@ -277,6 +277,59 @@ async def test_cannot_realize_planned_twice():
         db.close()
 
 
+def test_realize_planned_updates_planned_account_when_different():
+    from app.config import settings
+
+    engine = create_engine(settings.database_url)
+    SessionLocal = sessionmaker(bind=engine)
+    db = SessionLocal()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"acct_{suffix}@test.com",
+        password="secret1",
+        name="Account User",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        account_a = _create_account(db, user.id, f"ContaA_{suffix}", opening_balance="1000")
+        account_b = _create_account(db, user.id, f"ContaB_{suffix}", opening_balance="500")
+        planned = finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="80",
+                description="Conta diferente",
+                account_name=account_a["name"],
+                category_name="Alimentação",
+                status="planned",
+            ),
+        )
+        assert planned["account"] == account_a["name"]
+
+        result = finance.realize_planned(
+            db,
+            user.id,
+            RealizePlannedInput(
+                planned_id=planned["id"],
+                account_name=account_b["name"],
+                payment_date=local_today(),
+            ),
+        )
+
+        assert result["planned"]["account"] == account_b["name"]
+        assert result["actual"]["account"] == account_b["name"]
+        assert result["actual"]["source_planned_id"] == planned["id"]
+    finally:
+        db.query(Transaction).filter(Transaction.user_id == user.id).delete(synchronize_session=False)
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
 def test_wants_planned_movement_intent():
     from app.services.intents import wants_planned_movement
     from app.services.tools import try_rule_based_parse

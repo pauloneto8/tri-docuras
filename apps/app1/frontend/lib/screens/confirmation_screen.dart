@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:tri_docuras/checkout/delivery_address.dart';
 import 'package:tri_docuras/checkout/order_summary.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
@@ -76,6 +77,26 @@ class ConfirmationScreen extends StatelessWidget {
                                       label: summary.deliveryLabel,
                                       value: summary.deliveryDetail,
                                     ),
+                                    if (summary.deliveryAddress != null) ...[
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Ref.: ${summary.deliveryAddress!.reference}',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w400,
+                                          color: AppColors.brown,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${DeliveryAddress.cityLabel} · CEP ${DeliveryAddress.postalCodeLabel}',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w400,
+                                          color: AppColors.brown.withValues(alpha: 0.85),
+                                        ),
+                                      ),
+                                    ],
                                     const SizedBox(height: 12),
                                     _DetailRow(
                                       label: 'Total pago',

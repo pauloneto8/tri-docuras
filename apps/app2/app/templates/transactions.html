@@ -4,6 +4,9 @@
 {% if success %}
 <p class="mb-4 rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-2 text-emerald-300 text-sm">{{ success }}</p>
 {% endif %}
+{% if error %}
+<p class="mb-4 rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-2 text-rose-300 text-sm">{{ error }}</p>
+{% endif %}
 <div class="grid lg:grid-cols-3 gap-6">
   <div class="lg:col-span-2 space-y-6">
     {# Seção: A realizar #}
@@ -35,6 +38,9 @@
               <td class="py-2">
                 <span class="text-slate-400">{{ tx.type_label }}</span>
                 <span class="inline-flex rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-xs text-amber-300 ml-1">Previsto</span>
+                {% if tx.recurrence_label %}
+                <span class="inline-flex rounded-full border border-violet-700/60 bg-violet-950/40 px-2 py-0.5 text-xs text-violet-300 ml-1">{{ tx.recurrence_label }}</span>
+                {% endif %}
               </td>
               <td class="py-2">{{ tx.description }}</td>
               <td class="py-2">{{ tx.account or '—' }}</td>
@@ -45,6 +51,28 @@
                 <details class="inline-block text-left">
                   <summary class="cursor-pointer text-emerald-400 hover:text-emerald-300 text-xs">Realizar</summary>
                   <form method="post" action="/transactions/{{ tx.id }}/realize" class="mt-2 space-y-2 min-w-[14rem] rounded border border-slate-700 bg-slate-950 p-3">
+                    <div>
+                      <label class="block text-xs text-slate-400 mb-1">Conta</label>
+                      <div class="space-y-1 text-sm">
+                        <label class="flex items-center gap-2">
+                          <input type="radio" name="same_account" value="yes" checked class="realize-same-account" data-target="other-account-{{ tx.id }}">
+                          <span>Mesma conta ({{ tx.account or '—' }})</span>
+                        </label>
+                        <label class="flex items-center gap-2">
+                          <input type="radio" name="same_account" value="no" class="realize-same-account" data-target="other-account-{{ tx.id }}">
+                          <span>Outra conta</span>
+                        </label>
+                      </div>
+                      <div id="other-account-{{ tx.id }}" class="hidden mt-2">
+                        <select name="account_name" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm">
+                          {% for a in accounts %}
+                          {% if a.name != tx.account %}
+                          <option value="{{ a.name }}">{{ a.name }}</option>
+                          {% endif %}
+                          {% endfor %}
+                        </select>
+                      </div>
+                    </div>
                     <div>
                       <label class="block text-xs text-slate-400 mb-1">Data de pagamento</label>
                       <input name="payment_date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm" required>
@@ -59,6 +87,11 @@
                     </div>
                     <button class="w-full rounded bg-emerald-600 hover:bg-emerald-500 px-2 py-1 text-xs font-medium">Confirmar</button>
                   </form>
+                  {% if tx.recurrence_id %}
+                  <form method="post" action="/transactions/recurring/{{ tx.recurrence_id }}/stop" class="mt-2">
+                    <button type="submit" class="w-full rounded border border-rose-700 text-rose-300 hover:bg-rose-950/40 px-2 py-1 text-xs">Encerrar série</button>
+                  </form>
+                  {% endif %}
                 </details>
               </td>
             </tr>
@@ -155,6 +188,26 @@
           <input name="is_planned" id="is-planned" type="checkbox" class="rounded border-slate-600 bg-slate-800">
           Lançamento previsto (não altera saldo até realizar)
         </label>
+        <div id="recurring-fields" class="hidden space-y-3 pt-1">
+          <label class="flex items-center gap-2 text-sm text-slate-300">
+            <input name="is_recurring" id="is-recurring" type="checkbox" class="rounded border-slate-600 bg-slate-800">
+            Lançamento fixo (repete automaticamente)
+          </label>
+          <div id="recurring-options" class="hidden space-y-2 pl-1">
+            <div>
+              <label class="block text-sm text-slate-400 mb-1">Frequência</label>
+              <select name="frequency" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+                <option value="daily">Diária</option>
+                <option value="weekly">Semanal</option>
+                <option value="monthly" selected>Mensal</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-slate-400 mb-1">Data de término <span class="text-slate-600">(opcional)</span></label>
+              <input name="recurrence_end_date" type="date" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+            </div>
+          </div>
+        </div>
       </div>
 
       <div id="transfer-fields" class="hidden space-y-3">
@@ -221,6 +274,19 @@
   const paymentDate = document.getElementById('payment-date');
   const competenceDate = document.getElementById('competence-date');
   const dueDate = document.getElementById('due-date');
+  const recurringFields = document.getElementById('recurring-fields');
+  const isRecurring = document.getElementById('is-recurring');
+  const recurringOptions = document.getElementById('recurring-options');
+
+  function syncRecurringFields() {
+    const isTransfer = txType.value === 'transfer';
+    const planned = isPlanned.checked && !isTransfer;
+    recurringFields.classList.toggle('hidden', !planned || isTransfer);
+    if (!planned || isTransfer) {
+      isRecurring.checked = false;
+    }
+    recurringOptions.classList.toggle('hidden', !isRecurring.checked);
+  }
 
   function syncDateFields() {
     const isTransfer = txType.value === 'transfer';
@@ -249,10 +315,21 @@
       isPlanned.checked = false;
     }
     syncDateFields();
+    syncRecurringFields();
   }
 
   txType.addEventListener('change', syncFormMode);
-  isPlanned.addEventListener('change', syncDateFields);
+  isPlanned.addEventListener('change', () => { syncDateFields(); syncRecurringFields(); });
+  isRecurring.addEventListener('change', syncRecurringFields);
   syncFormMode();
+
+  document.querySelectorAll('.realize-same-account').forEach((radio) => {
+    radio.addEventListener('change', () => {
+      const panel = document.getElementById(radio.dataset.target);
+      if (!panel) return;
+      const useOther = document.querySelector(`input[name="same_account"][value="no"][data-target="${radio.dataset.target}"]`);
+      panel.classList.toggle('hidden', !useOther?.checked);
+    });
+  });
 </script>
 {% endblock %}

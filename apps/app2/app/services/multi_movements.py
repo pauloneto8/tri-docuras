@@ -140,8 +140,14 @@ def parse_multi_movements(
     tx_type_hint: str | None = None,
 ) -> list[ParsedMovement] | None:
     """Retorna 2+ lançamentos se a mensagem contiver múltiplos valores monetários."""
+    from app.services.tools import is_date_only_message
+
     text = message.strip()
     if not text:
+        return None
+
+    # Datas isoladas (ex.: 10/08/2026 no wizard) não são múltiplos lançamentos.
+    if is_date_only_message(text):
         return None
 
     amounts_found = list(AMOUNT_RE.finditer(text))

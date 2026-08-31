@@ -6,7 +6,7 @@ from uuid import uuid4
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import Account, Budget, Category, Transaction, User
+from app.models import Account, Budget, Category, RecurringRule, Transaction, User
 from app.schemas import (
     BudgetCreate,
     BudgetStatusInput,
@@ -233,11 +233,77 @@ def create_transaction(db: Session, user_id: int, data: TransactionCreate) -> Tr
         payment_date=payment,
         transaction_date=cash_date,
         status=data.status,
+        recurrence_id=data.recurrence_id,
     )
     db.add(tx)
     db.commit()
     db.refresh(tx)
     return tx
+
+
+def _register_recurring_movement(
+    db: Session,
+    user_id: int,
+    *,
+    account: Account,
+    category: Category | None,
+    tx_type: str,
+    payload: RegisterExpenseInput | RegisterIncomeInput,
+) -> dict:
+    from app.services.recurrence import (
+        create_recurring_rule,
+        ensure_recurring_horizon,
+        format_recurrence_label,
+    )
+
+    if not payload.frequency:
+        raise ValueError("Frequência é obrigatória para lançamento fixo.")
+
+    amount_cents = decimal_to_cents(payload.amount)
+    start_date = (
+        payload.competence_date
+        or payload.due_date
+        or payload.payment_date
+        or payload.transaction_date
+        or local_today()
+    )
+
+    rule = create_recurring_rule(
+        db,
+        user_id,
+        account_id=account.id,
+        category_id=category.id if category else None,
+        tx_type=tx_type,
+        amount_cents=amount_cents,
+        description=payload.description,
+        frequency=payload.frequency,
+        start_date=start_date,
+        end_date=payload.recurrence_end_date,
+    )
+
+    tx = create_transaction(
+        db,
+        user_id,
+        TransactionCreate(
+            account_id=account.id,
+            category_id=category.id if category else None,
+            type=tx_type,
+            amount_cents=amount_cents,
+            description=payload.description,
+            competence_date=payload.competence_date or start_date,
+            due_date=payload.due_date or start_date,
+            payment_date=payload.payment_date,
+            transaction_date=payload.transaction_date,
+            status=payload.status,
+            recurrence_id=rule.id,
+        ),
+    )
+    ensure_recurring_horizon(db, user_id, rule_id=rule.id)
+    result = format_transaction(tx)
+    result["recurrence_id"] = rule.id
+    result["frequency"] = rule.frequency
+    result["recurrence_label"] = format_recurrence_label(rule.frequency)
+    return result
 
 
 def register_expense(db: Session, user_id: int, payload: RegisterExpenseInput) -> dict:
@@ -247,6 +313,11 @@ def register_expense(db: Session, user_id: int, payload: RegisterExpenseInput) -
     category = find_category_by_name(db, user_id, payload.category_name, "expense")
     if not category:
         raise ValueError(f"Categoria '{payload.category_name}' não encontrada.")
+
+    if payload.frequency:
+        return _register_recurring_movement(
+            db, user_id, account=account, category=category, tx_type="expense", payload=payload
+        )
 
     tx = create_transaction(
         db,
@@ -275,6 +346,11 @@ def register_income(db: Session, user_id: int, payload: RegisterIncomeInput) -> 
     if not category:
         raise ValueError(f"Categoria '{payload.category_name}' não encontrada.")
 
+    if payload.frequency:
+        return _register_recurring_movement(
+            db, user_id, account=account, category=category, tx_type="income", payload=payload
+        )
+
     tx = create_transaction(
         db,
         user_id,
@@ -292,6 +368,56 @@ def register_income(db: Session, user_id: int, payload: RegisterIncomeInput) -> 
         ),
     )
     return format_transaction(tx)
+
+
+def create_user_transaction(
+    db: Session,
+    user_id: int,
+    data: TransactionCreate,
+    *,
+    frequency: str | None = None,
+    recurrence_end_date: date | None = None,
+) -> dict:
+    """Cria lançamento manual (formulário) com suporte opcional a recorrência."""
+    if not frequency:
+        tx = create_transaction(db, user_id, data)
+        return format_transaction(tx)
+
+    account = db.get(Account, data.account_id)
+    if not account or account.user_id != user_id:
+        raise ValueError("Conta inválida.")
+    category = db.get(Category, data.category_id) if data.category_id else None
+
+    if data.type == "expense":
+        payload = RegisterExpenseInput(
+            amount=format_brl(data.amount_cents),
+            description=data.description,
+            account_name=account.name,
+            category_name=category.name if category else "Outros",
+            competence_date=data.competence_date,
+            due_date=data.due_date,
+            payment_date=data.payment_date,
+            transaction_date=data.transaction_date,
+            status=data.status,
+            frequency=frequency,  # type: ignore[arg-type]
+            recurrence_end_date=recurrence_end_date,
+        )
+        return register_expense(db, user_id, payload)
+
+    payload = RegisterIncomeInput(
+        amount=format_brl(data.amount_cents),
+        description=data.description,
+        account_name=account.name,
+        category_name=category.name if category else "Salário",
+        competence_date=data.competence_date,
+        due_date=data.due_date,
+        payment_date=data.payment_date,
+        transaction_date=data.transaction_date,
+        status=data.status,
+        frequency=frequency,  # type: ignore[arg-type]
+        recurrence_end_date=recurrence_end_date,
+    )
+    return register_income(db, user_id, payload)
 
 
 def realize_planned(db: Session, user_id: int, payload: RealizePlannedInput) -> dict:
@@ -337,6 +463,9 @@ def realize_planned(db: Session, user_id: int, payload: RealizePlannedInput) -> 
     else:
         account = planned.account
 
+    if account.id != planned.account_id:
+        planned.account_id = account.id
+
     category = planned.category
     if payload.category_name and payload.category_name.strip():
         category = find_category_by_name(
@@ -377,7 +506,14 @@ def realize_planned(db: Session, user_id: int, payload: RealizePlannedInput) -> 
     )
     db.add(actual)
     db.commit()
+    db.refresh(planned)
     db.refresh(actual)
+
+    if planned.recurrence_id:
+        from app.services.recurrence import ensure_recurring_horizon
+
+        ensure_recurring_horizon(db, user_id, rule_id=planned.recurrence_id)
+
     return {
         "planned": format_transaction(planned),
         "actual": format_transaction(actual),
@@ -644,6 +780,7 @@ def list_transactions(
             joinedload(Transaction.category),
             joinedload(Transaction.counterparty_account),
             joinedload(Transaction.user),
+            joinedload(Transaction.recurrence),
         )
         .order_by(Transaction.transaction_date.desc(), Transaction.id.desc())
         .limit(payload.limit)
@@ -743,9 +880,11 @@ def _period_labels(period: str, period_start: date, period_end: date) -> tuple[s
 def _resolve_opening_balance_date(
     opening_cents: int, opening_balance_date: date | None
 ) -> date | None:
+    if opening_balance_date is not None:
+        return opening_balance_date
     if opening_cents <= 0:
         return None
-    return opening_balance_date or local_today()
+    return local_today()
 
 
 def _account_balance_at(db: Session, account: Account, as_of: date) -> int:
@@ -1166,12 +1305,11 @@ def create_account(db: Session, user_id: int, payload: CreateAccountInput) -> di
         raise ValueError(f"Já existe uma conta com o nome '{payload.name}'.")
 
     opening_cents = 0
-    opening_date = None
     if payload.opening_balance and payload.opening_balance.strip():
         opening_cents = decimal_to_cents(payload.opening_balance)
-        opening_date = _resolve_opening_balance_date(
-            opening_cents, payload.opening_balance_date
-        )
+    opening_date = _resolve_opening_balance_date(
+        opening_cents, payload.opening_balance_date
+    )
 
     account = Account(
         user_id=user_id,
@@ -1301,6 +1439,8 @@ def format_transaction(
     include_user: bool = False,
     realized_actual_id: int | None = None,
 ) -> dict:
+    from app.services.recurrence import format_recurrence_label
+
     counterparty = None
     if tx.counterparty_account:
         counterparty = tx.counterparty_account.name
@@ -1331,6 +1471,11 @@ def format_transaction(
         "transfer_group_id": tx.transfer_group_id,
         "counterparty_account": counterparty,
         "source_planned_id": tx.source_planned_id,
+        "recurrence_id": tx.recurrence_id,
+        "frequency": tx.recurrence.frequency if tx.recurrence else None,
+        "recurrence_label": (
+            format_recurrence_label(tx.recurrence.frequency) if tx.recurrence else None
+        ),
         "is_realized": status == "planned" and realized_actual_id is not None,
         "realized_actual_id": realized_actual_id,
         "created_at": tx.created_at.isoformat() if isinstance(tx.created_at, datetime) else None,
