@@ -31,10 +31,12 @@ lib/
 │   ├── product_screen.dart   # detalhe do produto (tela 2)
 │   ├── cart_screen.dart      # carrinho (tela 3)
 │   ├── checkout_screen.dart  # checkout (tela 4)
-│   └── pix_screen.dart       # pagamento Pix (tela 5, placeholder)
+│   ├── pix_screen.dart       # pagamento Pix (tela 5)
+│   └── confirmation_screen.dart # confirmação (tela 6)
 ├── checkout/
-│   ├── checkout_draft.dart      # rascunho em memória (PII não persistido)
-│   ├── checkout_validators.dart # nome/WhatsApp
+│   ├── checkout_draft.dart
+│   ├── checkout_validators.dart
+│   ├── order_summary.dart
 │   └── whatsapp_input_formatter.dart
 └── widgets/
     ├── td_button.dart
@@ -143,20 +145,33 @@ Implementada conforme página 5 do PDF (lado direito), com validação no client
 
 ### Tela 5 — Pagamento Pix (`pix_screen.dart`)
 
-**Placeholder** — sem QR nem código Pix inventado (risco de fraude). Total exibido a partir do draft.
+Implementada conforme página 6 do PDF (lado esquerdo):
+
+- QR visual (placeholder até API Mercado Pago — sem código escaneável falso)
+- Total, timer de expiração (10 min), preview do código + COPIAR (integração pendente)
+- Status “Aguardando pagamento”, passos 1–3, texto Mercado Pago
+- **Já realizei o pagamento** → confirmação (até webhook automático existir)
+
+### Tela 6 — Confirmação (`confirmation_screen.dart`)
+
+Implementada conforme página 6 do PDF (lado direito):
+
+- Pedido confirmado, resumo (#pedido, retirada/entrega, total, status Pago)
+- Acompanhar pedido (em breve), Voltar à loja (limpa stack → catálogo)
 
 ### Fluxo de navegação
 
 ```
 HomeScreen ──► ProductScreen ──(Adicionar)──► pop → HomeScreen
-HomeScreen ──(ícone carrinho)──► CartScreen ──(Finalizar)──► CheckoutScreen ──(Gerar Pix)──► PixScreen
+HomeScreen ──(ícone carrinho)──► CartScreen ──(Finalizar)──► CheckoutScreen
+CheckoutScreen ──(Gerar Pix)──► PixScreen ──(Já realizei o pagamento)──► ConfirmationScreen
 ```
 
-Estado do carrinho: `CartController` em memória (sem persistência). Badge do header = `itemCount`.
+Estado do carrinho: `CartController` em memória (sem persistência). Badge do header = `itemCount`. Carrinho é limpo na confirmação.
 
-### Pendente (PDF telas 5–6)
+### Pendente (integração)
 
-Pix Mercado Pago real, confirmação. API: pedidos + webhook. Melhorias opcionais: persistência do carrinho, favoritos, taxa de entrega.
+Pix Mercado Pago real (QR + copia-e-cola via API), webhook de confirmação automática, `POST /api/orders`, rastreamento de pedidos.
 ## Desenvolvimento
 
 ```bash

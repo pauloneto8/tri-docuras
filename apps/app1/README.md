@@ -73,13 +73,14 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 | 2 | Produto | Moldura, opções (brownies), quantidade, total no botão Adicionar, grava em `CartController` |
 | 3 | Carrinho | Linhas com stepper compacto, ENTREGA (retirar/receber), resumo, Finalizar pedido |
 | 4 | Checkout | Nome, WhatsApp (validado), retirada, card Pix visual, Gerar Pix → tela 5 |
-| 5 | Pagamento Pix | Placeholder (sem QR/código fake) |
+| 5 | Pagamento Pix | Timer, QR placeholder, aguardando pagamento, confirmação manual |
+| 6 | Confirmação | Resumo do pedido, status Pago, voltar à loja |
 
-**Navegação:** catálogo → produto (card ou Adicionar); catálogo → carrinho (ícone); carrinho → checkout (Finalizar); checkout → Pix (Gerar Pix).
+**Navegação:** catálogo → produto → carrinho → checkout → Pix → confirmação.
 
-### Pendente (telas 5–6)
+### Pendente (integração)
 
-Pix Mercado Pago real, confirmação. API: criação de pedidos e Mercado Pago.
+Pix Mercado Pago real (QR + webhook), `POST /api/orders`, rastreamento de pedidos.
 
 ## Mobile
 

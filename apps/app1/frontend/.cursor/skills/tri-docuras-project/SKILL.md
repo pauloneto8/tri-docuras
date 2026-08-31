@@ -52,9 +52,10 @@ Lora Italic (wordmark `displayMedium`, produtos `titleMedium`), Lora (headings),
 | 2 | `product_screen.dart` | Produto — opções, stepper, Adicionar + total |
 | 3 | `cart_screen.dart` | Carrinho — linhas, ENTREGA, resumo, Finalizar |
 | 4 | `checkout_screen.dart` | Nome, WhatsApp, retirada, Pix visual, Gerar Pix |
-| 5 | `pix_screen.dart` | Placeholder (sem QR/código fake) |
+| 5 | `pix_screen.dart` | Timer, QR placeholder, aguardando pagamento |
+| 6 | `confirmation_screen.dart` | Pedido confirmado, resumo, voltar à loja |
 
-Navegação: card/Adicionar → produto; ícone carrinho → carrinho; Finalizar → checkout; Gerar Pix → Pix.
+Navegação: catálogo → carrinho → checkout → Pix → confirmação (fluxo completo; Pix real via API pendente).
 
 ## Layout web
 
@@ -86,4 +87,4 @@ Teste no domínio configurado em `APP1_DOMAIN` (hard refresh após deploy).
 
 ## Pendente (PDF)
 
-Telas 5–6: Pix Mercado Pago real, confirmação. API: pedidos + Mercado Pago.
+Integração Mercado Pago (QR/copia-e-cola real + webhook), `POST /api/orders`, rastreamento de pedidos.

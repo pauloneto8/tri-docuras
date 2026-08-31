@@ -10,6 +10,6 @@ class AppConfig {
     if (kIsWeb) {
       return '/api';
     }
-    return 'http://tridocuras.example.com/api';
+    return 'https://tridocuras.com.br/api';
   }
 }

@@ -1,9 +1,13 @@
+import 'package:tri_docuras/cart/delivery_mode.dart';
+import 'package:tri_docuras/checkout/order_summary.dart';
+
 /// Rascunho de checkout em memória — não persistir (PII).
 class CheckoutDraft {
   const CheckoutDraft({
     required this.customerName,
     required this.whatsappDigits,
     required this.total,
+    required this.deliveryMode,
   });
 
   /// Nome já sanitizado (trim + espaços normalizados).
@@ -15,6 +19,15 @@ class CheckoutDraft {
   /// Total lido do [CartController] no momento do Gerar Pix.
   final double total;
 
+  final DeliveryMode deliveryMode;
+
   String get formattedTotal =>
       'R\$ ${total.toStringAsFixed(2).replaceAll('.', ',')}';
+
+  OrderSummary toOrderSummary(String orderId) => OrderSummary(
+        orderId: orderId,
+        customerName: customerName,
+        total: total,
+        deliveryMode: deliveryMode,
+      );
 }

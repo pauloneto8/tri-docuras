@@ -63,6 +63,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       customerName: CheckoutValidators.sanitizeName(_nameController.text),
       whatsappDigits: CheckoutValidators.digitsOnly(_whatsappController.text),
       total: cart.total,
+      deliveryMode: cart.deliveryMode,
     );
 
     Navigator.of(context).push(
