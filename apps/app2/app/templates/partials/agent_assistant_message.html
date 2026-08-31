@@ -1,0 +1,10 @@
+<div class="flex justify-start agent-assistant-bubble">
+  <div class="rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 max-w-[90%] text-sm whitespace-pre-line">
+    {{ agent_message }}
+    {% if suggestions %}
+    {% set chip_target = "#agent-chat-log" %}
+    {% set chip_swap = "beforeend" %}
+    {% include "partials/agent_suggestions.html" %}
+    {% endif %}
+  </div>
+</div>

@@ -1,0 +1,44 @@
+<div class="space-y-3 agent-exchange" {% if refresh_page %}data-refresh-page="true"{% endif %}{% if keep_chat_open %} data-keep-chat-open="true"{% endif %}>
+  <div class="flex justify-end">
+    <div class="rounded-lg bg-emerald-900/40 border border-emerald-800 px-3 py-2 max-w-[90%] text-sm">
+      {{ user_message }}
+    </div>
+  </div>
+  <div class="flex justify-start">
+    <div class="rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 max-w-[90%] text-sm whitespace-pre-line">
+      {{ agent_message }}
+      {% if needs_confirmation and pending_action %}
+      <div class="mt-3 flex gap-2">
+      <form
+        class="inline"
+        hx-post="/agent/chat"
+        hx-target="closest .agent-exchange"
+        hx-swap="outerHTML"
+        hx-indicator="#htmx-indicator"
+        hx-timeout="45000"
+      >
+        <input type="hidden" name="message" value="Confirmar">
+        <input type="hidden" name="confirmed" value="true">
+        <input type="hidden" name="pending_action" value='{{ pending_action | tojson }}'>
+        <button type="submit" class="rounded bg-emerald-600 hover:bg-emerald-500 px-3 py-1 text-xs">Confirmar</button>
+      </form>
+      <form
+        class="inline"
+        hx-post="/agent/chat"
+        hx-target="closest .agent-exchange"
+        hx-swap="outerHTML"
+        hx-indicator="#htmx-indicator"
+        hx-timeout="45000"
+      >
+        <input type="hidden" name="message" value="cancelar">
+        <input type="hidden" name="confirmed" value="false">
+        <button type="submit" class="rounded bg-slate-700 hover:bg-slate-600 px-3 py-1 text-xs">Cancelar</button>
+      </form>
+      </div>
+      {% endif %}
+      {% if suggestions and not needs_confirmation %}
+      {% include "partials/agent_suggestions.html" %}
+      {% endif %}
+    </div>
+  </div>
+</div>

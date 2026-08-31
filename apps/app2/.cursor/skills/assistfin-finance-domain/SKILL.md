@@ -1,0 +1,92 @@
+---
+name: assistfin-finance-domain
+description: >-
+  Domínio financeiro do AssistFin: saldos, centavos, contas, transações,
+  transferências, orçamentos e regras de negócio. Use ao alterar dashboard,
+  finance.py, modelos, onboarding, contas, movimentos, resumos por período
+  ou saldo inicial com data.
+paths: app/services/finance.py, app/models.py, app/schemas.py, app/templates/dashboard.html, app/templates/accounts.html, app/templates/transactions.html, app/templates/budgets.html, app/routers/pages.py, tests/test_summary.py, tests/test_transfers.py
+---
+
+# AssistFin — Domínio financeiro
+
+## Princípios de dinheiro
+
+- Valores em **centavos** (`*_cents`, `BigInteger`).
+- Exibição: `format_brl()` em `schemas.py` (ex.: `1.234,56`).
+- Entrada aceita `45,90`, `1.250,00`, `R$ 45.90`.
+
+## Tipos de movimento
+
+| Tipo | `Transaction.type` | Receitas/despesas do período | Saldo da conta |
+|------|---------------------|------------------------------|----------------|
+| Despesa | `expense` | Despesa | − |
+| Receita | `income` | Receita | + |
+| Transferência saída | `transfer_out` | **Não** | − |
+| Transferência entrada | `transfer_in` | **Não** | + |
+
+Transferências são pares vinculados por `transfer_group_id` (origem + destino).
+
+## Previsto vs realizado
+
+| Status | `payment_date` | Efeito no saldo | Período (receitas/despesas) |
+|--------|----------------|-----------------|------------------------------|
+| `planned` | `NULL` | Nenhum | Previstos no dashboard (projeção) |
+| `actual` | Obrigatório | Sim (`transaction_date`) | Sim |
+
+Realizar: `realize_planned()` cria lançamento `actual` com `source_planned_id`.
+
+## Datas de movimento
+
+| Campo | Papel |
+|-------|-------|
+| `competence_date` | Mês de competência — **orçamentos** somam por esta data |
+| `due_date` | Vencimento — previstos pendentes na projeção |
+| `payment_date` | Data de caixa (somente realizado) |
+| `transaction_date` | Data de caixa no sistema (= `due_date` ou `payment_date`) |
+
+`resolve_transaction_dates()` em `finance.py` é a fonte da verdade para normalização.
+
+## Conceitos de saldo no dashboard
+
+| Card | Significado |
+|------|-------------|
+| Receitas | Soma `income` no período |
+| Despesas | Soma `expense` no período |
+| Resultado do período | Receitas − despesas |
+| Saldo anterior | Soma dos saldos das contas no dia anterior ao período |
+| Resultado final | Soma dos saldos ao fim do período |
+| Saldos por conta | `_account_balance_at(account, period_end)` |
+
+**Saldo inicial** (`opening_balance_cents` + `opening_balance_date`): entra no saldo da conta, não é receita do período. Só vale a partir da data declarada.
+
+## Períodos
+
+`SummaryInput(period="day"|"week"|"month", ref_date=...)`
+
+- `resolve_period_bounds()` define início/fim
+- `shift_ref_date()` navega anterior/próximo
+
+## Entidades
+
+- Contas: `corrente`, `poupanca`, `carteira`, `cartao`
+- Categorias: `expense` | `income`
+- Isolamento por `user_id`
+
+## Ao implementar
+
+1. `finance.py` (fonte da verdade)
+2. `format_tool_result` se o agente expõe
+3. Templates com rótulos claros
+4. Testes (`test_summary.py`, `test_transfers.py`)
+
+## Armadilhas
+
+- `list_accounts` ≠ `list_transactions` (intents)
+- Transferência ≠ despesa/receita nos cards do período
+- Página `/accounts` = saldo **atual**; dashboard = saldo **histórico** ao fim do período
+- Lançamentos exigem confirmação no agente
+
+## Referência
+
+[reference.md](reference.md)

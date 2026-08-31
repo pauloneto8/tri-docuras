@@ -1,0 +1,147 @@
+<div id="agent-widget" class="fixed bottom-6 right-6 z-50">
+  <div id="agent-panel" class="hidden mb-4 w-[min(100vw-2rem,24rem)] h-[28rem] rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl flex flex-col overflow-hidden">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/95">
+      <div>
+        <p class="font-semibold text-emerald-400">Assistente</p>
+        <p class="text-xs text-slate-400">AssistFin com IA</p>
+      </div>
+      <button type="button" onclick="toggleAgentPanel(false)" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400" aria-label="Fechar chat">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div id="agent-chat-log" class="flex-1 overflow-y-auto p-4 space-y-4">
+      <div id="agent-welcome" class="text-sm text-slate-400 space-y-2">
+        <p>Olá! Posso ajudar com:</p>
+        <ul class="list-disc list-inside space-y-1 text-slate-500">
+          <li>"gastei 45 no mercado ontem"</li>
+          <li>"resumo do mês"</li>
+          <li>"últimas despesas"</li>
+          <li>"status dos orçamentos"</li>
+          <li>"cadastrar uma conta do Nubank"</li>
+          <li>"cadastrar categoria Pet de despesa"</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="htmx-indicator" class="hidden px-4 py-2 text-sm text-slate-400 items-center gap-2 border-t border-slate-800">
+      <svg class="animate-spin h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      Pensando...
+    </div>
+
+    <form
+      id="agent-form"
+      hx-post="/agent/chat"
+      hx-target="#agent-chat-log"
+      hx-swap="beforeend"
+      hx-indicator="#htmx-indicator"
+      hx-timeout="45000"
+      class="p-3 border-t border-slate-800 flex gap-2"
+    >
+      <input
+        id="agent-message-input"
+        name="message"
+        type="text"
+        placeholder="Digite sua mensagem..."
+        class="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:border-emerald-600"
+        required
+        autocomplete="off"
+      >
+      <button type="submit" class="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm font-medium shrink-0">
+        Enviar
+      </button>
+    </form>
+  </div>
+
+  <button
+    type="button"
+    id="agent-fab"
+    onclick="toggleAgentPanel()"
+    class="w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/50 flex items-center justify-center transition-transform hover:scale-105"
+    aria-label="Abrir assistente"
+  >
+    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+    </svg>
+  </button>
+</div>
+
+<script>
+  const AGENT_OPEN_KEY = 'assistfinAgentOpen';
+
+  function toggleAgentPanel(forceOpen) {
+    const panel = document.getElementById('agent-panel');
+    const isHidden = panel.classList.contains('hidden');
+    const open = forceOpen !== undefined ? forceOpen : isHidden;
+    panel.classList.toggle('hidden', !open);
+    try {
+      sessionStorage.setItem(AGENT_OPEN_KEY, open ? '1' : '0');
+    } catch (_) {}
+    if (open) {
+      panel.querySelector('input[name="message"]')?.focus();
+    }
+  }
+
+  function restoreAgentPanelState() {
+    try {
+      if (sessionStorage.getItem(AGENT_OPEN_KEY) === '1') {
+        toggleAgentPanel(true);
+      }
+    } catch (_) {}
+  }
+
+  function scrollAgentChat() {
+    const log = document.getElementById('agent-chat-log');
+    if (log) log.scrollTop = log.scrollHeight;
+  }
+
+  const agentForm = document.getElementById('agent-form');
+  const agentInput = document.getElementById('agent-message-input');
+
+  agentForm?.addEventListener('htmx:beforeRequest', function() {
+    if (agentInput) agentInput.value = '';
+  });
+
+  document.body.addEventListener('htmx:afterSwap', function(evt) {
+    if (evt.detail.target?.id === 'agent-chat-log') {
+      document.getElementById('agent-welcome')?.remove();
+      scrollAgentChat();
+      agentInput?.focus();
+      const refreshNode = evt.detail.target.querySelector('[data-refresh-page="true"]');
+      if (refreshNode) {
+        const keepOpen = refreshNode.hasAttribute('data-keep-chat-open');
+        if (keepOpen) {
+          try { sessionStorage.setItem(AGENT_OPEN_KEY, '1'); } catch (_) {}
+        }
+        setTimeout(() => window.location.reload(), 800);
+      }
+    }
+  });
+
+  function showAgentError(message) {
+    const log = document.getElementById('agent-chat-log');
+    if (!log) return;
+    const el = document.createElement('div');
+    el.className = 'rounded-lg bg-red-900/40 border border-red-700 px-3 py-2 text-sm text-red-200';
+    el.textContent = message;
+    log.appendChild(el);
+    scrollAgentChat();
+  }
+
+  document.body.addEventListener('htmx:responseError', function(evt) {
+    if (evt.detail.elt?.id === 'agent-form' || evt.detail.elt?.closest?.('#agent-form')) {
+      showAgentError('Não consegui responder a tempo. Envie de novo.');
+    }
+  });
+
+  document.body.addEventListener('htmx:timeout', function(evt) {
+    if (evt.detail.elt?.id === 'agent-form' || evt.detail.elt?.closest?.('#agent-form')) {
+      showAgentError('Não consegui responder a tempo. Envie de novo.');
+    }
+  });
+
+  restoreAgentPanelState();
+</script>

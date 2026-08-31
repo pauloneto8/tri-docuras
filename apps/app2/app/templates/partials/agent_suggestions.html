@@ -1,0 +1,21 @@
+{% if suggestions %}
+<div class="mt-3 flex flex-wrap gap-2">
+  {% for chip in suggestions %}
+  <form
+    class="inline"
+    hx-post="/agent/chat"
+    hx-target="{{ chip_target|default('closest .agent-exchange') }}"
+    hx-swap="{{ chip_swap|default('outerHTML') }}"
+    hx-indicator="#htmx-indicator"
+    hx-timeout="45000"
+  >
+    <input type="hidden" name="message" value="{{ chip }}">
+    <input type="hidden" name="confirmed" value="false">
+    <button
+      type="submit"
+      class="rounded-full border border-slate-600 bg-slate-700/80 hover:bg-emerald-700/80 hover:border-emerald-600 px-3 py-1 text-xs text-slate-100 transition-colors"
+    >{{ chip }}</button>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}

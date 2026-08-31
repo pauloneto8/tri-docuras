@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — AssistFin{% endblock %}
+{% block content %}
+<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h1 class="text-lg font-semibold text-slate-100">Visão financeira</h1>
+    <p class="text-sm text-slate-400">{{ summary.period_label }}</p>
+  </div>
+  <div class="flex flex-wrap items-center gap-2">
+    <div class="inline-flex rounded-lg border border-slate-700 overflow-hidden text-sm">
+      <a href="/?period=day&ref_date={{ ref_date }}"
+         class="px-3 py-1.5 {% if period == 'day' %}bg-emerald-600 text-white{% else %}bg-slate-900 text-slate-300 hover:bg-slate-800{% endif %}">
+        Diária
+      </a>
+      <a href="/?period=week&ref_date={{ ref_date }}"
+         class="px-3 py-1.5 {% if period == 'week' %}bg-emerald-600 text-white{% else %}bg-slate-900 text-slate-300 hover:bg-slate-800{% endif %}">
+        Semanal
+      </a>
+      <a href="/?period=month&ref_date={{ ref_date }}"
+         class="px-3 py-1.5 {% if period == 'month' %}bg-emerald-600 text-white{% else %}bg-slate-900 text-slate-300 hover:bg-slate-800{% endif %}">
+        Mensal
+      </a>
+    </div>
+    <div class="inline-flex rounded-lg border border-slate-700 overflow-hidden text-sm">
+      <a href="/?period={{ period }}&ref_date={{ prev_ref_date }}"
+         class="px-3 py-1.5 bg-slate-900 text-slate-300 hover:bg-slate-800" aria-label="Período anterior">
+        ←
+      </a>
+      <a href="/?period={{ period }}&ref_date={{ today.isoformat() }}"
+         class="px-3 py-1.5 bg-slate-900 text-slate-300 hover:bg-slate-800">
+        Hoje
+      </a>
+      <a href="/?period={{ period }}&ref_date={{ next_ref_date }}"
+         class="px-3 py-1.5 bg-slate-900 text-slate-300 hover:bg-slate-800" aria-label="Próximo período">
+        →
+      </a>
+    </div>
+  </div>
+</div>
+
+{# 1. Posição de caixa #}
+<section class="mb-8">
+  <h2 class="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3">Posição de caixa</h2>
+  <div class="grid md:grid-cols-2 gap-4 mb-3">
+    <div class="rounded-xl bg-slate-900 border border-emerald-800/60 p-6">
+      <p class="text-slate-400 text-sm">Saldo realizado</p>
+      <p class="text-xs text-slate-500 mb-2">Ao fim de {{ summary.period_label }}</p>
+      <p class="text-3xl font-bold text-emerald-400">R$ {{ summary.ending_balance }}</p>
+    </div>
+    <div class="rounded-xl bg-slate-900 border border-amber-700/50 p-6">
+      <p class="text-slate-400 text-sm">Saldo projetado</p>
+      <p class="text-xs text-slate-500 mb-2">Realizado + previstos pendentes</p>
+      <p class="text-3xl font-bold text-amber-300">R$ {{ summary.projected_ending_balance }}</p>
+    </div>
+  </div>
+  <p class="text-sm text-slate-500">
+    Saldo de partida ({{ summary.previous_label }}):
+    <span class="text-slate-300 font-medium">R$ {{ summary.previous_balance }}</span>
+  </p>
+</section>
+
+{# 2. Movimento realizado do período #}
+<section class="mb-8">
+  <h2 class="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3">Movimento do período</h2>
+  <p class="text-xs text-slate-500 mb-3">{{ summary.period_label }} — apenas lançamentos realizados</p>
+  <div class="grid md:grid-cols-3 gap-4">
+    <div class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+      <p class="text-slate-400 text-sm">Receitas</p>
+      <p class="text-2xl font-bold text-emerald-400 mt-1">R$ {{ summary.income }}</p>
+    </div>
+    <div class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+      <p class="text-slate-400 text-sm">Despesas</p>
+      <p class="text-2xl font-bold text-rose-400 mt-1">R$ {{ summary.expense }}</p>
+    </div>
+    <div class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+      <p class="text-slate-400 text-sm">Resultado</p>
+      <p class="text-xs text-slate-500 mb-1">Receitas − despesas</p>
+      <p class="text-2xl font-bold {% if summary.balance_cents >= 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">R$ {{ summary.balance }}</p>
+    </div>
+  </div>
+</section>
+
+{# 3. Previstos do período #}
+<section class="mb-8 rounded-xl bg-slate-900 border border-amber-800/40 p-5">
+  <h2 class="text-lg font-semibold mb-1">Previstos do período</h2>
+  <p class="text-xs text-slate-500 mb-4">
+    Compromissos ainda não liquidados não alteram o saldo realizado.
+  </p>
+  <div class="grid md:grid-cols-3 gap-4 mb-4">
+    <div class="rounded-lg border border-amber-800/30 p-4">
+      <p class="text-slate-400 text-sm">Receitas previstas</p>
+      <p class="text-lg font-semibold text-emerald-400">R$ {{ summary.planned_income }}</p>
+      <p class="text-xs text-slate-500">Pendente: R$ {{ summary.pending_planned_income }}</p>
+    </div>
+    <div class="rounded-lg border border-amber-800/30 p-4">
+      <p class="text-slate-400 text-sm">Despesas previstas</p>
+      <p class="text-lg font-semibold text-rose-400">R$ {{ summary.planned_expense }}</p>
+      <p class="text-xs text-slate-500">Pendente: R$ {{ summary.pending_planned_expense }}</p>
+    </div>
+    <div class="rounded-lg border border-amber-800/30 p-4">
+      <p class="text-slate-400 text-sm">Resultado previsto</p>
+      <p class="text-lg font-semibold {% if summary.planned_result_cents >= 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">R$ {{ summary.planned_result }}</p>
+      <p class="text-xs text-slate-500">Pendente: R$ {{ summary.pending_planned_result }}</p>
+    </div>
+  </div>
+  <h3 class="text-sm font-semibold text-slate-300 mb-2">Previsto vs realizado no período</h3>
+  {% if summary.plan_vs_actual %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="text-slate-400 border-b border-slate-800">
+        <tr>
+          <th class="text-left py-2">Descrição</th>
+          <th class="text-left py-2">Previsto (venc.)</th>
+          <th class="text-left py-2">Realizado (pag.)</th>
+          <th class="text-right py-2">Diferença</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in summary.plan_vs_actual %}
+        <tr class="border-b border-slate-800/60">
+          <td class="py-2">{{ item.description }} <span class="text-slate-500 text-xs">({{ item.type_label }})</span></td>
+          <td class="py-2">R$ {{ item.planned_amount }} <span class="text-slate-500 text-xs">{{ item.planned_date }}</span></td>
+          <td class="py-2">R$ {{ item.actual_amount }} <span class="text-slate-500 text-xs">{{ item.actual_date }}</span></td>
+          <td class="py-2 text-right font-mono {% if item.difference_cents > 0 %}text-emerald-400{% elif item.difference_cents < 0 %}text-rose-400{% else %}text-slate-300{% endif %}">R$ {{ item.difference }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-slate-400 text-sm">Nenhum previsto realizado neste período.</p>
+  {% endif %}
+</section>
+
+<div class="grid md:grid-cols-2 gap-6">
+  <section class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="text-lg font-semibold">Saldos por conta</h2>
+        <p class="text-xs text-slate-500">Ao fim de {{ summary.period_label }}</p>
+      </div>
+      <a href="/accounts" class="text-sm text-emerald-400 hover:text-emerald-300">Gerenciar</a>
+    </div>
+    {% if balances %}
+    <ul class="space-y-2">
+      {% for item in balances %}
+      <li class="flex justify-between border-b border-slate-800 pb-2 gap-2">
+        <span>{{ item.account }}</span>
+        <span class="font-mono">R$ {{ item.balance }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-slate-400">Nenhuma conta cadastrada.</p>
+    {% endif %}
+  </section>
+
+  <section class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+    <h2 class="text-lg font-semibold mb-4">Últimos movimentos</h2>
+    {% if recent %}
+    <ul class="space-y-2 text-sm">
+      {% for tx in recent %}
+      <li class="flex justify-between gap-4">
+        <span>
+          {{ tx.transaction_date }} — {{ tx.description }}
+          {% if tx.type in ['transfer_out', 'transfer_in'] and tx.counterparty_account %}
+          <span class="text-slate-500">({{ tx.type_label }} · {{ tx.counterparty_account }})</span>
+          {% endif %}
+        </span>
+        <span class="{% if tx.type in ['expense', 'transfer_out'] %}text-rose-400{% elif tx.type in ['income', 'transfer_in'] %}text-emerald-400{% else %}text-slate-300{% endif %} font-mono">
+          {% if tx.type in ['expense', 'transfer_out'] %}-{% elif tx.type in ['income', 'transfer_in'] %}+{% endif %}R$ {{ tx.amount }}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-slate-400">Sem lançamentos ainda.</p>
+    {% endif %}
+  </section>
+</div>
+
+{% if budgets %}
+<section class="mt-6 rounded-xl bg-slate-900 border border-slate-800 p-5">
+  <h2 class="text-lg font-semibold mb-4">Orçamentos do mês ({{ summary.month }}/{{ summary.year }})</h2>
+  <div class="space-y-3">
+    {% for b in budgets %}
+    <div>
+      <div class="flex justify-between text-sm mb-1">
+        <span>{{ b.category }}</span>
+        <span>R$ {{ b.spent }} / R$ {{ b.limit }}</span>
+      </div>
+      <div class="h-2 rounded bg-slate-800 overflow-hidden">
+        <div class="h-full {% if b.percent_used > 90 %}bg-rose-500{% elif b.percent_used > 70 %}bg-amber-500{% else %}bg-emerald-500{% endif %}"
+             style="width: {{ [b.percent_used, 100]|min }}%"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

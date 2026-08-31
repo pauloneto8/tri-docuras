@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}Movimentos — AssistFin{% endblock %}
+{% block content %}
+{% if success %}
+<p class="mb-4 rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-2 text-emerald-300 text-sm">{{ success }}</p>
+{% endif %}
+<div class="grid lg:grid-cols-3 gap-6">
+  <section class="lg:col-span-2 rounded-xl bg-slate-900 border border-slate-800 p-5">
+    <h2 class="text-lg font-semibold mb-4">Movimentos</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-slate-400 border-b border-slate-800">
+          <tr>
+            <th class="text-left py-2">Datas</th>
+            <th class="text-left py-2">Tipo</th>
+            <th class="text-left py-2">Status</th>
+            <th class="text-left py-2">Descrição</th>
+            <th class="text-left py-2">Conta</th>
+            <th class="text-right py-2">Valor</th>
+            <th class="text-right py-2">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tx in transactions %}
+          <tr class="border-b border-slate-800/60 {% if tx.status == 'planned' %}bg-amber-950/10{% elif tx.source_planned_id %}bg-emerald-950/10{% endif %}">
+            <td class="py-2 text-xs leading-relaxed">
+              <div><span class="text-slate-500">Comp.</span> {{ tx.competence_date_label or tx.competence_date }}</div>
+              <div><span class="text-slate-500">Venc.</span> {{ tx.due_date_label or tx.due_date }}</div>
+              <div><span class="text-slate-500">Pag.</span> {{ tx.payment_date_label or '—' }}</div>
+            </td>
+            <td class="py-2 text-slate-400">{{ tx.type_label }}</td>
+            <td class="py-2">
+              {% if tx.status == 'planned' %}
+                <span class="inline-flex rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-xs text-amber-300">Previsto</span>
+                {% if tx.is_realized %}
+                <span class="inline-flex rounded-full border border-emerald-700/60 bg-emerald-950/40 px-2 py-0.5 text-xs text-emerald-300 ml-1">Realizado</span>
+                {% endif %}
+              {% elif tx.source_planned_id %}
+                <span class="inline-flex rounded-full border border-emerald-700/60 bg-emerald-950/40 px-2 py-0.5 text-xs text-emerald-300">Realizado</span>
+              {% else %}
+                <span class="inline-flex rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 text-xs text-slate-300">Realizado</span>
+              {% endif %}
+            </td>
+            <td class="py-2">
+              {{ tx.description }}
+              {% if tx.type in ['transfer_out', 'transfer_in'] and tx.counterparty_account %}
+              <span class="text-slate-500 text-xs block">↔ {{ tx.counterparty_account }}</span>
+              {% endif %}
+            </td>
+            <td class="py-2">{{ tx.account or '—' }}</td>
+            <td class="py-2 text-right font-mono {% if tx.type in ['expense', 'transfer_out'] %}text-rose-400{% elif tx.type in ['income', 'transfer_in'] %}text-emerald-400{% else %}text-slate-300{% endif %}">
+              {% if tx.type in ['expense', 'transfer_out'] %}-{% elif tx.type in ['income', 'transfer_in'] %}+{% endif %}R$ {{ tx.amount }}
+            </td>
+            <td class="py-2 text-right">
+              {% if tx.status == 'planned' and not tx.is_realized %}
+              <details class="inline-block text-left">
+                <summary class="cursor-pointer text-emerald-400 hover:text-emerald-300 text-xs">Realizar</summary>
+                <form method="post" action="/transactions/{{ tx.id }}/realize" class="mt-2 space-y-2 min-w-[14rem] rounded border border-slate-700 bg-slate-950 p-3">
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-1">Valor (R$)</label>
+                    <input name="amount" type="text" value="{{ tx.amount }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm" required>
+                  </div>
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-1">Competência</label>
+                    <input name="competence_date" type="date" value="{{ tx.competence_date }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm" required>
+                  </div>
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-1">Vencimento</label>
+                    <input name="due_date" type="date" value="{{ tx.due_date }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm" required>
+                  </div>
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-1">Data de pagamento</label>
+                    <input name="payment_date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm" required>
+                  </div>
+                  <div>
+                    <label class="block text-xs text-slate-400 mb-1">Descrição</label>
+                    <input name="description" type="text" value="{{ tx.description }}" class="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm">
+                  </div>
+                  <button class="w-full rounded bg-emerald-600 hover:bg-emerald-500 px-2 py-1 text-xs font-medium">Confirmar</button>
+                </form>
+              </details>
+              {% else %}
+              <span class="text-slate-600 text-xs">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="py-4 text-slate-400">Nenhum movimento.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="rounded-xl bg-slate-900 border border-slate-800 p-5 h-fit">
+    <h2 class="text-lg font-semibold mb-4">Novo lançamento</h2>
+    <form method="post" action="/transactions" class="space-y-3" id="tx-form">
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Tipo</label>
+        <select name="type" id="tx-type" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+          <option value="expense">Despesa</option>
+          <option value="income">Receita</option>
+          <option value="transfer">Transferência</option>
+        </select>
+      </div>
+
+      <div id="single-account-fields">
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Conta</label>
+          <select name="account_id" id="account-id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+            {% for account in accounts %}
+            <option value="{{ account.id }}">{{ account.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div id="category-field">
+          <label class="block text-sm text-slate-400 mb-1">Categoria</label>
+          <select name="category_id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+            <option value="">Automática</option>
+            {% for cat in categories %}
+            <option value="{{ cat.id }}">{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <label class="flex items-center gap-2 text-sm text-slate-300" id="planned-checkbox">
+          <input name="is_planned" id="is-planned" type="checkbox" class="rounded border-slate-600 bg-slate-800">
+          Lançamento previsto (não altera saldo até realizar)
+        </label>
+      </div>
+
+      <div id="transfer-fields" class="hidden space-y-3">
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Conta de origem</label>
+          <select name="from_account_id" id="from-account-id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+            {% for account in accounts %}
+            <option value="{{ account.id }}">{{ account.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Conta de destino</label>
+          <select name="to_account_id" id="to-account-id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+            {% for account in accounts %}
+            <option value="{{ account.id }}" {% if loop.index == 2 %}selected{% endif %}>{{ account.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Valor (R$)</label>
+        <input name="amount" type="text" placeholder="45,90" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Descrição</label>
+        <input name="description" id="tx-description" type="text" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+      </div>
+      <div id="date-fields" class="space-y-3">
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Competência</label>
+          <input name="competence_date" id="competence-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Vencimento</label>
+          <input name="due_date" id="due-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+        </div>
+        <div id="payment-date-field">
+          <label class="block text-sm text-slate-400 mb-1">Pagamento</label>
+          <input name="payment_date" id="payment-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+        </div>
+      </div>
+      <button class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium">Registrar</button>
+    </form>
+  </section>
+</div>
+
+<script>
+  const txType = document.getElementById('tx-type');
+  const singleFields = document.getElementById('single-account-fields');
+  const transferFields = document.getElementById('transfer-fields');
+  const categoryField = document.getElementById('category-field');
+  const accountId = document.getElementById('account-id');
+  const description = document.getElementById('tx-description');
+  const plannedCheckbox = document.getElementById('planned-checkbox');
+  const isPlanned = document.getElementById('is-planned');
+  const paymentDateField = document.getElementById('payment-date-field');
+  const paymentDate = document.getElementById('payment-date');
+  const competenceDate = document.getElementById('competence-date');
+  const dueDate = document.getElementById('due-date');
+
+  function syncPaymentField() {
+    const planned = isPlanned.checked;
+    paymentDateField.classList.toggle('hidden', planned);
+    paymentDate.required = !planned;
+    if (planned) {
+      paymentDate.value = '';
+    } else if (!paymentDate.value) {
+      paymentDate.value = dueDate.value || competenceDate.value;
+    }
+  }
+
+  function syncFormMode() {
+    const isTransfer = txType.value === 'transfer';
+    singleFields.classList.toggle('hidden', isTransfer);
+    transferFields.classList.toggle('hidden', !isTransfer);
+    accountId.required = !isTransfer;
+    description.required = !isTransfer;
+    plannedCheckbox.classList.toggle('hidden', isTransfer);
+    if (isTransfer) {
+      paymentDateField.classList.remove('hidden');
+      paymentDate.required = true;
+    } else {
+      syncPaymentField();
+    }
+  }
+
+  txType.addEventListener('change', syncFormMode);
+  isPlanned.addEventListener('change', syncPaymentField);
+  syncFormMode();
+</script>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Administração — AssistFin{% endblock %}
+{% block content %}
+<div class="mb-6 rounded-xl bg-emerald-900/20 border border-emerald-800 p-4">
+  <p class="text-sm text-emerald-300 font-medium">Modo administrador</p>
+  <p class="text-sm text-slate-400 mt-1">Visão global de todos os usuários e movimentações do sistema.</p>
+</div>
+
+<div class="grid md:grid-cols-3 gap-4 mb-8">
+  <div class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+    <p class="text-slate-400 text-sm">Receitas globais ({{ summary.month }}/{{ summary.year }})</p>
+    <p class="text-2xl font-bold text-emerald-400">R$ {{ summary.income }}</p>
+  </div>
+  <div class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+    <p class="text-slate-400 text-sm">Despesas globais</p>
+    <p class="text-2xl font-bold text-rose-400">R$ {{ summary.expense }}</p>
+  </div>
+  <div class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+    <p class="text-slate-400 text-sm">Saldo global do mês</p>
+    <p class="text-2xl font-bold">R$ {{ summary.balance }}</p>
+  </div>
+</div>
+
+<section class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+  <h2 class="text-lg font-semibold mb-4">Usuários</h2>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="text-slate-400 border-b border-slate-800">
+        <tr>
+          <th class="text-left py-2">Nome</th>
+          <th class="text-left py-2">E-mail</th>
+          <th class="text-left py-2">Contas</th>
+          <th class="text-left py-2">Transações</th>
+          <th class="text-left py-2">Status</th>
+          <th class="text-left py-2">Perfil</th>
+          <th class="text-left py-2">Cadastro</th>
+          <th class="text-left py-2">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr class="border-b border-slate-800/60">
+          <td class="py-2">{{ u.name }}</td>
+          <td class="py-2">{{ u.email }}</td>
+          <td class="py-2">{{ u.accounts }}</td>
+          <td class="py-2">{{ u.transactions }}</td>
+          <td class="py-2">
+            {% if u.is_active %}
+            <span class="text-emerald-400">Liberado</span>
+            {% else %}
+            <span class="text-amber-400">Aguardando</span>
+            {% endif %}
+          </td>
+          <td class="py-2">
+            {% if u.is_root %}
+            <span class="text-emerald-400">Root</span>
+            {% else %}
+            <span class="text-slate-400">Usuário</span>
+            {% endif %}
+          </td>
+          <td class="py-2 text-slate-400">{{ u.created_at | local_datetime('%d/%m/%Y') }}</td>
+          <td class="py-2 space-x-2">
+            <a href="/admin/users/{{ u.id }}" class="text-emerald-400 hover:text-emerald-300 text-xs">Ver</a>
+            {% if not u.is_root %}
+              {% if u.is_active %}
+              <form method="post" action="/admin/users/{{ u.id }}/revoke" class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="text-rose-400 hover:text-rose-300 text-xs">Revogar</button>
+              </form>
+              {% else %}
+              <form method="post" action="/admin/users/{{ u.id }}/approve" class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="text-emerald-400 hover:text-emerald-300 text-xs">Liberar</button>
+              </form>
+              {% endif %}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

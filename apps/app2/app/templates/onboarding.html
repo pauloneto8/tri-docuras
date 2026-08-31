@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bem-vindo — AssistFin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-lg">
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-emerald-400">AssistFin</h1>
+      <p class="text-slate-400 mt-2">Olá, {{ user.name }}! Vamos configurar sua conta principal.</p>
+    </div>
+
+    <div class="rounded-xl bg-slate-900 border border-slate-800 p-6 mb-6">
+      <h2 class="text-lg font-semibold text-emerald-300 mb-3">O que é a conta principal?</h2>
+      <p class="text-slate-300 text-sm leading-relaxed">
+        É a conta padrão do seu controle financeiro — onde entram receitas e despesas quando você não
+        especifica outra conta. Pode ser sua carteira, conta corrente do dia a dia ou onde você
+        centraliza o dinheiro que usa com mais frequência.
+      </p>
+      <p class="text-slate-400 text-sm mt-3">
+        Escolha um apelido que faça sentido para você e informe o saldo atual para começar com os
+        números corretos.
+      </p>
+    </div>
+
+    <form method="post" action="/onboarding" class="rounded-xl bg-slate-900 border border-slate-800 p-6 space-y-4">
+      {% if error %}
+      <div class="rounded-lg bg-rose-900/40 border border-rose-700 px-4 py-3 text-rose-200 text-sm">{{ error }}</div>
+      {% endif %}
+
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Apelido da conta principal</label>
+        <input name="name" type="text" required minlength="2" maxlength="100" autocomplete="off"
+          placeholder="Ex.: Nubank, Carteira, Conta corrente"
+          class="w-full rounded-lg bg-slate-800 border border-slate-700 px-4 py-2.5 focus:outline-none focus:border-emerald-600">
+      </div>
+
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Saldo inicial</label>
+        <input name="opening_balance" type="text" inputmode="decimal"
+          placeholder="0,00"
+          class="w-full rounded-lg bg-slate-800 border border-slate-700 px-4 py-2.5 focus:outline-none focus:border-emerald-600">
+        <p class="text-xs text-slate-500 mt-1">Quanto você tem hoje nessa conta? Use 0 se preferir começar do zero.</p>
+      </div>
+
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Data do saldo inicial</label>
+        <input name="opening_balance_date" type="date" value="{{ today }}"
+          class="w-full rounded-lg bg-slate-800 border border-slate-700 px-4 py-2.5 focus:outline-none focus:border-emerald-600">
+        <p class="text-xs text-slate-500 mt-1">A partir de qual dia esse saldo passa a valer no controle?</p>
+      </div>
+
+      <button type="submit" class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 py-2.5 font-medium transition-colors">
+        Começar a usar
+      </button>
+    </form>
+  </div>
+</body>
+</html>

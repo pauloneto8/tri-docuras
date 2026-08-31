@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Criar conta — AssistFin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-md">
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-emerald-400">AssistFin</h1>
+      <p class="text-slate-400 mt-2">Crie sua conta gratuita</p>
+      <p class="text-slate-500 text-sm mt-1">Após o cadastro, aguarde a liberação do administrador.</p>
+    </div>
+
+    <form method="post" action="/register" class="rounded-xl bg-slate-900 border border-slate-800 p-6 space-y-4">
+      {% if error %}
+      <div class="rounded-lg bg-rose-900/40 border border-rose-700 px-4 py-3 text-rose-200 text-sm">{{ error }}</div>
+      {% endif %}
+
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Nome</label>
+        <input name="name" type="text" required autocomplete="name"
+          class="w-full rounded-lg bg-slate-800 border border-slate-700 px-4 py-2.5 focus:outline-none focus:border-emerald-600">
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">E-mail</label>
+        <input name="email" type="email" required autocomplete="email"
+          class="w-full rounded-lg bg-slate-800 border border-slate-700 px-4 py-2.5 focus:outline-none focus:border-emerald-600">
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Senha</label>
+        <input name="password" type="password" required minlength="6" autocomplete="new-password"
+          class="w-full rounded-lg bg-slate-800 border border-slate-700 px-4 py-2.5 focus:outline-none focus:border-emerald-600">
+        <p class="text-xs text-slate-500 mt-1">Mínimo de 6 caracteres</p>
+      </div>
+      <button type="submit" class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 py-2.5 font-medium transition-colors">
+        Criar conta
+      </button>
+    </form>
+
+    <p class="text-center text-slate-400 text-sm mt-6">
+      Já tem conta?
+      <a href="/login" class="text-emerald-400 hover:text-emerald-300">Entrar</a>
+    </p>
+  </div>
+</body>
+</html>
