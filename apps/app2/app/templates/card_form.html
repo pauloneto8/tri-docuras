@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Novo cartão — AssistFin{% endblock %}
+{% block content %}
+<div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h1 class="text-lg font-semibold text-slate-100">Novo cartão</h1>
+    <p class="text-sm text-slate-400">Informe fechamento, vencimento, limite e conta de liquidação.</p>
+  </div>
+  <a href="/accounts/cards" class="text-sm text-emerald-400 hover:text-emerald-300">← Voltar aos cartões</a>
+</div>
+
+{% if error %}
+<p class="mb-4 rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-2 text-rose-300 text-sm">{{ error }}</p>
+{% endif %}
+
+<section class="max-w-xl rounded-xl bg-slate-900 border border-slate-800 p-5">
+  <form method="post" action="/accounts/cards" class="space-y-3">
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Apelido do cartão</label>
+      <input name="name" type="text" placeholder="Nubank, Itaú Cartão..." class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Instituição <span class="text-slate-500">(opcional)</span></label>
+      <input name="institution" type="text" placeholder="Nubank, Itaú..." class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Dia de fechamento</label>
+      <input name="closing_day" type="number" min="1" max="31" placeholder="10" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Dia de vencimento</label>
+      <input name="due_day" type="number" min="1" max="31" placeholder="17" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Limite <span class="text-slate-500">(opcional)</span></label>
+      <input name="credit_limit" type="text" placeholder="5.000,00" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Conta de liquidação</label>
+      <p class="text-xs text-slate-500 mb-2">Conta padrão para pagar a fatura. Na hora do pagamento você pode escolher outra.</p>
+      <select name="settlement_account_id" required class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+        <option value="">Selecione a conta</option>
+        {% for da in bank_accounts %}
+        <option value="{{ da.id }}">{{ da.account }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium">Cadastrar cartão</button>
+  </form>
+</section>
+{% endblock %}

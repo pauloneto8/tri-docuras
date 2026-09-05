@@ -7,48 +7,107 @@
 {% if error %}
 <p class="mb-4 rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-2 text-rose-300 text-sm">{{ error }}</p>
 {% endif %}
-<div class="grid lg:grid-cols-3 gap-6">
-  <div class="lg:col-span-2 space-y-6">
-    {# Seção: A realizar #}
-    <section class="rounded-xl bg-slate-900 border border-amber-800/40 p-5">
-      <h2 class="text-lg font-semibold mb-1">A realizar</h2>
-      <p class="text-xs text-slate-500 mb-4">Previsões pendentes — não alteram o saldo até serem realizadas.</p>
-      {% if pending_transactions %}
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="text-slate-400 border-b border-slate-800">
-            <tr>
-              <th class="text-left py-2">Data</th>
-              <th class="text-left py-2">Tipo</th>
-              <th class="text-left py-2">Descrição</th>
-              <th class="text-left py-2">Conta</th>
-              <th class="text-right py-2">Valor</th>
-              <th class="text-right py-2">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for tx in pending_transactions %}
-            <tr class="border-b border-slate-800/60 bg-amber-950/10">
-              <td class="py-2 text-xs">
-                <div><span class="text-slate-500">Vence</span> {{ tx.due_date_label or tx.due_date }}</div>
-                {% if tx.competence_date != tx.due_date %}
-                <div class="text-slate-500">Comp. {{ tx.competence_date_label or tx.competence_date }}</div>
-                {% endif %}
-              </td>
-              <td class="py-2">
-                <span class="text-slate-400">{{ tx.type_label }}</span>
-                <span class="inline-flex rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-xs text-amber-300 ml-1">Previsto</span>
-                {% if tx.recurrence_label %}
-                <span class="inline-flex rounded-full border border-violet-700/60 bg-violet-950/40 px-2 py-0.5 text-xs text-violet-300 ml-1">{{ tx.recurrence_label }}</span>
-                {% endif %}
-              </td>
-              <td class="py-2">{{ tx.description }}</td>
-              <td class="py-2">{{ tx.account or '—' }}</td>
-              <td class="py-2 text-right font-mono {% if tx.type == 'expense' %}text-rose-400{% elif tx.type == 'income' %}text-emerald-400{% else %}text-slate-300{% endif %}">
-                {% if tx.type == 'expense' %}-{% elif tx.type == 'income' %}+{% endif %}R$ {{ tx.amount }}
-              </td>
-              <td class="py-2 text-right">
-                <details class="inline-block text-left">
+
+<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h1 class="text-lg font-semibold text-slate-100">Movimentos</h1>
+    <p class="text-sm text-slate-400">{{ period_label }}</p>
+  </div>
+  <div class="flex flex-wrap items-center gap-2">
+    <div class="inline-flex rounded-lg border border-slate-700 overflow-hidden text-sm" role="group" aria-label="Filtros de período">
+      <a href="/transactions?period=day&ref_date={{ ref_date }}"
+         class="px-3 py-1.5 {% if period == 'day' %}bg-emerald-600 text-white{% else %}bg-slate-900 text-slate-300 hover:bg-slate-800{% endif %}">
+        Diária
+      </a>
+      <a href="/transactions?period=week&ref_date={{ ref_date }}"
+         class="px-3 py-1.5 {% if period == 'week' %}bg-emerald-600 text-white{% else %}bg-slate-900 text-slate-300 hover:bg-slate-800{% endif %}">
+        Semanal
+      </a>
+      <a href="/transactions?period=month&ref_date={{ ref_date }}"
+         class="px-3 py-1.5 {% if period == 'month' %}bg-emerald-600 text-white{% else %}bg-slate-900 text-slate-300 hover:bg-slate-800{% endif %}">
+        Mensal
+      </a>
+    </div>
+    <div class="inline-flex rounded-lg border border-slate-700 overflow-hidden text-sm">
+      <a href="/transactions?period={{ period }}&ref_date={{ prev_ref_date }}"
+         class="px-3 py-1.5 bg-slate-900 text-slate-300 hover:bg-slate-800" aria-label="Período anterior">
+        ←
+      </a>
+      <a href="/transactions?period={{ period }}&ref_date={{ today }}"
+         class="px-3 py-1.5 bg-slate-900 text-slate-300 hover:bg-slate-800">
+        Hoje
+      </a>
+      <a href="/transactions?period={{ period }}&ref_date={{ next_ref_date }}"
+         class="px-3 py-1.5 bg-slate-900 text-slate-300 hover:bg-slate-800" aria-label="Próximo período">
+        →
+      </a>
+    </div>
+    <a href="/transactions/new"
+       class="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white">
+      Novo lançamento
+    </a>
+  </div>
+</div>
+
+<div class="space-y-6">
+  {# Seção: A realizar #}
+  <section class="rounded-xl bg-slate-900 border border-amber-800/40 p-5">
+    <h2 class="text-lg font-semibold mb-1">A realizar</h2>
+    <p class="text-xs text-slate-500 mb-4">Previsões pendentes em {{ period_label }} — não alteram o saldo até serem realizadas.</p>
+    {% if pending_transactions %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-slate-400 border-b border-slate-800">
+          <tr>
+            <th class="text-left py-2">Data</th>
+            <th class="text-left py-2">Tipo</th>
+            <th class="text-left py-2">Descrição</th>
+            <th class="text-left py-2">Conta</th>
+            <th class="text-right py-2">Valor</th>
+            <th class="text-right py-2">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tx in pending_transactions %}
+          <tr class="border-b border-slate-800/60 bg-amber-950/10">
+            <td class="py-2 text-xs">
+              <div><span class="text-slate-500">Vence</span> {{ tx.due_date_label or tx.due_date }}</div>
+              {% if tx.competence_date != tx.due_date %}
+              <div class="text-slate-500">Comp. {{ tx.competence_date_label or tx.competence_date }}</div>
+              {% endif %}
+            </td>
+            <td class="py-2">
+              <span class="text-slate-400">{{ tx.type_label }}</span>
+              <span class="inline-flex rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-xs text-amber-300 ml-1">Previsto</span>
+              {% if tx.recurrence_label %}
+              <span class="inline-flex rounded-full border border-violet-700/60 bg-violet-950/40 px-2 py-0.5 text-xs text-violet-300 ml-1">{{ tx.recurrence_label }}</span>
+              {% endif %}
+              {% if tx.installment_label %}
+              <span class="inline-flex rounded-full border border-sky-700/60 bg-sky-950/40 px-2 py-0.5 text-xs text-sky-300 ml-1">{{ tx.installment_label }}</span>
+              {% endif %}
+              {% if tx.invoice_label %}
+              <span class="inline-flex rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-xs text-amber-300 ml-1">{{ tx.invoice_label }}</span>
+              {% endif %}
+            </td>
+            <td class="py-2">{{ tx.description }}</td>
+            <td class="py-2">
+              {% if tx.card %}{{ tx.card }}{% endif %}
+              {% if tx.card and tx.account %} · {% endif %}
+              {% if tx.account %}{{ tx.account }}{% endif %}
+              {% if not tx.card and not tx.account %}—{% endif %}
+            </td>
+            <td class="py-2 text-right font-mono {% if tx.type == 'expense' %}text-rose-400{% elif tx.type == 'income' %}text-emerald-400{% else %}text-slate-300{% endif %}">
+              {% if tx.type == 'expense' %}-{% elif tx.type == 'income' %}+{% endif %}R$ {{ tx.amount }}
+            </td>
+            <td class="py-2 text-right">
+              <div class="flex flex-col items-end gap-1">
+                <div class="flex items-center gap-2 justify-end">
+                  <a href="/transactions/{{ tx.id }}/edit" class="text-xs text-emerald-400 hover:text-emerald-300">Editar</a>
+                  <form method="post" action="/transactions/{{ tx.id }}/delete" onsubmit="return confirm('Excluir este lançamento?')">
+                    <button type="submit" class="text-xs text-slate-400 hover:text-rose-400">Excluir</button>
+                  </form>
+                </div>
+                <details class="text-left">
                   <summary class="cursor-pointer text-emerald-400 hover:text-emerald-300 text-xs">Realizar</summary>
                   <form method="post" action="/transactions/{{ tx.id }}/realize" class="mt-2 space-y-2 min-w-[14rem] rounded border border-slate-700 bg-slate-950 p-3">
                     <div>
@@ -92,237 +151,89 @@
                     <button type="submit" class="w-full rounded border border-rose-700 text-rose-300 hover:bg-rose-950/40 px-2 py-1 text-xs">Encerrar série</button>
                   </form>
                   {% endif %}
+                  {% if tx.installment_plan_id %}
+                  <form method="post" action="/transactions/installments/{{ tx.installment_plan_id }}/stop" class="mt-2">
+                    <button type="submit" class="w-full rounded border border-rose-700 text-rose-300 hover:bg-rose-950/40 px-2 py-1 text-xs">Cancelar parcelas</button>
+                  </form>
+                  {% endif %}
                 </details>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <p class="text-slate-400 text-sm">Nenhuma previsão pendente.</p>
-      {% endif %}
-    </section>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-slate-400 text-sm">Nenhuma previsão pendente neste período.</p>
+    {% endif %}
+  </section>
 
-    {# Seção: Extrato #}
-    <section class="rounded-xl bg-slate-900 border border-slate-800 p-5">
-      <h2 class="text-lg font-semibold mb-1">Extrato</h2>
-      <p class="text-xs text-slate-500 mb-4">Lançamentos realizados que já movimentaram o saldo.</p>
-      {% if actual_transactions %}
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="text-slate-400 border-b border-slate-800">
-            <tr>
-              <th class="text-left py-2">Data</th>
-              <th class="text-left py-2">Tipo</th>
-              <th class="text-left py-2">Descrição</th>
-              <th class="text-left py-2">Conta</th>
-              <th class="text-right py-2">Valor</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for tx in actual_transactions %}
-            <tr class="border-b border-slate-800/60">
-              <td class="py-2 text-xs">
-                <div><span class="text-slate-500">Pago</span> {{ tx.payment_date_label or tx.transaction_date }}</div>
-              </td>
-              <td class="py-2">
-                <span class="text-slate-400">{{ tx.type_label }}</span>
-                <span class="inline-flex rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 text-xs text-slate-300 ml-1">Realizado</span>
-              </td>
-              <td class="py-2">
-                {{ tx.description }}
-                {% if tx.source_planned_id %}
-                <span class="text-slate-500 text-xs block">de previsto</span>
-                {% endif %}
-                {% if tx.type in ['transfer_out', 'transfer_in'] and tx.counterparty_account %}
-                <span class="text-slate-500 text-xs block">↔ {{ tx.counterparty_account }}</span>
-                {% endif %}
-              </td>
-              <td class="py-2">{{ tx.account or '—' }}</td>
-              <td class="py-2 text-right font-mono {% if tx.type in ['expense', 'transfer_out'] %}text-rose-400{% elif tx.type in ['income', 'transfer_in'] %}text-emerald-400{% else %}text-slate-300{% endif %}">
-                {% if tx.type in ['expense', 'transfer_out'] %}-{% elif tx.type in ['income', 'transfer_in'] %}+{% endif %}R$ {{ tx.amount }}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <p class="text-slate-400 text-sm">Nenhum lançamento realizado.</p>
-      {% endif %}
-    </section>
-  </div>
-
-  <section class="rounded-xl bg-slate-900 border border-slate-800 p-5 h-fit">
-    <h2 class="text-lg font-semibold mb-4">Novo lançamento</h2>
-    <form method="post" action="/transactions" class="space-y-3" id="tx-form">
-      <div>
-        <label class="block text-sm text-slate-400 mb-1">Tipo</label>
-        <select name="type" id="tx-type" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
-          <option value="expense">Despesa</option>
-          <option value="income">Receita</option>
-          <option value="transfer">Transferência</option>
-        </select>
-      </div>
-
-      <div id="single-account-fields">
-        <div>
-          <label class="block text-sm text-slate-400 mb-1">Conta</label>
-          <select name="account_id" id="account-id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
-            {% for account in accounts %}
-            <option value="{{ account.id }}">{{ account.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div id="category-field">
-          <label class="block text-sm text-slate-400 mb-1">Categoria</label>
-          <select name="category_id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
-            <option value="">Automática</option>
-            {% for cat in categories %}
-            <option value="{{ cat.id }}">{{ cat.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <label class="flex items-center gap-2 text-sm text-slate-300" id="planned-checkbox">
-          <input name="is_planned" id="is-planned" type="checkbox" class="rounded border-slate-600 bg-slate-800">
-          Lançamento previsto (não altera saldo até realizar)
-        </label>
-        <div id="recurring-fields" class="hidden space-y-3 pt-1">
-          <label class="flex items-center gap-2 text-sm text-slate-300">
-            <input name="is_recurring" id="is-recurring" type="checkbox" class="rounded border-slate-600 bg-slate-800">
-            Lançamento fixo (repete automaticamente)
-          </label>
-          <div id="recurring-options" class="hidden space-y-2 pl-1">
-            <div>
-              <label class="block text-sm text-slate-400 mb-1">Frequência</label>
-              <select name="frequency" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
-                <option value="daily">Diária</option>
-                <option value="weekly">Semanal</option>
-                <option value="monthly" selected>Mensal</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-sm text-slate-400 mb-1">Data de término <span class="text-slate-600">(opcional)</span></label>
-              <input name="recurrence_end_date" type="date" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div id="transfer-fields" class="hidden space-y-3">
-        <div>
-          <label class="block text-sm text-slate-400 mb-1">Conta de origem</label>
-          <select name="from_account_id" id="from-account-id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
-            {% for account in accounts %}
-            <option value="{{ account.id }}">{{ account.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm text-slate-400 mb-1">Conta de destino</label>
-          <select name="to_account_id" id="to-account-id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
-            {% for account in accounts %}
-            <option value="{{ account.id }}" {% if loop.index == 2 %}selected{% endif %}>{{ account.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label class="block text-sm text-slate-400 mb-1">Valor (R$)</label>
-        <input name="amount" type="text" placeholder="45,90" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
-      </div>
-      <div>
-        <label class="block text-sm text-slate-400 mb-1">Descrição</label>
-        <input name="description" id="tx-description" type="text" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
-      </div>
-
-      <div id="planned-date-fields" class="hidden space-y-3">
-        <div>
-          <label class="block text-sm text-slate-400 mb-1">Competência</label>
-          <input name="competence_date" id="competence-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
-        </div>
-        <div>
-          <label class="block text-sm text-slate-400 mb-1">Vencimento</label>
-          <input name="due_date" id="due-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
-        </div>
-      </div>
-
-      <div id="actual-date-fields" class="space-y-3">
-        <div>
-          <label class="block text-sm text-slate-400 mb-1">Data da realização</label>
-          <input name="payment_date" id="payment-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
-        </div>
-      </div>
-
-      <button class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium">Registrar</button>
-    </form>
+  {# Seção: Extrato #}
+  <section class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+    <h2 class="text-lg font-semibold mb-1">Extrato</h2>
+    <p class="text-xs text-slate-500 mb-4">Lançamentos realizados em {{ period_label }} que já movimentaram o saldo.</p>
+    {% if actual_transactions %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-slate-400 border-b border-slate-800">
+          <tr>
+            <th class="text-left py-2">Data</th>
+            <th class="text-left py-2">Tipo</th>
+            <th class="text-left py-2">Descrição</th>
+            <th class="text-left py-2">Conta</th>
+            <th class="text-right py-2">Valor</th>
+            <th class="text-right py-2">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tx in actual_transactions %}
+          <tr class="border-b border-slate-800/60">
+            <td class="py-2 text-xs">
+              <div><span class="text-slate-500">Pago</span> {{ tx.payment_date_label or tx.transaction_date }}</div>
+            </td>
+            <td class="py-2">
+              <span class="text-slate-400">{{ tx.type_label }}</span>
+              <span class="inline-flex rounded-full border border-slate-700 bg-slate-800 px-2 py-0.5 text-xs text-slate-300 ml-1">Realizado</span>
+            </td>
+            <td class="py-2">
+              {{ tx.description }}
+              {% if tx.source_planned_id %}
+              <span class="text-slate-500 text-xs block">de previsto</span>
+              {% endif %}
+              {% if tx.type in ['transfer_out', 'transfer_in'] and tx.counterparty_account %}
+              <span class="text-slate-500 text-xs block">↔ {{ tx.counterparty_account }}</span>
+              {% endif %}
+            </td>
+            <td class="py-2">
+              {% if tx.card %}{{ tx.card }}{% endif %}
+              {% if tx.card and tx.account %} · {% endif %}
+              {% if tx.account %}{{ tx.account }}{% endif %}
+              {% if not tx.card and not tx.account %}—{% endif %}
+            </td>
+            <td class="py-2 text-right font-mono {% if tx.type in ['expense', 'transfer_out'] %}text-rose-400{% elif tx.type in ['income', 'transfer_in'] %}text-emerald-400{% else %}text-slate-300{% endif %}">
+              {% if tx.type in ['expense', 'transfer_out'] %}-{% elif tx.type in ['income', 'transfer_in'] %}+{% endif %}R$ {{ tx.amount }}
+            </td>
+            <td class="py-2 text-right">
+              <div class="flex items-center gap-2 justify-end">
+                <a href="/transactions/{{ tx.id }}/edit" class="text-xs text-emerald-400 hover:text-emerald-300">Editar</a>
+                <form method="post" action="/transactions/{{ tx.id }}/delete" onsubmit="return confirm('Excluir este lançamento?')">
+                  <button type="submit" class="text-xs text-slate-400 hover:text-rose-400">Excluir</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-slate-400 text-sm">Nenhum lançamento realizado neste período.</p>
+    {% endif %}
   </section>
 </div>
 
 <script>
-  const txType = document.getElementById('tx-type');
-  const singleFields = document.getElementById('single-account-fields');
-  const transferFields = document.getElementById('transfer-fields');
-  const accountId = document.getElementById('account-id');
-  const description = document.getElementById('tx-description');
-  const plannedCheckbox = document.getElementById('planned-checkbox');
-  const isPlanned = document.getElementById('is-planned');
-  const plannedDateFields = document.getElementById('planned-date-fields');
-  const actualDateFields = document.getElementById('actual-date-fields');
-  const paymentDate = document.getElementById('payment-date');
-  const competenceDate = document.getElementById('competence-date');
-  const dueDate = document.getElementById('due-date');
-  const recurringFields = document.getElementById('recurring-fields');
-  const isRecurring = document.getElementById('is-recurring');
-  const recurringOptions = document.getElementById('recurring-options');
-
-  function syncRecurringFields() {
-    const isTransfer = txType.value === 'transfer';
-    const planned = isPlanned.checked && !isTransfer;
-    recurringFields.classList.toggle('hidden', !planned || isTransfer);
-    if (!planned || isTransfer) {
-      isRecurring.checked = false;
-    }
-    recurringOptions.classList.toggle('hidden', !isRecurring.checked);
-  }
-
-  function syncDateFields() {
-    const isTransfer = txType.value === 'transfer';
-    const planned = isPlanned.checked && !isTransfer;
-
-    plannedDateFields.classList.toggle('hidden', !planned);
-    actualDateFields.classList.toggle('hidden', planned);
-
-    competenceDate.required = planned;
-    dueDate.required = planned;
-    paymentDate.required = !planned;
-
-    if (planned) {
-      paymentDate.value = '';
-    }
-  }
-
-  function syncFormMode() {
-    const isTransfer = txType.value === 'transfer';
-    singleFields.classList.toggle('hidden', isTransfer);
-    transferFields.classList.toggle('hidden', !isTransfer);
-    accountId.required = !isTransfer;
-    description.required = !isTransfer;
-    plannedCheckbox.classList.toggle('hidden', isTransfer);
-    if (isTransfer) {
-      isPlanned.checked = false;
-    }
-    syncDateFields();
-    syncRecurringFields();
-  }
-
-  txType.addEventListener('change', syncFormMode);
-  isPlanned.addEventListener('change', () => { syncDateFields(); syncRecurringFields(); });
-  isRecurring.addEventListener('change', syncRecurringFields);
-  syncFormMode();
-
   document.querySelectorAll('.realize-same-account').forEach((radio) => {
     radio.addEventListener('change', () => {
       const panel = document.getElementById(radio.dataset.target);

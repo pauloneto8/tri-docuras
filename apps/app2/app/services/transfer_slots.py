@@ -148,7 +148,7 @@ def try_process_transfer_wizard(
 
     from app.services.agent_state import is_cancel_message
 
-    if is_cancel_message(message):
+    if is_cancel_message(message, session):
         clear_wizard(session)
         return SlotResult(question="Transferência cancelada.")
 

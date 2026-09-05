@@ -13,6 +13,7 @@ from app.services.tools import (
 )
 from app.services.transaction_slots import (
     DATE_SLOTS,
+    PAYMENT_SOURCE_SLOTS,
     SLOT_QUESTIONS,
     WIZARD_KEY,
     _apply_inference,
@@ -22,19 +23,24 @@ from app.services.transaction_slots import (
     apply_inferred_dates,
     fill_slot,
     list_active_account_names,
+    list_active_card_names,
     list_category_names,
     parse_account_answer,
     parse_category_answer,
+    parse_payment_source_answer,
     parse_slot_date,
     parse_status_answer,
+    refresh_wizard_payment_context,
 )
 from app.services.wizard_slots import is_complex_message, is_short_slot_message
 
 PROMPT_FLAG = "prompt_transaction_on_login"
+PAUSED_WIZARD_KEY = "paused_transaction_wizard"
 
 CANCEL_WORDS = {"cancelar", "desistir", "abortar", "sair", "não", "nao"}
 EXPENSE_WORDS = {"despesa", "despesas", "gasto", "gastos", "debito", "débito", "1"}
 INCOME_WORDS = {"receita", "receitas", "entrada", "entradas", "ganho", "ganhos", "credito", "crédito", "2"}
+NEW_CATEGORY_WORDS = {"nova categoria", "nova", "criar categoria", "cadastrar categoria"}
 
 QUESTIONS = SLOT_QUESTIONS
 
@@ -45,6 +51,90 @@ def get_wizard(session: dict) -> dict | None:
 
 def clear_wizard(session: dict) -> None:
     session.pop(WIZARD_KEY, None)
+
+
+def get_paused_wizard(session: dict) -> dict | None:
+    return session.get(PAUSED_WIZARD_KEY)
+
+
+def clear_paused_wizard(session: dict) -> None:
+    session.pop(PAUSED_WIZARD_KEY, None)
+
+
+def pause_transaction_for_category(session: dict, wizard: dict) -> None:
+    """Guarda o lançamento em andamento enquanto cadastra categoria nova."""
+    session[PAUSED_WIZARD_KEY] = dict(wizard)
+    session.pop(WIZARD_KEY, None)
+
+
+def resume_paused_transaction_after_category(
+    session: dict, *, category_name: str
+) -> AgentResponse | None:
+    """Retoma o lançamento pausado após criar categoria e vai para confirmação."""
+    paused = get_paused_wizard(session)
+    if not paused:
+        return None
+    clear_paused_wizard(session)
+    paused["category_name"] = category_name
+    session[WIZARD_KEY] = paused
+    confirmation = _confirmation_response(paused)
+    confirmation.message = (
+        f"Categoria '{category_name}' cadastrada. Seguindo com o lançamento.\n\n"
+        f"{confirmation.message}"
+    )
+    return confirmation
+
+
+def restore_paused_transaction_on_category_cancel(
+    session: dict,
+) -> AgentResponse | None:
+    """Se o usuário cancelar o cadastro de categoria, volta ao slot de categoria."""
+    paused = get_paused_wizard(session)
+    if not paused:
+        return None
+    clear_paused_wizard(session)
+    session[WIZARD_KEY] = paused
+    return AgentResponse(
+        message=(
+            "Cadastro de categoria cancelado. "
+            "Qual categoria usar no lançamento? Informe um nome existente "
+            "ou digite o nome de uma nova."
+        ),
+        suggestions=for_transaction_wizard_field(
+            "category_name", None, None, paused
+        ),
+        source="wizard",
+    )
+
+
+def _looks_like_new_category_name(message: str) -> bool:
+    from app.services.text_correction import correct_category_name
+
+    lower = message.strip().lower()
+    if lower in NEW_CATEGORY_WORDS or lower.startswith("nova "):
+        return True
+    if is_complex_message(message):
+        return False
+    name = correct_category_name(message.strip())
+    return len(name) >= 2 and is_short_slot_message(name, max_words=6)
+
+
+def _begin_category_from_transaction(
+    session: dict,
+    wizard: dict,
+    message: str,
+) -> AgentResponse:
+    from app.services.category_wizard import begin_category_wizard
+    from app.services.text_correction import correct_category_name
+
+    pause_transaction_for_category(session, wizard)
+    lower = message.strip().lower()
+    initial: dict = {"type": wizard.get("tx_type") or "expense"}
+    if lower not in NEW_CATEGORY_WORDS and not lower.startswith("nova categoria"):
+        name = correct_category_name(message.strip())
+        if len(name) >= 2:
+            initial["name"] = name
+    return begin_category_wizard(session, message, initial=initial)
 
 
 def mark_login_prompt(session: dict) -> None:
@@ -62,15 +152,24 @@ def start_wizard(session: dict, *, source_message: str | None = None) -> None:
         "amount": None,
         "description": None,
         "account_name": None,
+        "card_name": None,
         "category_name": None,
         "competence_date": None,
         "due_date": None,
         "payment_date": None,
         "transaction_date": None,
+        "payment_source": None,
+        "payment_on_card": False,
+        "has_credit_cards": False,
+        "payment_mode": None,
         "is_recurring": None,
         "frequency": None,
         "recurrence_end_date": None,
         "recurrence_end_asked": False,
+        "installment_count": None,
+        "installment_interval": None,
+        "installment_start_index": None,
+        "installment_amount_basis": None,
         "source_message": source_message,
         "suggested_category": None,
     }
@@ -114,6 +213,17 @@ def _parse_tx_type(message: str) -> str | None:
 
 def _next_field(wizard: dict) -> str | None:
     return _next_slot(wizard)
+
+
+def _message_for_remaining(
+    db: Session | None,
+    user_id: int | None,
+    wizard: dict,
+    remaining: str,
+) -> str:
+    if db is not None and user_id is not None:
+        return _question_for_slot(db, user_id, wizard, remaining)
+    return QUESTIONS.get(remaining, "")
 
 
 def _fill_field(wizard: dict, field: str, message: str) -> str | None:
@@ -180,13 +290,34 @@ def is_slot_answer(
     if field == "status":
         return parse_status_answer(message) is not None
     if field in DATE_SLOTS:
-        return parse_slot_date(message, wizard) is not None and is_short_slot_message(
+        return parse_slot_date(message, wizard, slot=field) is not None and is_short_slot_message(
             message, max_words=8
         )
+    if field == "payment_mode":
+        from app.services.transaction_slots import parse_payment_mode_answer
+
+        return parse_payment_mode_answer(message) is not None
     if field == "is_recurring":
         from app.services.transaction_slots import parse_is_recurring_answer
 
         return parse_is_recurring_answer(message) is not None
+    if field == "installment_count":
+        from app.services.installments import parse_installment_count
+
+        return parse_installment_count(message) is not None
+    if field == "installment_interval":
+        from app.services.installments import parse_installment_interval
+
+        return parse_installment_interval(message) is not None
+    if field == "installment_start_index":
+        from app.services.installments import parse_installment_start_index
+
+        max_count = int((wizard or {}).get("installment_count") or 360)
+        return parse_installment_start_index(message, max_count) is not None
+    if field == "installment_amount_basis":
+        from app.services.transaction_slots import parse_installment_amount_basis
+
+        return parse_installment_amount_basis(message) is not None
     if field == "frequency":
         from app.services.recurrence import parse_frequency
 
@@ -196,6 +327,11 @@ def is_slot_answer(
         if lower in {"não", "nao", "n", "no", "sem", "nunca"}:
             return True
         return parse_slot_date(message, wizard) is not None
+    if field == "payment_source":
+        return parse_payment_source_answer(message) is not None
+    if field == "card_name" and db is not None and user_id is not None:
+        choices = list_active_card_names(db, user_id)
+        return parse_account_answer(message, choices) is not None
     if field == "amount":
         return parse_amount(message) is not None
     if field == "description":
@@ -226,12 +362,19 @@ def get_wizard_context(session: dict) -> str | None:
     labels = {
         "tx_type": "tipo (despesa ou receita)",
         "status": "status (realizado ou previsto)",
+        "payment_source": "forma de pagamento (cartao ou conta)",
+        "card_name": "cartao de credito",
         "competence_date": "data de competencia",
         "due_date": "data de vencimento",
         "payment_date": "data da realizacao",
+        "payment_mode": "tipo do lancamento (unico, fixo ou parcelado)",
         "is_recurring": "se e lancamento fixo",
         "frequency": "frequencia do lancamento fixo",
         "recurrence_end_date": "data de termino da serie",
+        "installment_count": "numero de parcelas",
+        "installment_interval": "intervalo das parcelas",
+        "installment_start_index": "parcela atual do parcelamento",
+        "installment_amount_basis": "valor total ou valor da parcela",
         "amount": "valor",
         "description": "descricao",
         "account_name": "conta bancaria",
@@ -297,10 +440,13 @@ def try_process_transaction_wizard(
 
     lower_msg = message.strip().lower()
     if lower_msg in CANCEL_WORDS:
+        from app.services.transaction_slots import INSTALLMENT_SLOTS
+
         if lower_msg in {"não", "nao"} and next_field in {
+            "payment_mode",
             "is_recurring",
             "recurrence_end_date",
-        }:
+        } | INSTALLMENT_SLOTS:
             pass
         else:
             clear_wizard(session)
@@ -325,13 +471,29 @@ def try_process_transaction_wizard(
     if not is_slot_answer(
         message, next_field, db=db, user_id=user_id, wizard=wizard
     ):
+        if (
+            next_field == "category_name"
+            and db is not None
+            and user_id is not None
+            and _looks_like_new_category_name(message)
+        ):
+            return _begin_category_from_transaction(session, wizard, message)
         clear_wizard(session)
         return None
 
-    from app.services.transaction_slots import RECURRENCE_SLOTS
+    from app.services.transaction_slots import INSTALLMENT_SLOTS, MODE_SLOTS, RECURRENCE_SLOTS
 
-    if next_field in {"status", "account_name", "category_name"} | DATE_SLOTS | RECURRENCE_SLOTS:
-        if next_field in RECURRENCE_SLOTS:
+    slot_fields = (
+        {"status", "account_name", "category_name", "card_name"}
+        | DATE_SLOTS
+        | MODE_SLOTS
+        | PAYMENT_SOURCE_SLOTS
+        | RECURRENCE_SLOTS
+        | INSTALLMENT_SLOTS
+    )
+
+    if next_field in slot_fields:
+        if next_field in MODE_SLOTS | RECURRENCE_SLOTS | INSTALLMENT_SLOTS | PAYMENT_SOURCE_SLOTS:
             error = fill_slot(wizard, next_field, message, db, user_id)
             if error:
                 return AgentResponse(
@@ -341,6 +503,10 @@ def try_process_transaction_wizard(
                     ),
                     source="wizard",
                 )
+            session[WIZARD_KEY] = wizard
+            if db is not None and user_id is not None:
+                _apply_inference(db, user_id, wizard)
+                refresh_wizard_payment_context(db, user_id, wizard)
             session[WIZARD_KEY] = wizard
             remaining = _next_field(wizard)
             if remaining is None:
@@ -353,7 +519,9 @@ def try_process_transaction_wizard(
                 source="wizard",
             )
 
-        if next_field in {"account_name", "category_name"} and (db is None or user_id is None):
+        if next_field in {"account_name", "category_name", "card_name"} and (
+            db is None or user_id is None
+        ):
             return AgentResponse(
                 message=_question_for_slot(db, user_id, wizard, next_field),
                 suggestions=for_transaction_wizard_field(
@@ -380,20 +548,19 @@ def try_process_transaction_wizard(
         session[WIZARD_KEY] = wizard
         if db is not None and user_id is not None:
             _apply_inference(db, user_id, wizard)
+            refresh_wizard_payment_context(db, user_id, wizard)
             session[WIZARD_KEY] = wizard
         remaining = _next_field(wizard)
         if remaining is None:
             return _confirmation_response(wizard)
-        if remaining in {"account_name", "category_name"} and db is not None and user_id is not None:
+        if remaining in {"account_name", "category_name", "card_name"} and db is not None and user_id is not None:
             return AgentResponse(
                 message=_question_for_slot(db, user_id, wizard, remaining),
                 suggestions=for_transaction_wizard_field(remaining, db, user_id, wizard),
                 source="wizard",
             )
         return AgentResponse(
-            message=_question_for_slot(db, user_id, wizard, remaining)
-            if remaining in {"account_name", "category_name"} and db is not None and user_id is not None
-            else QUESTIONS.get(remaining, ""),
+            message=_message_for_remaining(db, user_id, wizard, remaining),
             suggestions=for_transaction_wizard_field(remaining, db, user_id, wizard),
             source="wizard",
         )
@@ -421,13 +588,14 @@ def try_process_transaction_wizard(
 
     if db is not None and user_id is not None:
         _apply_inference(db, user_id, wizard)
+        refresh_wizard_payment_context(db, user_id, wizard)
         session[WIZARD_KEY] = wizard
 
     remaining = _next_field(wizard)
     if remaining is None:
         return _confirmation_response(wizard)
 
-    if remaining in {"account_name", "category_name"} and db is not None and user_id is not None:
+    if remaining in {"account_name", "category_name", "card_name"} and db is not None and user_id is not None:
         return AgentResponse(
             message=_question_for_slot(db, user_id, wizard, remaining),
             suggestions=for_transaction_wizard_field(remaining, db, user_id, wizard),
@@ -435,8 +603,8 @@ def try_process_transaction_wizard(
         )
 
     return AgentResponse(
-        message=QUESTIONS.get(remaining, ""),
-        suggestions=for_transaction_wizard_field(remaining, None, None, wizard)
+        message=_message_for_remaining(db, user_id, wizard, remaining),
+        suggestions=for_transaction_wizard_field(remaining, db, user_id, wizard)
         if remaining
         else None,
         source="wizard",

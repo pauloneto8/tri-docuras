@@ -16,8 +16,8 @@
 | Tools | `tools.py` + `finance.py` |
 | Checkpointer | `session` + wizard keys (`transfer_wizard`, etc.) |
 | Episodic log | `conversations.py` |
-| Evaluator | confirmação HTMX + chips |
-| Fallback model | Groq → Ollama |
+| Evaluator | confirmação HTMX + chips (fora do balão) |
+| Fallback model | Groq → Ollama → `try_rule_based_parse` |
 
 ## Template para nova ferramenta
 

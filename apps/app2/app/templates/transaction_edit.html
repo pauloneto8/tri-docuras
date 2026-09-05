@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Editar lançamento — AssistFin{% endblock %}
+{% block content %}
+<div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h1 class="text-lg font-semibold text-slate-100">Editar lançamento</h1>
+    <p class="text-sm text-slate-400">{{ tx.type_label }} · {{ tx.status_label }}</p>
+  </div>
+  <a href="/transactions" class="text-sm text-emerald-400 hover:text-emerald-300">← Voltar aos movimentos</a>
+</div>
+
+{% if error %}
+<p class="mb-4 rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-2 text-rose-300 text-sm">{{ error }}</p>
+{% endif %}
+
+<section class="max-w-xl rounded-xl bg-slate-900 border border-slate-800 p-5">
+  {% if tx.recurrence_label or tx.installment_label or tx.invoice_label or tx.card %}
+  <div class="mb-4 flex flex-wrap gap-2 text-xs">
+    {% if tx.card %}
+    <span class="inline-flex rounded-full border border-slate-600 px-2 py-0.5 text-slate-300">Cartão: {{ tx.card }}</span>
+    {% endif %}
+    {% if tx.recurrence_label %}
+    <span class="inline-flex rounded-full border border-violet-700/60 bg-violet-950/40 px-2 py-0.5 text-violet-300">{{ tx.recurrence_label }}</span>
+    {% endif %}
+    {% if tx.installment_label %}
+    <span class="inline-flex rounded-full border border-sky-700/60 bg-sky-950/40 px-2 py-0.5 text-sky-300">{{ tx.installment_label }}</span>
+    {% endif %}
+    {% if tx.invoice_label %}
+    <span class="inline-flex rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-amber-300">{{ tx.invoice_label }}</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/transactions/{{ tx.id }}" class="space-y-3">
+    {% if tx.type in ['transfer_out', 'transfer_in'] %}
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Conta de origem</label>
+      <select name="from_account_id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+        {% for account in accounts %}
+        <option value="{{ account.id }}" {% if tx.from_account_id == account.id or tx.account_id == account.id %}selected{% endif %}>{{ account.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Conta de destino</label>
+      <select name="to_account_id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+        {% for account in accounts %}
+        <option value="{{ account.id }}" {% if tx.to_account_id == account.id or tx.counterparty_account_id == account.id %}selected{% endif %}>{{ account.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% else %}
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Tipo</label>
+      <input type="text" value="{{ tx.type_label }}" class="w-full rounded bg-slate-800/60 border border-slate-700 px-3 py-2 text-slate-400" disabled>
+    </div>
+    {% if not tx.card_id %}
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Conta</label>
+      <select name="account_id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+        {% for account in accounts %}
+        <option value="{{ account.id }}" {% if tx.account_id == account.id %}selected{% endif %}>{{ account.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% else %}
+    <p class="text-sm text-slate-400">Conta associada: {{ tx.account or '—' }}</p>
+    {% endif %}
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Categoria</label>
+      <select name="category_id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+        <option value="">Sem alteração</option>
+        {% for cat in categories %}
+        {% if cat.type == tx.type %}
+        <option value="{{ cat.id }}" {% if tx.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+        {% endif %}
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Valor (R$)</label>
+      <input name="amount" type="text" value="{{ tx.amount }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Descrição</label>
+      <input name="description" type="text" value="{{ tx.description }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" {% if tx.type not in ['transfer_out', 'transfer_in'] %}required{% endif %}>
+    </div>
+
+    {% if tx.status == 'planned' and tx.type not in ['transfer_out', 'transfer_in'] %}
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Competência</label>
+      <input name="competence_date" type="date" value="{{ tx.competence_date }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Vencimento</label>
+      <input name="due_date" type="date" value="{{ tx.due_date }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+    </div>
+    {% else %}
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Data da realização</label>
+      <input name="payment_date" type="date" value="{{ tx.payment_date or tx.transaction_date }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+    </div>
+    {% endif %}
+
+    <div class="flex flex-col sm:flex-row gap-2 pt-2">
+      <button type="submit" class="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium">Salvar</button>
+      <a href="/transactions" class="flex-1 rounded-lg border border-slate-700 px-4 py-2 text-center text-slate-300 hover:bg-slate-800">Cancelar</a>
+    </div>
+  </form>
+
+  <form method="post" action="/transactions/{{ tx.id }}/delete" class="mt-4 pt-4 border-t border-slate-800" onsubmit="return confirm('Excluir este lançamento?')">
+    <button type="submit" class="w-full rounded-lg border border-rose-700 text-rose-300 hover:bg-rose-950/40 px-4 py-2 text-sm">Excluir lançamento</button>
+  </form>
+</section>
+{% endblock %}

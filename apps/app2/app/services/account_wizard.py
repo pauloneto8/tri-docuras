@@ -68,6 +68,10 @@ QUESTIONS = {
     "institution": "Qual a instituição financeira? (opcional — responda 'pular' para ignorar)",
     "opening_balance": "Qual o saldo inicial? (opcional — responda 'pular' ou '0' para ignorar)",
     "opening_balance_date": "A partir de qual data esse saldo inicial vale? (ex.: hoje, 01/08/2026)",
+    "closing_day": "Qual o *dia de fechamento* da fatura? (1 a 31)",
+    "due_day": "Qual o *dia de vencimento* da fatura? (1 a 31)",
+    "credit_limit": "Qual o *limite* do cartão? (opcional — responda 'pular' para ignorar)",
+    "settlement_account_name": "Qual a *conta de liquidação* padrão? (conta usada para pagar a fatura — você poderá alterar no pagamento)",
 }
 
 TYPE_LABELS = {
@@ -268,6 +272,16 @@ def _next_field(wizard: dict) -> str | None:
         return "account_type"
     if not wizard.get("institution_asked"):
         return "institution"
+    if wizard.get("account_type") == "cartao":
+        if wizard.get("closing_day") is None:
+            return "closing_day"
+        if wizard.get("due_day") is None:
+            return "due_day"
+        if not wizard.get("credit_limit_asked"):
+            return "credit_limit"
+        if not wizard.get("settlement_account_name"):
+            return "settlement_account_name"
+        return None
     if not wizard.get("opening_balance_asked"):
         return "opening_balance"
     if _has_positive_opening_balance(wizard) and not wizard.get("opening_balance_date_asked"):
@@ -331,6 +345,49 @@ def _fill_field(wizard: dict, field: str, message: str) -> str | None:
         wizard["opening_balance_date"] = parsed
         return None
 
+    if field == "closing_day":
+        from app.services.credit_cards import parse_day_of_month
+
+        parsed = parse_day_of_month(message)
+        if parsed is None:
+            return "Dia inválido. Informe um número de 1 a 31."
+        wizard["closing_day"] = parsed
+        return None
+
+    if field == "due_day":
+        from app.services.credit_cards import parse_day_of_month
+
+        parsed = parse_day_of_month(message)
+        if parsed is None:
+            return "Dia inválido. Informe um número de 1 a 31."
+        wizard["due_day"] = parsed
+        return None
+
+    if field == "credit_limit":
+        wizard["credit_limit_asked"] = True
+        if is_skip(message):
+            wizard["credit_limit"] = None
+        else:
+            amount = parse_amount(message) or message.strip()
+            try:
+                from app.schemas import decimal_to_cents
+
+                cents = decimal_to_cents(amount)
+                if cents <= 0:
+                    wizard["credit_limit"] = None
+                else:
+                    wizard["credit_limit"] = amount
+            except (ValueError, Exception):
+                return "Valor inválido. Informe o limite ou responda 'pular'."
+        return None
+
+    if field == "settlement_account_name":
+        value = message.strip()
+        if len(value) < 2:
+            return "Informe o nome da conta de liquidação."
+        wizard["settlement_account_name"] = value[:100]
+        return None
+
     return "Campo desconhecido."
 
 
@@ -341,6 +398,14 @@ def _wizard_summary(wizard: dict) -> str:
     ]
     if wizard.get("institution"):
         lines.append(f"Instituição: {wizard['institution']}")
+    if wizard.get("account_type") == "cartao":
+        lines.append(f"Fechamento: dia {wizard.get('closing_day')}")
+        lines.append(f"Vencimento: dia {wizard.get('due_day')}")
+        if wizard.get("credit_limit"):
+            lines.append(f"Limite: R$ {wizard['credit_limit']}")
+        if wizard.get("settlement_account_name"):
+            lines.append(f"Conta de liquidação: {wizard['settlement_account_name']}")
+        return "Confirme o cadastro do cartão:\n" + "\n".join(lines)
     balance = wizard.get("opening_balance")
     if balance:
         lines.append(f"Saldo inicial: R$ {balance}")
@@ -394,6 +459,18 @@ def is_slot_answer(message: str, field: str) -> bool:
         return is_skip(message) or looks_like_amount(message)
     if field == "opening_balance_date":
         return parse_opening_balance_date(message) is not None
+    if field == "closing_day":
+        from app.services.credit_cards import parse_day_of_month
+
+        return parse_day_of_month(message) is not None
+    if field == "due_day":
+        from app.services.credit_cards import parse_day_of_month
+
+        return parse_day_of_month(message) is not None
+    if field == "credit_limit":
+        return is_skip(message) or looks_like_amount(message)
+    if field == "settlement_account_name":
+        return is_short_slot_message(message, max_words=6)
     return False
 
 
@@ -410,12 +487,28 @@ def get_wizard_context(session: dict) -> str | None:
         "institution": "instituição financeira",
         "opening_balance": "saldo inicial",
         "opening_balance_date": "data do saldo inicial",
+        "closing_day": "dia de fechamento da fatura",
+        "due_day": "dia de vencimento da fatura",
+        "credit_limit": "limite do cartão",
+        "settlement_account_name": "conta de liquidação",
     }
     return f"Wizard de conta aguardando: {labels.get(field, field)}"
 
 
 
 def wizard_to_tool_call(wizard: dict) -> ToolCall:
+    if wizard.get("account_type") == "cartao":
+        args = {
+            "name": wizard["name"],
+            "institution": wizard.get("institution"),
+            "closing_day": wizard.get("closing_day"),
+            "due_day": wizard.get("due_day"),
+            "settlement_account_name": wizard.get("settlement_account_name"),
+        }
+        if wizard.get("credit_limit"):
+            args["credit_limit"] = wizard["credit_limit"]
+        return ToolCall(tool="create_card", arguments=args)
+
     args = {
         "name": wizard["name"],
         "account_type": wizard["account_type"],
@@ -460,11 +553,12 @@ def process_wizard_message(session: dict, message: str) -> AgentResponse | None:
             return _ask_field("name")
         lower = message.strip().lower()
         if lower in {"sim", "s", "ok", "confirmo", "isso", "essa", "esse"}:
+            tool_used = "create_card" if wizard.get("account_type") == "cartao" else "create_account"
             return AgentResponse(
                 message=_wizard_summary(wizard),
                 needs_confirmation=True,
                 pending_action=wizard_to_tool_call(wizard).model_dump(),
-                tool_used="create_account",
+                tool_used=tool_used,
                 source="wizard",
             )
         clear_wizard(session)
@@ -489,11 +583,12 @@ def process_wizard_message(session: dict, message: str) -> AgentResponse | None:
         _sanitize_wizard_name(wizard)
         if not wizard.get("name"):
             return _ask_field("name")
+        tool_used = "create_card" if wizard.get("account_type") == "cartao" else "create_account"
         return AgentResponse(
             message=_wizard_summary(wizard),
             needs_confirmation=True,
             pending_action=wizard_to_tool_call(wizard).model_dump(),
-            tool_used="create_account",
+            tool_used=tool_used,
             source="wizard",
         )
 
@@ -516,11 +611,12 @@ def begin_account_wizard(
         _sanitize_wizard_name(wizard)
         if not wizard.get("name"):
             return _ask_field("name")
+        tool_used = "create_card" if wizard.get("account_type") == "cartao" else "create_account"
         return AgentResponse(
             message=_wizard_summary(wizard),
             needs_confirmation=True,
             pending_action=wizard_to_tool_call(wizard).model_dump(),
-            tool_used="create_account",
+            tool_used=tool_used,
             source="wizard",
         )
     return _ask_field(next_field)

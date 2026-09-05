@@ -207,8 +207,8 @@ async def test_wizard_account_name_stays_in_wizard():
 
     try_process_transaction_wizard(session, "despesa")
     try_process_transaction_wizard(session, "realizado")
-    try_process_transaction_wizard(session, "hoje")
     decline_recurring(session)
+    try_process_transaction_wizard(session, "hoje")
     try_process_transaction_wizard(session, "40,50")
     try_process_transaction_wizard(session, "passagem")
 

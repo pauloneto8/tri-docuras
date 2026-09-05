@@ -22,12 +22,13 @@ Baseado em práticas de Anthropic, LangGraph, MLflow e FastAPI para apps LLM (20
 ```
 1. Cancelamento / comandos fixos
 2. Estado de wizard (continuação)
-3. Heurísticas determinísticas (regex, keywords)
-4. LLM remoto rápido (Groq) para ambiguidade
+3. Atalhos determinísticos para despesa/receita/realizar previsto/pagar fatura
+4. LLM remoto (Groq) para o restante das intenções
 5. LLM local (Ollama) como fallback
+6. Heurísticas (`try_rule_based_parse`) se o LLM falhar
 ```
 
-Nunca pular para LLM se regra ou wizard resolver com confiança.
+Wizards e atalhos de despesa/receita não passam pelo LLM. Pedidos ambíguos (listar vs cadastrar, corrigir transferência, editar cartão) vão primeiro ao Groq.
 
 ## 3. Memória em quatro níveis
 
@@ -42,7 +43,7 @@ Persistir estado do wizard **fora** do prompt; injetar só contexto curto ao LLM
 
 ## 4. Confirmação para ações irreversíveis
 
-- Escritas (`register_*`, `create_account`, `register_transfer`) → `needs_confirmation`.
+- Escritas (`register_*`, `update_*`, `delete_*`, `create_account`, `pay_invoice`) → `needs_confirmation`.
 - Leituras (`list_*`, `get_summary`) → executar direto.
 - Wizard coleta dados; confirmação final antes de persistir.
 
@@ -50,7 +51,7 @@ Persistir estado do wizard **fora** do prompt; injetar só contexto curto ao LLM
 
 - **Intenção errada** (ex.: listar contas vs cadastrar) → sair do wizard e re-rotear.
 - **Slot errado** (valor inválido) → repetir pergunta do mesmo passo.
-- **Slots condicionais** (ex.: datas de transação) → ordem fixa no código (`_next_slot`), não no LLM; previsto pede competência + vencimento; realizado pede data da realização.
+- **Slots condicionais** (ex.: datas de transação) → ordem fixa no código (`_next_slot`), não no LLM; previsto pede competência + vencimento; realizado pede modo e depois a data da realização; parcelado pergunta N, índice, datas da parcela e total vs parcela.
 - Não misturar: delegação ao LLM só quando a intenção mudou.
 
 ## 6. Prompt de ferramentas

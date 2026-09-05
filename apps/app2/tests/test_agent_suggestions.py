@@ -31,3 +31,19 @@ def test_transaction_date_suggestions():
     assert "Ontem" in chips
     chips_due = for_transaction_wizard_field("due_date", None, None, {})
     assert "Amanhã" in chips_due
+
+
+def test_installment_amount_basis_suggestions():
+    chips = for_transaction_wizard_field("installment_amount_basis", None, None, {})
+    assert "Valor total" in chips
+    assert "Valor da parcela" in chips
+    assert "Cancelar" in chips
+
+
+def test_installment_start_index_suggestions():
+    chips = for_transaction_wizard_field(
+        "installment_start_index", None, None, {"installment_count": 12}
+    )
+    assert "1 (primeira)" in chips
+    assert "3" in chips
+    assert "Cancelar" in chips

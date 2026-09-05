@@ -10,6 +10,10 @@
     .sidebar-open #sidebar-overlay { display: block; }
     .sidebar-open #sidebar { transform: translateX(0); }
     #htmx-indicator.htmx-request { display: flex; }
+    #agent-panel.hidden { display: none !important; pointer-events: none; }
+    .chat-md-list { list-style: disc; padding-left: 1.1rem; margin: 0.35rem 0; }
+    .chat-md-list li { margin: 0.1rem 0; }
+    .chat-bubble-content strong { font-weight: 600; color: inherit; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
@@ -28,9 +32,13 @@
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
           Dashboard
         </a>
-        <a href="/accounts" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path.startswith('/accounts') %}bg-emerald-600/20 text-emerald-300 border border-emerald-700/50{% else %}text-slate-300 hover:bg-slate-800{% endif %}">
+        <a href="/accounts" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path == '/accounts' %}bg-emerald-600/20 text-emerald-300 border border-emerald-700/50{% else %}text-slate-300 hover:bg-slate-800{% endif %}">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
           Contas
+        </a>
+        <a href="/accounts/cards" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path.startswith('/accounts/cards') %}bg-emerald-600/20 text-emerald-300 border border-emerald-700/50{% else %}text-slate-300 hover:bg-slate-800{% endif %}">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M5 6h14"/></svg>
+          Cartões
         </a>
         <a href="/transactions" class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if path.startswith('/transactions') %}bg-emerald-600/20 text-emerald-300 border border-emerald-700/50{% else %}text-slate-300 hover:bg-slate-800{% endif %}">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
@@ -75,7 +83,7 @@
         <span class="font-semibold text-emerald-400">AssistFin</span>
       </header>
 
-      <main class="flex-1 p-4 lg:p-8 max-w-5xl w-full">
+      <main id="page-main" class="flex-1 p-4 lg:p-8 max-w-5xl w-full">
         {% if success %}
         <div class="mb-4 rounded-lg bg-emerald-900/40 border border-emerald-700 px-4 py-3 text-emerald-200">{{ success }}</div>
         {% endif %}
@@ -96,7 +104,7 @@
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('agent-welcome')?.remove();
-      toggleAgentPanel(true);
+      window.toggleAgentPanel?.(true);
     });
   </script>
   {% endif %}

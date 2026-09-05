@@ -10,6 +10,24 @@ def test_is_cancel_message():
     assert not is_cancel_message("gastei 30")
 
 
+def test_nao_not_cancel_during_recurring_slot():
+    from app.services.transaction_slots import WIZARD_KEY
+    from app.services.transaction_wizard import start_wizard
+
+    session: dict = {}
+    start_wizard(session)
+    session[WIZARD_KEY]["tx_type"] = "income"
+    session[WIZARD_KEY]["status"] = "actual"
+    session[WIZARD_KEY]["payment_date"] = "2026-08-31"
+    session[WIZARD_KEY]["competence_date"] = "2026-08-31"
+    session[WIZARD_KEY]["due_date"] = "2026-08-31"
+
+    assert not is_cancel_message("Não", session)
+    assert not is_cancel_message("Único", session)
+    assert not is_cancel_message("Parcelado", session)
+    assert is_cancel_message("cancelar", session)
+
+
 def test_clear_agent_flow_state_removes_transaction_wizard():
     session = {WIZARD_KEY: {"amount": "50", "tx_type": "expense"}}
     clear_agent_flow_state(session)

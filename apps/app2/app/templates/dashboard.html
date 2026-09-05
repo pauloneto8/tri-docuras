@@ -80,6 +80,60 @@
   </div>
 </section>
 
+{# 2b. Indicadores por categoria #}
+<section class="mb-8">
+  <h2 class="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3">Por categoria</h2>
+  <p class="text-xs text-slate-500 mb-3">{{ summary.period_label }} — realizados (sem cartão)</p>
+  <div class="grid md:grid-cols-2 gap-6">
+    <div class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold">Despesas</h3>
+        <span class="text-sm font-mono text-rose-400">R$ {{ summary.expense }}</span>
+      </div>
+      {% if summary.expenses_by_category %}
+      <ul class="space-y-3">
+        {% for item in summary.expenses_by_category %}
+        <li>
+          <div class="flex justify-between text-sm mb-1 gap-2">
+            <span class="truncate">{{ item.category }}</span>
+            <span class="font-mono text-slate-300 shrink-0">R$ {{ item.amount }} <span class="text-slate-500">({{ item.percent }}%)</span></span>
+          </div>
+          <div class="h-2 rounded bg-slate-800 overflow-hidden">
+            <div class="h-full bg-rose-500/80" style="width: {{ [item.percent, 100]|min }}%"></div>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-slate-400 text-sm">Nenhuma despesa realizada neste período.</p>
+      {% endif %}
+    </div>
+    <div class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold">Receitas</h3>
+        <span class="text-sm font-mono text-emerald-400">R$ {{ summary.income }}</span>
+      </div>
+      {% if summary.income_by_category %}
+      <ul class="space-y-3">
+        {% for item in summary.income_by_category %}
+        <li>
+          <div class="flex justify-between text-sm mb-1 gap-2">
+            <span class="truncate">{{ item.category }}</span>
+            <span class="font-mono text-slate-300 shrink-0">R$ {{ item.amount }} <span class="text-slate-500">({{ item.percent }}%)</span></span>
+          </div>
+          <div class="h-2 rounded bg-slate-800 overflow-hidden">
+            <div class="h-full bg-emerald-500/80" style="width: {{ [item.percent, 100]|min }}%"></div>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-slate-400 text-sm">Nenhuma receita realizada neste período.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
 {# 3. Previstos do período #}
 <section class="mb-8 rounded-xl bg-slate-900 border border-amber-800/40 p-5">
   <h2 class="text-lg font-semibold mb-1">Previstos do período</h2>
@@ -132,6 +186,89 @@
   {% endif %}
 </section>
 
+{# 4. Cartões e faturas #}
+<section class="mb-8 rounded-xl bg-slate-900 border border-slate-800 p-5">
+  <div class="flex items-center justify-between mb-1">
+    <h2 class="text-lg font-semibold">Cartões e faturas</h2>
+    <a href="/accounts/cards" class="text-sm text-emerald-400 hover:text-emerald-300">Gerenciar</a>
+  </div>
+  <p class="text-xs text-slate-500 mb-4">
+    Compras no cartão não alteram o saldo bancário. Pagar a fatura é despesa na conta de débito.
+  </p>
+  {% if summary.card_invoices and summary.card_invoices.cards %}
+  <div class="grid sm:grid-cols-2 gap-3 mb-4">
+    <div class="rounded-lg border border-amber-800/40 p-4">
+      <p class="text-slate-400 text-sm">Total a pagar</p>
+      <p class="text-2xl font-bold text-amber-300 mt-1">R$ {{ summary.card_invoices.unpaid_total }}</p>
+      <p class="text-xs text-slate-500 mt-1">
+        {% if summary.card_invoices.unpaid_count == 1 %}
+        1 cartão com fatura em aberto
+        {% else %}
+        {{ summary.card_invoices.unpaid_count }} cartões com fatura em aberto
+        {% endif %}
+      </p>
+    </div>
+    <div class="rounded-lg border border-slate-800 p-4">
+      <p class="text-slate-400 text-sm">Vencendo no período</p>
+      <p class="text-2xl font-bold {% if summary.card_invoices.due_in_period_cents > 0 %}text-rose-400{% else %}text-slate-300{% endif %} mt-1">R$ {{ summary.card_invoices.due_in_period }}</p>
+      <p class="text-xs text-slate-500 mt-1">{{ summary.period_label }}</p>
+    </div>
+  </div>
+  <ul class="space-y-3">
+    {% for card in summary.card_invoices.cards %}
+    <li class="rounded-lg bg-slate-800/50 p-4">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+        <div>
+          <p class="font-medium">{{ card.name }}</p>
+          <p class="text-xs text-slate-500">
+            {% if card.institution %}{{ card.institution }} · {% endif %}
+            Fecha dia {{ card.closing_day }} · Vence dia {{ card.due_day }}
+          </p>
+        </div>
+        {% if card.available_limit %}
+        <p class="text-sm text-slate-300">
+          Disponível <span class="font-mono text-emerald-400">R$ {{ card.available_limit }}</span>
+          {% if card.credit_limit %}<span class="text-slate-500"> / R$ {{ card.credit_limit }}</span>{% endif %}
+        </p>
+        {% endif %}
+      </div>
+      {% if card.current_invoice_id %}
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <p class="text-lg font-semibold {% if card.current_invoice_overdue %}text-rose-400{% else %}text-amber-300{% endif %}">
+          R$ {{ card.current_invoice_total }}
+        </p>
+        <span class="inline-flex rounded-full border px-2 py-0.5 text-xs
+          {% if card.current_invoice_overdue %}border-rose-700 text-rose-300{% elif card.current_invoice_status == 'closed' %}border-amber-700 text-amber-300{% else %}border-slate-600 text-slate-300{% endif %}">
+          {{ card.current_invoice_status_label }}
+        </span>
+        {% if card.due_in_period %}
+        <span class="inline-flex rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 text-xs text-amber-300">Vence neste período</span>
+        {% endif %}
+        {% if card.current_invoice_overdue %}
+        <span class="inline-flex rounded-full border border-rose-700/60 bg-rose-950/40 px-2 py-0.5 text-xs text-rose-300">Atrasada</span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-slate-500 mt-1">
+        {{ card.invoice_label }} · vence {{ card.current_invoice_due_label }}
+        {% if card.unpaid_total_cents is not none and card.current_invoice_total_cents is not none and card.unpaid_total_cents > card.current_invoice_total_cents %}
+        · Total em aberto R$ {{ card.unpaid_total }}
+        {% endif %}
+      </p>
+      {% else %}
+      <p class="text-sm text-slate-500 mt-3">Sem fatura em aberto.</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-slate-400 text-sm">
+    Nenhum cartão cadastrado.
+    <a href="/accounts/cards" class="text-emerald-400 hover:text-emerald-300">Cadastre um cartão</a>
+    para acompanhar faturas, vencimento e limite disponível.
+  </p>
+  {% endif %}
+</section>
+
 <div class="grid md:grid-cols-2 gap-6">
   <section class="rounded-xl bg-slate-900 border border-slate-800 p-5">
     <div class="flex items-center justify-between mb-4">
@@ -156,25 +293,32 @@
   </section>
 
   <section class="rounded-xl bg-slate-900 border border-slate-800 p-5">
-    <h2 class="text-lg font-semibold mb-4">Últimos movimentos</h2>
+    <div class="flex items-center justify-between mb-4 gap-2">
+      <div>
+        <h2 class="text-lg font-semibold">Últimos movimentos</h2>
+        <p class="text-xs text-slate-500">{{ summary.period_label }} — realizados</p>
+      </div>
+      <a href="/transactions" class="text-sm text-emerald-400 hover:text-emerald-300 shrink-0">Ver todos</a>
+    </div>
     {% if recent %}
     <ul class="space-y-2 text-sm">
       {% for tx in recent %}
       <li class="flex justify-between gap-4">
         <span>
-          {{ tx.transaction_date }} — {{ tx.description }}
+          {{ tx.payment_date_label or tx.transaction_date }} — {{ tx.description }}
+          {% if tx.account %}<span class="text-slate-500">· {{ tx.account }}</span>{% endif %}
           {% if tx.type in ['transfer_out', 'transfer_in'] and tx.counterparty_account %}
           <span class="text-slate-500">({{ tx.type_label }} · {{ tx.counterparty_account }})</span>
           {% endif %}
         </span>
-        <span class="{% if tx.type in ['expense', 'transfer_out'] %}text-rose-400{% elif tx.type in ['income', 'transfer_in'] %}text-emerald-400{% else %}text-slate-300{% endif %} font-mono">
+        <span class="{% if tx.type in ['expense', 'transfer_out'] %}text-rose-400{% elif tx.type in ['income', 'transfer_in'] %}text-emerald-400{% else %}text-slate-300{% endif %} font-mono shrink-0">
           {% if tx.type in ['expense', 'transfer_out'] %}-{% elif tx.type in ['income', 'transfer_in'] %}+{% endif %}R$ {{ tx.amount }}
         </span>
       </li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="text-slate-400">Sem lançamentos ainda.</p>
+    <p class="text-slate-400">Nenhum movimento realizado neste período.</p>
     {% endif %}
   </section>
 </div>

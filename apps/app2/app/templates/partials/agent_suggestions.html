@@ -1,6 +1,7 @@
 {% if suggestions %}
-<div class="mt-3 flex flex-wrap gap-2">
+<div class="flex flex-wrap gap-1.5">
   {% for chip in suggestions %}
+  {% set is_cancel = chip|lower == 'cancelar' %}
   <form
     class="inline"
     hx-post="/agent/chat"
@@ -13,8 +14,20 @@
     <input type="hidden" name="confirmed" value="false">
     <button
       type="submit"
-      class="rounded-full border border-slate-600 bg-slate-700/80 hover:bg-emerald-700/80 hover:border-emerald-600 px-3 py-1 text-xs text-slate-100 transition-colors"
-    >{{ chip }}</button>
+      title="{{ chip }}"
+      class="max-w-[11rem] truncate rounded-full border px-3 py-1 text-xs transition-colors {% if is_cancel %}border-rose-800/80 bg-rose-950/40 text-rose-200 hover:bg-rose-900/60{% else %}border-slate-600 bg-slate-800 text-slate-100 hover:bg-emerald-700/80 hover:border-emerald-600{% endif %}"
+    >
+      {% if is_cancel %}
+      <span class="inline-flex items-center gap-1">
+        <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+        {{ chip }}
+      </span>
+      {% else %}
+      {{ chip }}
+      {% endif %}
+    </button>
   </form>
   {% endfor %}
 </div>

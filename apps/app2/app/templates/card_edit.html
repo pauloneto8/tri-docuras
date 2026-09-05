@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Editar cartão — AssistFin{% endblock %}
+{% block content %}
+<div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h1 class="text-lg font-semibold text-slate-100">Editar cartão</h1>
+    <p class="text-sm text-slate-400">{{ card.name }}</p>
+  </div>
+  <a href="/accounts/cards" class="text-sm text-emerald-400 hover:text-emerald-300">← Voltar aos cartões</a>
+</div>
+
+{% if error %}
+<p class="mb-4 rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-2 text-rose-300 text-sm">{{ error }}</p>
+{% endif %}
+
+<section class="max-w-xl rounded-xl bg-slate-900 border border-slate-800 p-5">
+  <form method="post" action="/accounts/cards/{{ card.id }}" class="space-y-3">
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Apelido do cartão</label>
+      <input name="name" type="text" value="{{ card.name }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Instituição <span class="text-slate-500">(opcional)</span></label>
+      <input name="institution" type="text" value="{{ card.institution or '' }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Dia de fechamento</label>
+      <input name="closing_day" type="number" min="1" max="31" value="{{ card.closing_day }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Dia de vencimento</label>
+      <input name="due_day" type="number" min="1" max="31" value="{{ card.due_day }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Limite <span class="text-slate-500">(opcional)</span></label>
+      <input name="credit_limit" type="text" value="{{ card.credit_limit or '' }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Conta de liquidação</label>
+      <select name="settlement_account_id" required class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+        <option value="">Selecione a conta</option>
+        {% for da in bank_accounts %}
+        <option value="{{ da.id }}" {% if card.settlement_account_id == da.id %}selected{% endif %}>{{ da.account }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="flex flex-col sm:flex-row gap-2 pt-2">
+      <button type="submit" class="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium">Salvar</button>
+      <a href="/accounts/cards" class="flex-1 rounded-lg border border-slate-700 px-4 py-2 text-center text-slate-300 hover:bg-slate-800">Cancelar</a>
+    </div>
+  </form>
+  <form method="post" action="/accounts/cards/{{ card.id }}/delete" class="mt-4 pt-4 border-t border-slate-800" onsubmit="return confirm('Desativar este cartão?')">
+    <button type="submit" class="w-full rounded-lg border border-rose-700 text-rose-300 hover:bg-rose-950/40 px-4 py-2 text-sm">Desativar cartão</button>
+  </form>
+</section>
+{% endblock %}

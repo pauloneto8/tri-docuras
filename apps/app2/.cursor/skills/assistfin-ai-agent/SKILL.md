@@ -5,7 +5,7 @@ description: >-
   Ollama, ferramentas, chips e chat HTMX. Use ao alterar assistente, chat, LLM,
   prompt, confirmação, transferências, wizards ou quando o agente não entender
   intenção do usuário.
-paths: app/agent/**, app/services/account_wizard.py, app/services/category_wizard.py, app/services/transaction_wizard.py, app/services/transaction_slots.py, app/services/realize_planned_slots.py, app/services/recurrence.py, app/services/transfer_slots.py, app/services/multi_movements.py, app/services/multi_movement_flow.py, app/services/intents.py, app/services/tools.py, app/services/agent_suggestions.py, app/services/agent_state.py, app/templates/partials/agent_*.html, app/routers/pages.py
+paths: app/agent/**, app/chat_format.py, app/services/account_wizard.py, app/services/category_wizard.py, app/services/card_wizard.py, app/services/transaction_wizard.py, app/services/transaction_slots.py, app/services/realize_planned_slots.py, app/services/pay_invoice_slots.py, app/services/recurrence.py, app/services/transfer_slots.py, app/services/multi_movements.py, app/services/multi_movement_flow.py, app/services/intents.py, app/services/tools.py, app/services/agent_suggestions.py, app/services/agent_state.py, app/templates/partials/agent_*.html, app/routers/pages.py
 ---
 
 # AssistFin — Agente de IA
@@ -21,14 +21,19 @@ paths: app/agent/**, app/services/account_wizard.py, app/services/category_wizar
 ```
 mensagem
   → multi-movimento em andamento (pending_movements)?
+  → wizard pagar fatura?
   → wizard transferência?
   → wizard realizar previsto?
-  → wizard transação? (datas/recorrência antes de multi-lançamento)
+  → wizard transação? (datas/modo/parcelas/recorrência antes de multi-lançamento)
   → try_begin_from_message (vários valores na mensagem)?
+  → wizard cartão? (cadastro em andamento)
   → wizard conta / categoria?
   → exclusão pendente?
-  → _resolve_intent (regras → Groq → Ollama)
-  → create_account / create_category → wizard
+  → _resolve_intent:
+       atalhos (realize_planned, pay_invoice, register_expense, register_income)
+       → Groq → Ollama
+       → try_rule_based_parse (fallback)
+  → create_account / create_category / create_card → wizard
   → WRITE_TOOLS → slots → confirmação → execute_tool
 ```
 
@@ -36,15 +41,15 @@ mensagem
 
 | Camada | Quando |
 |--------|--------|
-| Regras (`try_rule_based_parse`) | "gastei 45", "transferir 100 da X para Y", "resumo" |
-| `intents.py` | Listar vs cadastrar conta/categoria; detectar transferência |
-| Wizards | Coleta guiada (conta, categoria, transação, transferência) |
-| Groq | Intenção ambígua (`call_intent_llm`) |
+| Wizards | Coleta guiada em andamento (conta, categoria, transação, transferência, cartão, fatura) |
+| Atalhos em `_resolve_intent` | `realize_planned`, `pay_invoice`, `register_expense`, `register_income` |
+| Groq | Intenção ambígua (`call_intent_llm`) — **primeiro** para o restante |
 | Ollama | Fallback local |
+| `try_rule_based_parse` | Fallback se o LLM falhar ("gastei 45", "transferir 100 da X para Y") |
 
 ## WRITE_TOOLS (confirmação obrigatória)
 
-`register_expense`, `register_income`, `register_transfer`, `realize_planned`, `update_transaction`, `update_account`, `delete_transaction`, `create_account`, `create_category`
+`register_expense`, `register_income`, `register_transfer`, `realize_planned`, `update_transfer`, `update_transaction`, `update_account`, `update_card`, `delete_card`, `delete_transaction`, `create_account`, `create_card`, `create_category`, `pay_invoice`
 
 ## Chips de resposta
 
@@ -58,30 +63,49 @@ mensagem
 
 | Wizard | Arquivo | Campos |
 |--------|---------|--------|
-| Transação | `transaction_wizard.py` + `transaction_slots.py` | tipo, status, datas, recorrência (fixo/frequência/término), valor, descrição, conta, categoria |
+| Transação | `transaction_wizard.py` + `transaction_slots.py` | tipo, status, modo, parcelas (N, intervalo, índice, basis), datas, valor, descrição, conta, categoria |
 | Realizar previsto | `realize_planned_slots.py` | previsto, pagamento, mesma conta?, conta |
 | Transferência | `transfer_slots.py` | valor, origem, destino |
-| Conta | `account_wizard.py` | apelido, tipo, instituição, saldo |
+| Conta | `account_wizard.py` | apelido, tipo, instituição, saldo, data do saldo inicial |
+| Cartão | `card_wizard.py` | apelido, instituição, fechamento, vencimento, limite, liquidação |
 | Categoria | `category_wizard.py` | nome, tipo |
+| Pagar fatura | `pay_invoice_slots.py` | fatura, conta de débito, data |
 
 ### Slots de data (transação)
 
-Após `status`, o wizard pergunta datas **antes** de valor/descrição:
+Ordem depende de **status** e **modo**:
 
-| Status | Slots | Comportamento |
-|--------|-------|---------------|
-| `planned` | `competence_date`, `due_date` | Duas perguntas; `payment_date` fica vazio |
-| `actual` | `payment_date` | Uma pergunta; replica em competência e vencimento |
+| Contexto | Slots | Comportamento |
+|----------|-------|---------------|
+| `planned`, não parcelado | `competence_date`, `due_date` | Duas perguntas; `payment_date` vazio |
+| `actual`, não parcelado | `payment_mode` primeiro, depois `payment_date` | Pagamento replica em competência e vencimento |
+| **parcelado** | Após N, intervalo e `installment_start_index` | Competência e vencimento **da parcela**; depois `payment_date` se realizado |
+| **parcelado** + inferência | — | `ontem`/`hoje` na mensagem **não** preenchem slots; escolher *parcelado* limpa datas genéricas |
 
 - Parsing: `parse_slot_date()` → `parse_user_date()` (`hoje`, `ontem`, `amanhã`, `DD/MM/AAAA`, `agosto`, etc.)
-- `is_date_only_message()` evita que datas isoladas (`10/08/2026`) sejam interpretadas como múltiplos valores em `parse_multi_movements`
-- Com wizard ativo em slot de data, `try_begin_from_message` **não** inicia fluxo multi
-- LLM **não** envia `status` nem inventa datas — só extrai se o usuário citou na mensagem
-- Inferência de "ontem"/"hoje" na mensagem original pula a pergunta de data (realizado)
+- Parcelado: `payment_date` **não** altera competência/vencimento já informados
+- `is_date_only_message()` evita que datas isoladas sejam interpretadas como múltiplos valores
+- LLM **não** envia `status`, `installment_amount_basis`, `installment_start_index` nem inventa datas de parcelamento
+
+### Slots de parcelamento
+
+Após `payment_mode=installment`:
+
+| Slot | Pergunta |
+|------|----------|
+| `installment_count` | Em quantas vezes? |
+| `installment_interval` | Mensal, semanal ou quinzenal |
+| `installment_start_index` | Primeira parcela ou qual está lançando (1…N) |
+| `competence_date` | Competência da parcela X/N |
+| `due_date` | Vencimento da parcela X/N (ancora cronograma) |
+| `payment_date` | Só se realizado — caixa, independente do vencimento |
+| `installment_amount_basis` | Valor total da compra ou valor de cada parcela |
+
+`INSTALLMENT_SLOTS` entram nas guardas anti-multi em `multi_movement_flow.py`.
 
 ### Slots de recorrência
 
-Após as datas, antes de valor:
+Após datas (lançamento **não** parcelado), antes de valor:
 
 | Slot | Pergunta | Respostas |
 |------|----------|-----------|
@@ -99,12 +123,17 @@ Escape: intenção diferente → `clear_wizard` + `None` (delega ao runner).
 - `SYSTEM_PROMPT` em `app/agent/prompt.py`
 - JSON único `{"tool","arguments"}`
 - Diferenciar: `list_accounts` vs `list_transactions` vs `register_transfer`
+- Diferenciar: `update_account` (conta bancária) vs `update_card` (cartão) vs `update_transaction` (despesa/receita) vs `update_transfer` (par de transferência)
+- Diferenciar: `delete_card` (cartão) vs `delete_transaction` (lançamento)
 
 ## Chat UI (HTMX)
 
 - `partials/agent_widget.html` → `POST /agent/chat`
-- Confirmação: `partials/agent_response.html` com `confirmed=true`
-- Chips em `agent_assistant_message.html`
+- Avatares: `agent_avatar.html` (assistente à esquerda, inicial do usuário à direita)
+- Corpo: `agent_message_body.html` com filtro `chat_md` (`app/chat_format.py`) — HTML escapado, `*negrito*`, listas
+- Chips **fora** do balão: `agent_suggestions.html`
+- Confirmação **fora** do balão: `agent_confirm_actions.html` (`confirmed=true`)
+- Welcome HTMX: `agent_assistant_message.html`
 
 ## Checklist ao mudar o agente
 

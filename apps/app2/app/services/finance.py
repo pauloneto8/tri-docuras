@@ -6,11 +6,12 @@ from uuid import uuid4
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import Account, Budget, Category, RecurringRule, Transaction, User
+from app.models import Account, Budget, CardInvoice, Category, CreditCard, RecurringRule, Transaction, User
 from app.schemas import (
     BudgetCreate,
     BudgetStatusInput,
     CreateAccountInput,
+    CreateCardInput,
     ListTransactionsInput,
     RegisterExpenseInput,
     RegisterIncomeInput,
@@ -19,8 +20,11 @@ from app.schemas import (
     SummaryInput,
     TransactionCreate,
     UpdateAccountInput,
-    UpdateTransactionInput,
+    UpdateCardInput,
+    DeleteCardInput,
     DeleteTransactionInput,
+    UpdateTransactionInput,
+    UpdateTransferInput,
     decimal_to_cents,
     format_brl,
 )
@@ -108,6 +112,58 @@ def resolve_account(db: Session, user_id: int, account_name: str | None) -> Acco
     return resolve_account_for_transaction(db, user_id, account_name.strip())
 
 
+def resolve_card_for_transaction(db: Session, user_id: int, card_name: str) -> CreditCard:
+    card = db.scalar(
+        select(CreditCard).where(
+            CreditCard.user_id == user_id,
+            CreditCard.is_active.is_(True),
+            func.lower(CreditCard.name) == card_name.lower(),
+        )
+    )
+    if not card:
+        raise ValueError(f"Cartão '{card_name}' não encontrado.")
+    return card
+
+
+def resolve_movement_accounts(
+    db: Session,
+    user_id: int,
+    *,
+    account_name: str | None = None,
+    card_name: str | None = None,
+) -> tuple[Account | None, CreditCard | None]:
+    account: Account | None = None
+    card: CreditCard | None = None
+
+    if card_name and card_name.strip():
+        card = resolve_card_for_transaction(db, user_id, card_name.strip())
+
+    if account_name and account_name.strip():
+        name = account_name.strip()
+        if card and name.lower() == card.name.lower():
+            if card.settlement_account_id:
+                settlement = db.get(Account, card.settlement_account_id)
+                if settlement and settlement.is_active:
+                    account = settlement
+        else:
+            account = resolve_account_for_transaction(db, user_id, name)
+
+    if card is None and account is None and account_name and account_name.strip():
+        try:
+            card = resolve_card_for_transaction(db, user_id, account_name.strip())
+        except ValueError:
+            account = resolve_account_for_transaction(db, user_id, account_name.strip())
+
+    if card and account is None and card.settlement_account_id:
+        settlement = db.get(Account, card.settlement_account_id)
+        if settlement and settlement.is_active:
+            account = settlement
+
+    if account is None and card is None:
+        raise ValueError("Conta ou cartão não informado.")
+    return account, card
+
+
 def resolve_account_for_transaction(db: Session, user_id: int, account_name: str) -> Account:
     account = db.scalar(
         select(Account).where(
@@ -185,6 +241,19 @@ def suggest_category_by_keywords(
     return best
 
 
+def normalize_card_expense_status(
+    *,
+    card: CreditCard | None,
+    tx_type: str,
+    status: str,
+    payment_date: date | None,
+) -> tuple[str, date | None]:
+    """Despesa no cartão é prevista até o pagamento da fatura."""
+    if card is not None and tx_type == "expense":
+        return "planned", None
+    return status, payment_date
+
+
 def resolve_transaction_dates(
     status: str,
     *,
@@ -214,16 +283,40 @@ def resolve_transaction_dates(
 
 
 def create_transaction(db: Session, user_id: int, data: TransactionCreate) -> Transaction:
+    account = None
+    card = None
+    if data.account_id is not None:
+        account = db.get(Account, data.account_id)
+        if not account or account.user_id != user_id:
+            raise ValueError("Conta inválida.")
+    if data.card_id is not None:
+        card = db.get(CreditCard, data.card_id)
+        if not card or card.user_id != user_id:
+            raise ValueError("Cartão inválido.")
+    if account is None and card is None:
+        raise ValueError("Informe a conta ou o cartão do lançamento.")
+
+    status, payment_date = normalize_card_expense_status(
+        card=card,
+        tx_type=data.type,
+        status=data.status,
+        payment_date=data.payment_date,
+    )
     comp, due, payment, cash_date = resolve_transaction_dates(
-        data.status,
+        status,
         competence_date=data.competence_date,
         due_date=data.due_date,
-        payment_date=data.payment_date,
+        payment_date=payment_date,
         transaction_date=data.transaction_date,
     )
+    account_id = data.account_id
+    if account_id is None and card is not None:
+        account_id = card.settlement_account_id
+
     tx = Transaction(
         user_id=user_id,
-        account_id=data.account_id,
+        account_id=account_id,
+        card_id=data.card_id,
         category_id=data.category_id,
         type=data.type,
         amount_cents=data.amount_cents,
@@ -232,10 +325,18 @@ def create_transaction(db: Session, user_id: int, data: TransactionCreate) -> Tr
         due_date=due,
         payment_date=payment,
         transaction_date=cash_date,
-        status=data.status,
+        status=status,
         recurrence_id=data.recurrence_id,
+        installment_plan_id=data.installment_plan_id,
+        installment_index=data.installment_index,
+        invoice_id=data.invoice_id,
     )
     db.add(tx)
+    db.flush()
+    if card and data.invoice_id is None:
+        from app.services.credit_cards import assign_transaction_to_invoice
+
+        assign_transaction_to_invoice(db, card, tx)
     db.commit()
     db.refresh(tx)
     return tx
@@ -245,7 +346,8 @@ def _register_recurring_movement(
     db: Session,
     user_id: int,
     *,
-    account: Account,
+    account: Account | None,
+    card: CreditCard | None = None,
     category: Category | None,
     tx_type: str,
     payload: RegisterExpenseInput | RegisterIncomeInput,
@@ -268,6 +370,9 @@ def _register_recurring_movement(
         or local_today()
     )
 
+    if account is None:
+        raise ValueError("Conta é obrigatória para lançamento fixo.")
+
     rule = create_recurring_rule(
         db,
         user_id,
@@ -286,6 +391,7 @@ def _register_recurring_movement(
         user_id,
         TransactionCreate(
             account_id=account.id,
+            card_id=card.id if card else None,
             category_id=category.id if category else None,
             type=tx_type,
             amount_cents=amount_cents,
@@ -306,30 +412,133 @@ def _register_recurring_movement(
     return result
 
 
+def _register_installment_movement(
+    db: Session,
+    user_id: int,
+    *,
+    account: Account | None,
+    card: CreditCard | None = None,
+    category: Category | None,
+    tx_type: str,
+    payload: RegisterExpenseInput | RegisterIncomeInput,
+) -> dict:
+    from app.services.installments import (
+        create_installment_plan,
+        format_installment_label,
+    )
+
+    if not payload.installment_count or not payload.installment_interval:
+        raise ValueError("Número de parcelas e intervalo são obrigatórios.")
+    if account is None:
+        raise ValueError("Conta é obrigatória para parcelamento.")
+
+    total_cents = decimal_to_cents(payload.amount)
+    start_index = payload.installment_start_index or 1
+    if card:
+        # Compra no cartão: cronograma e ciclo da fatura usam a data da compra
+        # (competência), nunca o vencimento da fatura (que costuma ser após o fechamento).
+        start_date = (
+            payload.competence_date
+            or payload.payment_date
+            or payload.transaction_date
+            or local_today()
+        )
+    else:
+        start_date = (
+            payload.due_date
+            or payload.competence_date
+            or payload.payment_date
+            or payload.transaction_date
+            or local_today()
+        )
+    count = payload.installment_count
+    interval = payload.installment_interval
+    amount_basis = payload.installment_amount_basis or "total"
+
+    plan, transactions = create_installment_plan(
+        db,
+        user_id,
+        account_id=account.id,
+        card_id=card.id if card else None,
+        category_id=category.id if category else None,
+        tx_type=tx_type,
+        total_cents=total_cents,
+        installment_count=count,
+        interval=interval,  # type: ignore[arg-type]
+        start_date=start_date,
+        description=payload.description,
+        first_status=payload.status,
+        competence_date=payload.competence_date,
+        due_date=payload.due_date,
+        payment_date=payload.payment_date,
+        transaction_date=payload.transaction_date,
+        amount_basis=amount_basis,  # type: ignore[arg-type]
+        start_index=start_index,
+    )
+
+    db.commit()
+    db.refresh(plan)
+    first_tx = transactions[0]
+    result = format_transaction(first_tx)
+    result["installment_plan_id"] = plan.id
+    result["installment_count"] = count
+    result["installment_interval"] = interval
+    result["installment_start_index"] = start_index
+    result["installment_label"] = format_installment_label(start_index, count, interval)
+    return result
+
+
 def register_expense(db: Session, user_id: int, payload: RegisterExpenseInput) -> dict:
-    if not payload.account_name or not payload.category_name:
-        raise ValueError("Conta e categoria são obrigatórias para registrar a despesa.")
-    account = resolve_account_for_transaction(db, user_id, payload.account_name)
+    if not payload.category_name:
+        raise ValueError("Categoria é obrigatória para registrar a despesa.")
+    account, card = resolve_movement_accounts(
+        db,
+        user_id,
+        account_name=payload.account_name,
+        card_name=payload.card_name,
+    )
     category = find_category_by_name(db, user_id, payload.category_name, "expense")
     if not category:
         raise ValueError(f"Categoria '{payload.category_name}' não encontrada.")
 
     if payload.frequency:
+        if card and not account:
+            raise ValueError("Lançamento fixo no cartão exige conta associada.")
         return _register_recurring_movement(
-            db, user_id, account=account, category=category, tx_type="expense", payload=payload
+            db, user_id, account=account, card=card, category=category, tx_type="expense", payload=payload
         )
+
+    if payload.installment_count:
+        if card and not account:
+            raise ValueError("Parcelamento no cartão exige conta associada.")
+        return _register_installment_movement(
+            db, user_id, account=account, card=card, category=category, tx_type="expense", payload=payload
+        )
+
+    due_date = payload.due_date
+    if card and due_date is None:
+        from app.services.credit_cards import invoice_due_for_purchase
+
+        anchor = (
+            payload.competence_date
+            or payload.payment_date
+            or payload.transaction_date
+            or local_today()
+        )
+        due_date = invoice_due_for_purchase(card, anchor)
 
     tx = create_transaction(
         db,
         user_id,
         TransactionCreate(
-            account_id=account.id,
+            account_id=account.id if account else None,
+            card_id=card.id if card else None,
             category_id=category.id if category else None,
             type="expense",
             amount_cents=decimal_to_cents(payload.amount),
             description=payload.description,
             competence_date=payload.competence_date,
-            due_date=payload.due_date,
+            due_date=due_date,
             payment_date=payload.payment_date,
             transaction_date=payload.transaction_date,
             status=payload.status,
@@ -339,23 +548,38 @@ def register_expense(db: Session, user_id: int, payload: RegisterExpenseInput) -
 
 
 def register_income(db: Session, user_id: int, payload: RegisterIncomeInput) -> dict:
-    if not payload.account_name or not payload.category_name:
-        raise ValueError("Conta e categoria são obrigatórias para registrar a receita.")
-    account = resolve_account_for_transaction(db, user_id, payload.account_name)
+    if not payload.category_name:
+        raise ValueError("Categoria é obrigatória para registrar a receita.")
+    account, card = resolve_movement_accounts(
+        db,
+        user_id,
+        account_name=payload.account_name,
+        card_name=payload.card_name,
+    )
     category = find_category_by_name(db, user_id, payload.category_name, "income")
     if not category:
         raise ValueError(f"Categoria '{payload.category_name}' não encontrada.")
 
     if payload.frequency:
+        if card and not account:
+            raise ValueError("Lançamento fixo no cartão exige conta associada.")
         return _register_recurring_movement(
-            db, user_id, account=account, category=category, tx_type="income", payload=payload
+            db, user_id, account=account, card=card, category=category, tx_type="income", payload=payload
+        )
+
+    if payload.installment_count:
+        if card and not account:
+            raise ValueError("Parcelamento no cartão exige conta associada.")
+        return _register_installment_movement(
+            db, user_id, account=account, card=card, category=category, tx_type="income", payload=payload
         )
 
     tx = create_transaction(
         db,
         user_id,
         TransactionCreate(
-            account_id=account.id,
+            account_id=account.id if account else None,
+            card_id=card.id if card else None,
             category_id=category.id if category else None,
             type="income",
             amount_cents=decimal_to_cents(payload.amount),
@@ -377,15 +601,50 @@ def create_user_transaction(
     *,
     frequency: str | None = None,
     recurrence_end_date: date | None = None,
+    installment_count: int | None = None,
+    installment_interval: str | None = None,
+    installment_amount_basis: str | None = None,
 ) -> dict:
-    """Cria lançamento manual (formulário) com suporte opcional a recorrência."""
+    """Cria lançamento manual (formulário) com suporte opcional a recorrência ou parcelas."""
+    if data.account_id is None and data.card_id is None:
+        raise ValueError("Informe a conta ou o cartão.")
+
+    account = db.get(Account, data.account_id) if data.account_id else None
+    card = db.get(CreditCard, data.card_id) if data.card_id else None
+    if data.account_id and (not account or account.user_id != user_id):
+        raise ValueError("Conta inválida.")
+    if data.card_id and (not card or card.user_id != user_id):
+        raise ValueError("Cartão inválido.")
+
+    if installment_count:
+        if not account:
+            raise ValueError("Parcelamento exige conta associada.")
+        category = db.get(Category, data.category_id) if data.category_id else None
+        common = dict(
+            amount=format_brl(data.amount_cents),
+            description=data.description,
+            account_name=account.name,
+            card_name=card.name if card else None,
+            category_name=category.name if category else ("Outros" if data.type == "expense" else "Salário"),
+            competence_date=data.competence_date,
+            due_date=data.due_date,
+            payment_date=data.payment_date,
+            transaction_date=data.transaction_date,
+            status=data.status,
+            installment_count=installment_count,
+            installment_interval=installment_interval,  # type: ignore[arg-type]
+            installment_amount_basis=installment_amount_basis,  # type: ignore[arg-type]
+        )
+        if data.type == "expense":
+            return register_expense(db, user_id, RegisterExpenseInput(**common))
+        return register_income(db, user_id, RegisterIncomeInput(**common))
+
     if not frequency:
         tx = create_transaction(db, user_id, data)
         return format_transaction(tx)
 
-    account = db.get(Account, data.account_id)
-    if not account or account.user_id != user_id:
-        raise ValueError("Conta inválida.")
+    if not account:
+        raise ValueError("Lançamento fixo exige conta associada.")
     category = db.get(Category, data.category_id) if data.category_id else None
 
     if data.type == "expense":
@@ -393,6 +652,7 @@ def create_user_transaction(
             amount=format_brl(data.amount_cents),
             description=data.description,
             account_name=account.name,
+            card_name=card.name if card else None,
             category_name=category.name if category else "Outros",
             competence_date=data.competence_date,
             due_date=data.due_date,
@@ -408,6 +668,7 @@ def create_user_transaction(
         amount=format_brl(data.amount_cents),
         description=data.description,
         account_name=account.name,
+        card_name=card.name if card else None,
         category_name=category.name if category else "Salário",
         competence_date=data.competence_date,
         due_date=data.due_date,
@@ -445,6 +706,12 @@ def realize_planned(db: Session, user_id: int, payload: RealizePlannedInput) -> 
         raise ValueError("Lançamento previsto não encontrado.")
     if planned.status != "planned":
         raise ValueError("O lançamento informado não é um previsto.")
+    if planned.invoice_id:
+        invoice = db.get(CardInvoice, planned.invoice_id)
+        if invoice and invoice.status == "paid":
+            raise ValueError(
+                "Esta fatura já foi paga; o lançamento foi liquidado com o pagamento da fatura."
+            )
     if planned.type in {"transfer_out", "transfer_in"}:
         raise ValueError("Transferências não podem ser previstas.")
 
@@ -458,12 +725,22 @@ def realize_planned(db: Session, user_id: int, payload: RealizePlannedInput) -> 
         raise ValueError("Este previsto já foi realizado.")
 
     account_name = payload.account_name
-    if account_name and account_name.strip():
+    card = planned.card
+    if card:
+        account = None
+        if account_name and account_name.strip():
+            account = resolve_account_for_transaction(db, user_id, account_name.strip())
+        elif planned.account_id:
+            account = planned.account
+    elif account_name and account_name.strip():
         account = resolve_account_for_transaction(db, user_id, account_name.strip())
     else:
         account = planned.account
 
-    if account.id != planned.account_id:
+    if account is None and card is None:
+        raise ValueError("Conta ou cartão do previsto não encontrado.")
+
+    if account and planned.account_id and account.id != planned.account_id:
         planned.account_id = account.id
 
     category = planned.category
@@ -492,7 +769,8 @@ def realize_planned(db: Session, user_id: int, payload: RealizePlannedInput) -> 
 
     actual = Transaction(
         user_id=user_id,
-        account_id=account.id,
+        account_id=account.id if account else planned.account_id,
+        card_id=planned.card_id,
         category_id=category.id if category else None,
         type=planned.type,
         amount_cents=amount_cents,
@@ -505,6 +783,11 @@ def realize_planned(db: Session, user_id: int, payload: RealizePlannedInput) -> 
         source_planned_id=planned.id,
     )
     db.add(actual)
+    db.flush()
+    if card and planned.type in ("expense", "income"):
+        from app.services.credit_cards import assign_transaction_to_invoice
+
+        assign_transaction_to_invoice(db, card, actual)
     db.commit()
     db.refresh(planned)
     db.refresh(actual)
@@ -613,6 +896,10 @@ def find_transactions(
                 joinedload(Transaction.account),
                 joinedload(Transaction.category),
                 joinedload(Transaction.counterparty_account),
+                joinedload(Transaction.card),
+                joinedload(Transaction.recurrence),
+                joinedload(Transaction.installment_plan),
+                joinedload(Transaction.invoice),
             )
             .where(Transaction.id == transaction_id, Transaction.user_id == user_id)
         )
@@ -624,6 +911,10 @@ def find_transactions(
             joinedload(Transaction.account),
             joinedload(Transaction.category),
             joinedload(Transaction.counterparty_account),
+            joinedload(Transaction.card),
+            joinedload(Transaction.recurrence),
+            joinedload(Transaction.installment_plan),
+            joinedload(Transaction.invoice),
         )
         .where(Transaction.user_id == user_id)
         .order_by(Transaction.transaction_date.desc(), Transaction.id.desc())
@@ -635,6 +926,51 @@ def find_transactions(
         stmt = stmt.where(Transaction.amount_cents == decimal_to_cents(amount))
 
     return list(db.scalars(stmt.limit(limit)).all())
+
+
+def find_transfer(
+    db: Session,
+    user_id: int,
+    *,
+    transaction_id: int | None = None,
+    amount: str | None = None,
+) -> Transaction | None:
+    if transaction_id is not None:
+        tx = db.scalar(
+            select(Transaction)
+            .options(
+                joinedload(Transaction.account),
+                joinedload(Transaction.counterparty_account),
+            )
+            .where(Transaction.id == transaction_id, Transaction.user_id == user_id)
+        )
+        if not tx or not tx.transfer_group_id:
+            return None
+    else:
+        if not amount or not amount.strip():
+            return None
+        tx = db.scalar(
+            select(Transaction)
+            .options(
+                joinedload(Transaction.account),
+                joinedload(Transaction.counterparty_account),
+            )
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.type == "transfer_out",
+                Transaction.transfer_group_id.isnot(None),
+                Transaction.amount_cents == decimal_to_cents(amount),
+            )
+            .order_by(Transaction.transaction_date.desc(), Transaction.id.desc())
+            .limit(1)
+        )
+        if not tx:
+            return None
+
+    if tx.type == "transfer_in":
+        pair = _get_transfer_pair(db, user_id, tx)
+        tx = next((leg for leg in pair if leg.type == "transfer_out"), tx)
+    return tx
 
 
 def find_transaction(
@@ -656,6 +992,102 @@ def find_transaction(
     return results[0] if results else None
 
 
+def update_transfer(db: Session, user_id: int, payload: UpdateTransferInput) -> dict:
+    if not any(
+        [
+            payload.from_account_name,
+            payload.to_account_name,
+            payload.amount,
+            payload.description,
+            payload.transaction_date,
+            payload.competence_date,
+            payload.due_date,
+            payload.payment_date,
+        ]
+    ):
+        raise ValueError("Informe ao menos um campo para atualizar a transferência.")
+
+    out_tx = find_transfer(
+        db,
+        user_id,
+        transaction_id=payload.transaction_id,
+        amount=payload.amount if not payload.transaction_id else None,
+    )
+    if not out_tx:
+        raise ValueError("Transferência não encontrada.")
+
+    pair = _get_transfer_pair(db, user_id, out_tx)
+    in_tx = next(leg for leg in pair if leg.type == "transfer_in")
+
+    from_account = out_tx.account
+    to_account = in_tx.account
+    if payload.from_account_name and payload.from_account_name.strip():
+        from_account = resolve_account_for_transaction(db, user_id, payload.from_account_name.strip())
+    if payload.to_account_name and payload.to_account_name.strip():
+        to_account = resolve_account_for_transaction(db, user_id, payload.to_account_name.strip())
+    if from_account.id == to_account.id:
+        raise ValueError("A conta de origem e destino devem ser diferentes.")
+
+    out_tx.account_id = from_account.id
+    out_tx.counterparty_account_id = to_account.id
+    in_tx.account_id = to_account.id
+    in_tx.counterparty_account_id = from_account.id
+
+    if payload.amount and payload.amount.strip():
+        amount_cents = decimal_to_cents(payload.amount)
+        out_tx.amount_cents = amount_cents
+        in_tx.amount_cents = amount_cents
+
+    if payload.transaction_date or payload.competence_date or payload.due_date or payload.payment_date:
+        comp, due, payment, cash_date = resolve_transaction_dates(
+            out_tx.status,
+            competence_date=payload.competence_date or out_tx.competence_date,
+            due_date=payload.due_date or out_tx.due_date,
+            payment_date=payload.payment_date or out_tx.payment_date,
+            transaction_date=payload.transaction_date or out_tx.transaction_date,
+        )
+        for leg in pair:
+            leg.competence_date = comp
+            leg.due_date = due
+            leg.payment_date = payment
+            leg.transaction_date = cash_date
+
+    if payload.description and payload.description.strip():
+        description = payload.description.strip()[:255]
+        out_tx.description = description
+        in_tx.description = f"Transferência de {from_account.name}"
+
+    db.commit()
+    db.refresh(out_tx)
+    db.refresh(in_tx)
+    return format_transfer(out_tx, in_tx, from_account.name, to_account.name)
+
+
+def _update_installment_descriptions(
+    db: Session,
+    user_id: int,
+    tx: Transaction,
+    new_base: str,
+) -> None:
+    """Atualiza a descrição-base de todas as parcelas do mesmo plano."""
+    siblings = list(
+        db.scalars(
+            select(Transaction).where(
+                Transaction.user_id == user_id,
+                Transaction.installment_plan_id == tx.installment_plan_id,
+            )
+        ).all()
+    )
+    plan = tx.installment_plan
+    count = plan.installment_count if plan else None
+    base = new_base.strip()[:240]
+    for sibling in siblings:
+        if count and sibling.installment_index:
+            sibling.description = f"{base} {sibling.installment_index}/{count}"[:255]
+        else:
+            sibling.description = base[:255]
+
+
 def update_transaction(db: Session, user_id: int, payload: UpdateTransactionInput) -> dict:
     if not any(
         [
@@ -668,12 +1100,20 @@ def update_transaction(db: Session, user_id: int, payload: UpdateTransactionInpu
             payload.competence_date,
             payload.due_date,
             payload.payment_date,
+            payload.invoice_due_month is not None,
         ]
     ):
         raise ValueError("Informe ao menos um campo para atualizar o lançamento.")
 
+    # Com valor, o amount identifica o lançamento; description é o novo texto
+    # (não usar a descrição nova como filtro de busca).
     lookup_description = None
-    if payload.description and not payload.transaction_id:
+    if (
+        payload.transaction_id is None
+        and not (payload.amount and payload.amount.strip())
+        and payload.description
+        and payload.description.strip()
+    ):
         lookup_description = payload.description
 
     tx = find_transaction(
@@ -689,7 +1129,11 @@ def update_transaction(db: Session, user_id: int, payload: UpdateTransactionInpu
     if payload.amount and payload.amount.strip():
         tx.amount_cents = decimal_to_cents(payload.amount)
     if payload.description and payload.description.strip():
-        tx.description = payload.description.strip()[:255]
+        new_desc = payload.description.strip()[:255]
+        if tx.installment_plan_id and tx.installment_index:
+            _update_installment_descriptions(db, user_id, tx, new_desc)
+        else:
+            tx.description = new_desc
     if payload.account_name and payload.account_name.strip():
         account = resolve_account_for_transaction(db, user_id, payload.account_name.strip())
         tx.account_id = account.id
@@ -700,7 +1144,14 @@ def update_transaction(db: Session, user_id: int, payload: UpdateTransactionInpu
         if not category:
             raise ValueError(f"Categoria '{payload.category_name}' não encontrada.")
         tx.category_id = category.id
-    if payload.transaction_date or payload.competence_date or payload.due_date or payload.payment_date:
+
+    dates_changed = bool(
+        payload.transaction_date
+        or payload.competence_date
+        or payload.due_date
+        or payload.payment_date
+    )
+    if dates_changed:
         comp, due, payment, cash_date = resolve_transaction_dates(
             tx.status,
             competence_date=payload.competence_date or tx.competence_date,
@@ -713,6 +1164,40 @@ def update_transaction(db: Session, user_id: int, payload: UpdateTransactionInpu
         tx.payment_date = payment
         tx.transaction_date = cash_date
 
+    invoice_period_changed = False
+    if payload.invoice_due_month is not None:
+        if not tx.card_id:
+            raise ValueError("Só lançamentos no cartão podem mudar de fatura.")
+        card = db.get(CreditCard, tx.card_id)
+        if not card or card.user_id != user_id:
+            raise ValueError("Cartão não encontrado.")
+        from app.services.credit_cards import (
+            reassign_card_transaction_invoice,
+            resolve_invoice_by_due_period,
+        )
+
+        due_year = payload.invoice_due_year
+        if due_year is None:
+            from app.timezone import local_today
+
+            due_year = local_today().year
+            if payload.invoice_due_month > local_today().month + 2:
+                due_year -= 1
+        invoice = resolve_invoice_by_due_period(
+            db,
+            card,
+            due_month=payload.invoice_due_month,
+            due_year=due_year,
+        )
+        reassign_card_transaction_invoice(db, card, tx, invoice)
+        invoice_period_changed = True
+    elif dates_changed and tx.card_id:
+        card = db.get(CreditCard, tx.card_id)
+        if card and card.user_id == user_id:
+            from app.services.credit_cards import assign_transaction_to_invoice
+
+            assign_transaction_to_invoice(db, card, tx)
+
     if tx.transfer_group_id:
         pair = _get_transfer_pair(db, user_id, tx)
         for leg in pair:
@@ -720,12 +1205,7 @@ def update_transaction(db: Session, user_id: int, payload: UpdateTransactionInpu
                 continue
             if payload.amount and payload.amount.strip():
                 leg.amount_cents = tx.amount_cents
-            if (
-                payload.transaction_date
-                or payload.competence_date
-                or payload.due_date
-                or payload.payment_date
-            ):
+            if dates_changed:
                 leg.competence_date = tx.competence_date
                 leg.due_date = tx.due_date
                 leg.payment_date = tx.payment_date
@@ -742,7 +1222,10 @@ def update_transaction(db: Session, user_id: int, payload: UpdateTransactionInpu
 
     db.commit()
     db.refresh(tx)
-    return format_transaction(tx)
+    result = format_transaction(tx)
+    if invoice_period_changed and result.get("invoice_label"):
+        result["invoice_moved"] = True
+    return result
 
 
 def delete_transaction(db: Session, user_id: int, payload: DeleteTransactionInput) -> dict:
@@ -779,8 +1262,11 @@ def list_transactions(
             joinedload(Transaction.account),
             joinedload(Transaction.category),
             joinedload(Transaction.counterparty_account),
+            joinedload(Transaction.card),
             joinedload(Transaction.user),
             joinedload(Transaction.recurrence),
+            joinedload(Transaction.installment_plan),
+            joinedload(Transaction.invoice),
         )
         .order_by(Transaction.transaction_date.desc(), Transaction.id.desc())
         .limit(payload.limit)
@@ -794,6 +1280,10 @@ def list_transactions(
             stmt = stmt.where(Transaction.type == payload.type)
     if payload.status != "all":
         stmt = stmt.where(Transaction.status == payload.status)
+    if payload.start_date is not None:
+        stmt = stmt.where(Transaction.transaction_date >= payload.start_date)
+    if payload.end_date is not None:
+        stmt = stmt.where(Transaction.transaction_date <= payload.end_date)
     rows = db.scalars(stmt).unique().all()
     include_user = user_id is None
     planned_ids = [tx.id for tx in rows if tx.status == "planned"]
@@ -854,6 +1344,10 @@ def shift_ref_date(period: str, ref_date: date, delta: int) -> date:
     return date(year, month, 1)
 
 
+def format_period_label(period: str, period_start: date, period_end: date) -> str:
+    return _period_labels(period, period_start, period_end)[0]
+
+
 def _period_labels(period: str, period_start: date, period_end: date) -> tuple[str, str]:
     if period == "day":
         period_label = period_start.strftime("%d/%m/%Y")
@@ -903,6 +1397,7 @@ def _account_balance_at(db: Session, account: Account, as_of: date) -> int:
     tx_filters = [
         Transaction.user_id == account.user_id,
         Transaction.account_id == account.id,
+        Transaction.card_id.is_(None),
         Transaction.transaction_date <= as_of,
         Transaction.status == "actual",
     ]
@@ -927,7 +1422,10 @@ def _account_balance_at(db: Session, account: Account, as_of: date) -> int:
 def _sum_account_balances_as_of(
     db: Session, user_id: int | None, as_of: date
 ) -> int:
-    stmt = select(Account).where(Account.is_active.is_(True))
+    stmt = select(Account).where(
+        Account.is_active.is_(True),
+        Account.account_type != "cartao",
+    )
     if user_id is not None:
         stmt = stmt.where(Account.user_id == user_id)
     accounts = db.scalars(stmt).all()
@@ -947,11 +1445,12 @@ def _sum_transactions(
     stmt = (
         select(func.coalesce(func.sum(Transaction.amount_cents), 0))
         .select_from(Transaction)
-        .join(Account, Transaction.account_id == Account.id)
+        .outerjoin(Account, Transaction.account_id == Account.id)
         .where(Transaction.type == tx_type, Transaction.status == status)
     )
     if user_id is not None:
         stmt = stmt.where(Transaction.user_id == user_id)
+    stmt = stmt.where(Transaction.card_id.is_(None))
     stmt = stmt.where(
         or_(
             Account.opening_balance_date.is_(None),
@@ -965,6 +1464,60 @@ def _sum_transactions(
     if end is not None:
         stmt = stmt.where(Transaction.transaction_date <= end)
     return int(db.scalar(stmt) or 0)
+
+
+def _category_totals(
+    db: Session,
+    user_id: int | None,
+    tx_type: str,
+    *,
+    start: date,
+    end: date,
+    status: str = "actual",
+) -> list[dict]:
+    """Totais realizados por categoria no período (mesmas regras de `_sum_transactions`)."""
+    stmt = (
+        select(
+            Category.id,
+            Category.name,
+            func.coalesce(func.sum(Transaction.amount_cents), 0).label("total_cents"),
+        )
+        .select_from(Transaction)
+        .outerjoin(Account, Transaction.account_id == Account.id)
+        .outerjoin(Category, Transaction.category_id == Category.id)
+        .where(Transaction.type == tx_type, Transaction.status == status)
+        .where(Transaction.card_id.is_(None))
+        .where(Transaction.transaction_date >= start)
+        .where(Transaction.transaction_date <= end)
+        .where(
+            or_(
+                Account.opening_balance_date.is_(None),
+                Transaction.transaction_date >= Account.opening_balance_date,
+            )
+        )
+        .group_by(Category.id, Category.name)
+        .order_by(func.sum(Transaction.amount_cents).desc())
+    )
+    if user_id is not None:
+        stmt = stmt.where(Transaction.user_id == user_id)
+
+    rows = db.execute(stmt).all()
+    total = sum(int(row.total_cents or 0) for row in rows)
+    results: list[dict] = []
+    for row in rows:
+        cents = int(row.total_cents or 0)
+        if cents <= 0:
+            continue
+        results.append(
+            {
+                "category_id": row.id,
+                "category": row.name or "Sem categoria",
+                "amount_cents": cents,
+                "amount": format_brl(cents),
+                "percent": round((cents / total) * 100, 1) if total else 0,
+            }
+        )
+    return results
 
 
 def _realized_planned_ids_subquery(user_id: int | None):
@@ -1106,6 +1659,21 @@ def get_summary(db: Session, user_id: int | None, payload: SummaryInput) -> dict
     )
 
     plan_vs_actual = _plan_vs_actual_pairs(db, user_id, period_start, period_end)
+    expenses_by_category = _category_totals(
+        db, user_id, "expense", start=period_start, end=period_end
+    )
+    income_by_category = _category_totals(
+        db, user_id, "income", start=period_start, end=period_end
+    )
+
+    from app.services.credit_cards import invoice_dashboard
+
+    card_invoices = invoice_dashboard(
+        db,
+        user_id,
+        period_start=period_start,
+        period_end=period_end,
+    )
 
     return {
         "period": period,
@@ -1143,6 +1711,9 @@ def get_summary(db: Session, user_id: int | None, payload: SummaryInput) -> dict
         "projected_ending_balance_cents": projected_ending_balance_cents,
         "projected_ending_balance": format_brl(projected_ending_balance_cents),
         "plan_vs_actual": plan_vs_actual,
+        "expenses_by_category": expenses_by_category,
+        "income_by_category": income_by_category,
+        "card_invoices": card_invoices,
     }
 
 
@@ -1174,7 +1745,11 @@ def get_budget_status(
         spent = int(spent or 0)
         limit = budget.limit_cents
         item = {
+            "id": budget.id,
+            "category_id": budget.category_id,
             "category": budget.category.name,
+            "year": budget.year,
+            "month": budget.month,
             "limit_cents": limit,
             "spent_cents": spent,
             "remaining_cents": limit - spent,
@@ -1191,6 +1766,16 @@ def get_budget_status(
 
 
 def create_budget(db: Session, user_id: int, payload: BudgetCreate) -> dict:
+    existing = db.scalar(
+        select(Budget).where(
+            Budget.user_id == user_id,
+            Budget.category_id == payload.category_id,
+            Budget.year == payload.year,
+            Budget.month == payload.month,
+        )
+    )
+    if existing:
+        raise ValueError("Já existe orçamento para esta categoria neste mês.")
     budget = Budget(user_id=user_id, **payload.model_dump())
     db.add(budget)
     db.commit()
@@ -1202,6 +1787,108 @@ def create_budget(db: Session, user_id: int, payload: BudgetCreate) -> dict:
         "month": budget.month,
         "limit": format_brl(budget.limit_cents),
     }
+
+
+def get_budget(db: Session, user_id: int, budget_id: int) -> dict | None:
+    budget = db.scalar(
+        select(Budget)
+        .options(joinedload(Budget.category))
+        .where(Budget.id == budget_id, Budget.user_id == user_id)
+    )
+    if not budget:
+        return None
+    spent_stmt = select(func.coalesce(func.sum(Transaction.amount_cents), 0)).where(
+        Transaction.user_id == user_id,
+        Transaction.category_id == budget.category_id,
+        Transaction.type == "expense",
+        Transaction.status == "actual",
+        func.extract("year", Transaction.competence_date) == budget.year,
+        func.extract("month", Transaction.competence_date) == budget.month,
+    )
+    spent = int(db.scalar(spent_stmt) or 0)
+    limit = budget.limit_cents
+    return {
+        "id": budget.id,
+        "category_id": budget.category_id,
+        "category": budget.category.name,
+        "year": budget.year,
+        "month": budget.month,
+        "limit_cents": limit,
+        "spent_cents": spent,
+        "remaining_cents": limit - spent,
+        "limit": format_brl(limit),
+        "spent": format_brl(spent),
+        "remaining": format_brl(limit - spent),
+        "percent_used": round((spent / limit) * 100, 1) if limit else 0,
+    }
+
+
+def update_budget(
+    db: Session,
+    user_id: int,
+    budget_id: int,
+    *,
+    category_id: int | None = None,
+    year: int | None = None,
+    month: int | None = None,
+    limit_cents: int | None = None,
+) -> dict:
+    budget = db.scalar(
+        select(Budget)
+        .options(joinedload(Budget.category))
+        .where(Budget.id == budget_id, Budget.user_id == user_id)
+    )
+    if not budget:
+        raise ValueError("Orçamento não encontrado.")
+
+    new_category_id = category_id if category_id is not None else budget.category_id
+    new_year = year if year is not None else budget.year
+    new_month = month if month is not None else budget.month
+
+    if category_id is not None:
+        category = db.get(Category, category_id)
+        if not category or category.user_id != user_id:
+            raise ValueError("Categoria inválida.")
+        budget.category_id = category_id
+    if year is not None:
+        budget.year = year
+    if month is not None:
+        if month < 1 or month > 12:
+            raise ValueError("Mês inválido.")
+        budget.month = month
+    if limit_cents is not None:
+        if limit_cents <= 0:
+            raise ValueError("Limite deve ser maior que zero.")
+        budget.limit_cents = limit_cents
+
+    duplicate = db.scalar(
+        select(Budget).where(
+            Budget.user_id == user_id,
+            Budget.category_id == new_category_id,
+            Budget.year == new_year,
+            Budget.month == new_month,
+            Budget.id != budget.id,
+        )
+    )
+    if duplicate:
+        raise ValueError("Já existe orçamento para esta categoria neste mês.")
+
+    db.commit()
+    db.refresh(budget)
+    return get_budget(db, user_id, budget.id) or {
+        "id": budget.id,
+        "limit": format_brl(budget.limit_cents),
+    }
+
+
+def delete_budget(db: Session, user_id: int, budget_id: int) -> None:
+    budget = db.scalar(
+        select(Budget).where(Budget.id == budget_id, Budget.user_id == user_id)
+    )
+    if not budget:
+        raise ValueError("Orçamento não encontrado.")
+    db.delete(budget)
+    db.commit()
 
 
 def find_account(
@@ -1294,7 +1981,172 @@ def update_account(db: Session, user_id: int, payload: UpdateAccountInput) -> di
 
     db.commit()
     db.refresh(account)
-    return format_account(account)
+    return format_account(account, db=db)
+
+
+def create_card(db: Session, user_id: int, payload: CreateCardInput) -> dict:
+    existing = db.scalar(
+        select(CreditCard).where(
+            CreditCard.user_id == user_id,
+            func.lower(CreditCard.name) == payload.name.strip().lower(),
+        )
+    )
+    if existing:
+        raise ValueError(f"Já existe um cartão com o nome '{payload.name}'.")
+
+    settlement = resolve_account_for_transaction(
+        db, user_id, payload.settlement_account_name.strip()
+    )
+    settlement_account_id = settlement.id
+
+    credit_limit_cents = None
+    if payload.credit_limit and payload.credit_limit.strip():
+        credit_limit_cents = decimal_to_cents(payload.credit_limit)
+
+    card = CreditCard(
+        user_id=user_id,
+        name=payload.name.strip(),
+        institution=payload.institution.strip() if payload.institution else None,
+        credit_limit_cents=credit_limit_cents,
+        closing_day=payload.closing_day,
+        due_day=payload.due_day,
+        settlement_account_id=settlement_account_id,
+    )
+    db.add(card)
+    db.commit()
+    db.refresh(card)
+    from app.services.credit_cards import ensure_invoices_for_card
+
+    ensure_invoices_for_card(db, card)
+    from app.services.credit_cards import format_credit_card
+
+    return format_credit_card(card, db=db)
+
+
+def find_card(
+    db: Session,
+    user_id: int,
+    *,
+    card_id: int | None = None,
+    card_name: str | None = None,
+) -> CreditCard | None:
+    if card_id is not None:
+        return db.scalar(
+            select(CreditCard).where(
+                CreditCard.id == card_id,
+                CreditCard.user_id == user_id,
+                CreditCard.is_active.is_(True),
+            )
+        )
+
+    if not card_name or not card_name.strip():
+        return None
+
+    normalized = card_name.strip()
+    card = db.scalar(
+        select(CreditCard).where(
+            CreditCard.user_id == user_id,
+            CreditCard.is_active.is_(True),
+            func.lower(CreditCard.name) == normalized.lower(),
+        )
+    )
+    if card:
+        return card
+
+    return db.scalar(
+        select(CreditCard).where(
+            CreditCard.user_id == user_id,
+            CreditCard.is_active.is_(True),
+            func.lower(CreditCard.name).contains(normalized.lower()),
+        )
+    )
+
+
+def update_card(db: Session, user_id: int, payload: UpdateCardInput) -> dict:
+    if not any(
+        [
+            payload.name,
+            payload.institution is not None,
+            payload.credit_limit is not None,
+            payload.closing_day is not None,
+            payload.due_day is not None,
+            payload.settlement_account_name,
+        ]
+    ):
+        raise ValueError("Informe ao menos um campo para atualizar o cartão.")
+
+    card = find_card(
+        db,
+        user_id,
+        card_id=payload.card_id,
+        card_name=payload.card_name,
+    )
+    if not card:
+        raise ValueError("Cartão não encontrado.")
+
+    if payload.name and payload.name.strip():
+        new_name = payload.name.strip()
+        duplicate = db.scalar(
+            select(CreditCard).where(
+                CreditCard.user_id == user_id,
+                func.lower(CreditCard.name) == new_name.lower(),
+                CreditCard.id != card.id,
+            )
+        )
+        if duplicate:
+            raise ValueError(f"Já existe um cartão com o nome '{new_name}'.")
+        card.name = new_name
+
+    if payload.institution is not None:
+        card.institution = payload.institution.strip() or None
+
+    if payload.credit_limit is not None:
+        if payload.credit_limit.strip():
+            card.credit_limit_cents = decimal_to_cents(payload.credit_limit)
+        else:
+            card.credit_limit_cents = None
+
+    cycle_changed = False
+    if payload.closing_day is not None:
+        card.closing_day = payload.closing_day
+        cycle_changed = True
+    if payload.due_day is not None:
+        card.due_day = payload.due_day
+        cycle_changed = True
+
+    if payload.settlement_account_name and payload.settlement_account_name.strip():
+        settlement = resolve_account_for_transaction(
+            db, user_id, payload.settlement_account_name.strip()
+        )
+        card.settlement_account_id = settlement.id
+
+    db.commit()
+    db.refresh(card)
+    if cycle_changed:
+        from app.services.credit_cards import ensure_invoices_for_card
+
+        ensure_invoices_for_card(db, card)
+    from app.services.credit_cards import format_credit_card
+
+    return format_credit_card(card, db=db)
+
+
+def deactivate_card(db: Session, user_id: int, payload: DeleteCardInput) -> dict:
+    card = find_card(
+        db,
+        user_id,
+        card_id=payload.card_id,
+        card_name=payload.card_name,
+    )
+    if not card:
+        raise ValueError("Cartão não encontrado.")
+
+    card.is_active = False
+    db.commit()
+    db.refresh(card)
+    from app.services.credit_cards import format_credit_card
+
+    return format_credit_card(card, db=db)
 
 
 def create_account(db: Session, user_id: int, payload: CreateAccountInput) -> dict:
@@ -1305,6 +2157,7 @@ def create_account(db: Session, user_id: int, payload: CreateAccountInput) -> di
         raise ValueError(f"Já existe uma conta com o nome '{payload.name}'.")
 
     opening_cents = 0
+    opening_date = None
     if payload.opening_balance and payload.opening_balance.strip():
         opening_cents = decimal_to_cents(payload.opening_balance)
     opening_date = _resolve_opening_balance_date(
@@ -1323,7 +2176,7 @@ def create_account(db: Session, user_id: int, payload: CreateAccountInput) -> di
     db.add(account)
     db.commit()
     db.refresh(account)
-    return format_account(account)
+    return format_account(account, db=db)
 
 
 def create_category(db: Session, user_id: int, payload) -> dict:
@@ -1376,7 +2229,6 @@ ACCOUNT_TYPE_LABELS = {
     "corrente": "Corrente",
     "poupanca": "Poupança",
     "carteira": "Carteira",
-    "cartao": "Cartão",
 }
 
 TRANSACTION_TYPE_LABELS = {
@@ -1411,8 +2263,8 @@ def format_transfer(
     }
 
 
-def format_account(account: Account) -> dict:
-    return {
+def format_account(account: Account, *, db: Session | None = None) -> dict:
+    data = {
         "id": account.id,
         "name": account.name,
         "institution": account.institution,
@@ -1431,6 +2283,7 @@ def format_account(account: Account) -> dict:
             else None
         ),
     }
+    return data
 
 
 def format_transaction(
@@ -1440,6 +2293,30 @@ def format_transaction(
     realized_actual_id: int | None = None,
 ) -> dict:
     from app.services.recurrence import format_recurrence_label
+
+    def _installment_label_for_tx(transaction: Transaction) -> str | None:
+        if not transaction.installment_plan_id or not transaction.installment_index:
+            return None
+        plan = transaction.installment_plan
+        if plan:
+            from app.services.installments import format_installment_label
+
+            return format_installment_label(
+                transaction.installment_index,
+                plan.installment_count,
+                plan.interval,
+            )
+        return f"{transaction.installment_index}/?"
+
+    def _invoice_label_for_tx(transaction: Transaction) -> str | None:
+        if not transaction.invoice_id:
+            return None
+        invoice = transaction.invoice
+        if invoice:
+            from app.services.credit_cards import format_invoice_label
+
+            return format_invoice_label(invoice)
+        return "Fatura"
 
     counterparty = None
     if tx.counterparty_account:
@@ -1466,8 +2343,13 @@ def format_transaction(
         "payment_date_label": (
             tx.payment_date.strftime("%d/%m/%Y") if tx.payment_date else None
         ),
+        "account_id": tx.account_id,
         "account": tx.account.name if tx.account else None,
+        "card_id": tx.card_id,
+        "card": tx.card.name if tx.card else None,
+        "category_id": tx.category_id,
         "category": tx.category.name if tx.category else None,
+        "counterparty_account_id": tx.counterparty_account_id,
         "transfer_group_id": tx.transfer_group_id,
         "counterparty_account": counterparty,
         "source_planned_id": tx.source_planned_id,
@@ -1475,6 +2357,15 @@ def format_transaction(
         "frequency": tx.recurrence.frequency if tx.recurrence else None,
         "recurrence_label": (
             format_recurrence_label(tx.recurrence.frequency) if tx.recurrence else None
+        ),
+        "installment_plan_id": tx.installment_plan_id,
+        "installment_index": tx.installment_index,
+        "installment_label": (
+            _installment_label_for_tx(tx) if tx.installment_plan_id else None
+        ),
+        "invoice_id": tx.invoice_id,
+        "invoice_label": (
+            _invoice_label_for_tx(tx) if tx.invoice_id else None
         ),
         "is_realized": status == "planned" and realized_actual_id is not None,
         "realized_actual_id": realized_actual_id,
@@ -1489,7 +2380,15 @@ def format_transaction(
 def account_balances(
     db: Session, user_id: int | None, *, as_of: date | None = None
 ) -> list[dict]:
-    stmt = select(Account).where(Account.is_active.is_(True))
+    if user_id is not None:
+        from app.services.credit_cards import sync_credit_cards
+
+        sync_credit_cards(db, user_id, today=as_of or local_today())
+
+    stmt = select(Account).where(
+        Account.is_active.is_(True),
+        Account.account_type != "cartao",
+    )
     if user_id is not None:
         stmt = stmt.where(Account.user_id == user_id)
     accounts = db.scalars(stmt.options(joinedload(Account.user))).unique().all()

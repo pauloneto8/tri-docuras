@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app.chat_format import chat_md
 from app.config import settings
 from app.routers import api, auth, pages
 from app.security.csrf import ensure_csrf_token
@@ -58,6 +59,7 @@ app.state.templates.env.filters["local_datetime"] = (
     if value is None
     else to_local_datetime(value).strftime(fmt)
 )
+app.state.templates.env.filters["chat_md"] = chat_md
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 

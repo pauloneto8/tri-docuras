@@ -1,63 +1,64 @@
 {% extends "base.html" %}
 {% block title %}Orçamentos — AssistFin{% endblock %}
 {% block content %}
-<div class="grid lg:grid-cols-3 gap-6">
-  <section class="lg:col-span-2 rounded-xl bg-slate-900 border border-slate-800 p-5">
-    <h2 class="text-lg font-semibold mb-4">Orçamentos — {{ today.month }}/{{ today.year }}</h2>
-    {% if budgets %}
-    <div class="space-y-4">
-      {% for b in budgets %}
-      <div class="rounded-lg bg-slate-800/50 p-4">
-        <div class="flex justify-between mb-2">
-          <span class="font-medium">
-            {{ b.category }}
-          </span>
-          <span class="text-sm text-slate-400">{{ b.percent_used }}% usado</span>
-        </div>
-        <div class="flex justify-between text-sm mb-2">
-          <span>Gasto: R$ {{ b.spent }}</span>
-          <span>Limite: R$ {{ b.limit }}</span>
-          <span>Restante: R$ {{ b.remaining }}</span>
-        </div>
-        <div class="h-2 rounded bg-slate-700 overflow-hidden">
-          <div class="h-full {% if b.percent_used > 90 %}bg-rose-500{% elif b.percent_used > 70 %}bg-amber-500{% else %}bg-emerald-500{% endif %}"
-               style="width: {{ [b.percent_used, 100]|min }}%"></div>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <p class="text-slate-400">Nenhum orçamento definido para este mês.</p>
-    {% endif %}
-  </section>
+{% if success %}
+<p class="mb-4 rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-2 text-emerald-300 text-sm">{{ success }}</p>
+{% endif %}
+{% if error %}
+<p class="mb-4 rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-2 text-rose-300 text-sm">{{ error }}</p>
+{% endif %}
 
-  <section class="rounded-xl bg-slate-900 border border-slate-800 p-5 h-fit">
-    <h2 class="text-lg font-semibold mb-4">Definir orçamento</h2>
-    <form method="post" action="/budgets" class="space-y-3">
-      <div>
-        <label class="block text-sm text-slate-400 mb-1">Categoria</label>
-        <select name="category_id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
-          {% for cat in categories %}
-          <option value="{{ cat.id }}">{{ cat.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="grid grid-cols-2 gap-2">
-        <div>
-          <label class="block text-sm text-slate-400 mb-1">Ano</label>
-          <input name="year" type="number" value="{{ today.year }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
-        </div>
-        <div>
-          <label class="block text-sm text-slate-400 mb-1">Mês</label>
-          <input name="month" type="number" min="1" max="12" value="{{ today.month }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
-        </div>
-      </div>
-      <div>
-        <label class="block text-sm text-slate-400 mb-1">Limite (R$)</label>
-        <input name="limit" type="text" placeholder="500,00" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
-      </div>
-      <button class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium">Salvar</button>
+<div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h1 class="text-lg font-semibold text-slate-100">Orçamentos</h1>
+    <p class="text-sm text-slate-400">{{ month }}/{{ year }}</p>
+  </div>
+  <div class="flex flex-wrap items-center gap-2">
+    <form method="get" action="/budgets" class="inline-flex items-center gap-2 text-sm">
+      <input name="month" type="number" min="1" max="12" value="{{ month }}" class="w-16 rounded bg-slate-900 border border-slate-700 px-2 py-1.5">
+      <input name="year" type="number" value="{{ year }}" class="w-24 rounded bg-slate-900 border border-slate-700 px-2 py-1.5">
+      <button class="rounded-lg border border-slate-700 px-3 py-1.5 text-slate-300 hover:bg-slate-800">Filtrar</button>
     </form>
-  </section>
+    <a href="/budgets/new" class="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white">Novo orçamento</a>
+  </div>
 </div>
+
+<section class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+  {% if budgets %}
+  <div class="space-y-4">
+    {% for b in budgets %}
+    <div class="rounded-lg bg-slate-800/50 p-4">
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-2">
+        <div class="flex-1">
+          <div class="flex justify-between mb-2 gap-2">
+            <span class="font-medium">{{ b.category }}</span>
+            <span class="text-sm text-slate-400">{{ b.percent_used }}% usado</span>
+          </div>
+          <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm mb-2">
+            <span>Gasto: R$ {{ b.spent }}</span>
+            <span>Limite: R$ {{ b.limit }}</span>
+            <span>Restante: R$ {{ b.remaining }}</span>
+          </div>
+          <div class="h-2 rounded bg-slate-700 overflow-hidden">
+            <div class="h-full {% if b.percent_used > 90 %}bg-rose-500{% elif b.percent_used > 70 %}bg-amber-500{% else %}bg-emerald-500{% endif %}"
+                 style="width: {{ [b.percent_used, 100]|min }}%"></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <a href="/budgets/{{ b.id }}/edit" class="text-sm text-emerald-400 hover:text-emerald-300">Editar</a>
+          <form method="post" action="/budgets/{{ b.id }}/delete" onsubmit="return confirm('Excluir este orçamento?')">
+            <button type="submit" class="text-sm text-slate-400 hover:text-rose-400">Excluir</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-slate-400">
+    Nenhum orçamento definido para este mês.
+    <a href="/budgets/new" class="text-emerald-400 hover:text-emerald-300">Definir orçamento</a>
+  </p>
+  {% endif %}
+</section>
 {% endblock %}

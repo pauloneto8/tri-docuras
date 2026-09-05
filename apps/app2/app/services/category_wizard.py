@@ -149,6 +149,13 @@ def process_wizard_message(session: dict, message: str) -> AgentResponse | None:
 
     if message.strip().lower() in CANCEL_WORDS:
         clear_wizard(session)
+        from app.services.transaction_wizard import (
+            restore_paused_transaction_on_category_cancel,
+        )
+
+        restored = restore_paused_transaction_on_category_cancel(session)
+        if restored:
+            return restored
         return AgentResponse(message="Cadastro de categoria cancelado.", clear_wizard=True, source="wizard")
 
     if wants_list_categories(message):

@@ -4,7 +4,7 @@ description: >-
   Testes do agente de IA do AssistFin: pytest, mocks de Groq/Ollama, wizards,
   intents, transferências e conversas. Use ao criar ou corrigir testes do chat,
   runner, LLM ou antes de deploy de mudanças no agente.
-paths: tests/test_*wizard*.py, tests/test_intents.py, tests/test_intent_llm.py, tests/test_runner_wizard_escape.py, tests/test_llm_fallback.py, tests/test_tools.py, tests/test_conversations.py, tests/test_list_accounts.py, tests/test_list_categories.py, tests/test_transfers.py, tests/test_multi_movements.py, tests/test_agent_suggestions.py, tests/test_agent_cancel.py, app/agent/**, app/services/intents.py
+paths: tests/test_*wizard*.py, tests/test_intents.py, tests/test_intent_llm.py, tests/test_runner_wizard_escape.py, tests/test_llm_first_runner.py, tests/test_llm_fallback.py, tests/test_tools.py, tests/test_conversations.py, tests/test_list_accounts.py, tests/test_list_categories.py, tests/test_transfers.py, tests/test_update_transfer.py, tests/test_multi_movements.py, tests/test_agent_suggestions.py, tests/test_agent_cancel.py, tests/test_chat_format.py, tests/test_installments.py, app/agent/**, app/services/intents.py
 ---
 
 # AssistFin — Testes do agente
@@ -32,6 +32,14 @@ docker compose exec -T app2 python -m pytest \
   tests/test_multi_movements.py \
   tests/test_account_wizard.py \
   tests/test_category_wizard.py \
+  tests/test_card_wizard.py \
+  tests/test_credit_cards.py \
+  tests/test_update_card.py \
+  tests/test_runner_update_card.py \
+  tests/test_update_transfer.py \
+  tests/test_installments.py \
+  tests/test_chat_format.py \
+  tests/test_llm_first_runner.py \
   tests/test_runner_wizard_escape.py \
   tests/test_list_accounts.py \
   tests/test_list_categories.py \
@@ -47,15 +55,23 @@ docker compose exec -T app2 python -m pytest \
 |---------|-----------|
 | `test_intents.py` | listar vs cadastrar conta/categoria |
 | `test_transfers.py` | par, saldos, período sem receita/despesa |
-| `test_transaction_wizard.py` | wizard despesa/receita + slots de data e recorrência |
-| `test_transaction_slots.py` | slots (status, datas, recorrência, conta, categoria) |
+| `test_update_transfer.py` | corrigir origem/destino; regra "corrija a transferência" |
+| `test_transaction_wizard.py` | wizard despesa/receita + slots de data, modo e recorrência |
+| `test_transaction_slots.py` | slots (status, modo, datas, parcelas, recorrência, conta, categoria) |
+| `test_installments.py` | motor, wizard, total vs parcela, parcela inicial, datas |
+| `test_chat_format.py` | filtro `chat_md` (escape, negrito, listas) |
+| `test_llm_first_runner.py` | escape de wizard + LLM; atalhos de intenção |
 | `test_transaction_dates.py` | competência, vencimento, pagamento, orçamento |
 | `test_planned_transactions.py` | previsto/realizado, filtro `status`, projeção, `realize_planned` |
 | `test_recurrence.py` | lançamentos fixos, horizonte, encerrar série, wizard não cancela em "não" |
 | `test_realize_planned_wizard.py` | realizar previsto: pagamento, mesma/outra conta |
 | `test_multi_movements.py` | vários lançamentos numa mensagem; data isolada **não** vira multi |
 | `test_parse_date.py` | `parse_date`, `parse_user_date`, `is_date_only_message` |
-| `test_account_wizard.py` | wizard conta |
+| `test_account_wizard.py` | wizard conta (inclui data do saldo inicial) |
+| `test_card_wizard.py` | wizard cadastro de cartão |
+| `test_credit_cards.py` | domínio cartões e faturas |
+| `test_update_card.py` | `update_card`, `deactivate_card`, rule-based |
+| `test_runner_update_card.py` | confirmação update/delete cartão no runner |
 | `test_category_wizard.py` | wizard categoria, normalização nome |
 | `test_runner_wizard_escape.py` | `process_message` + escape de wizards |
 | `test_list_accounts.py` / `test_list_categories.py` | ferramentas de listagem |
@@ -80,9 +96,11 @@ with patch("app.agent.runner.call_intent_llm", new_callable=AsyncMock, return_va
 - [ ] Transferência altera saldos das contas
 - [ ] Cancelar limpa wizard no servidor
 - [ ] `register_transfer` para "transferir X da A para B"
+- [ ] Corrigir transferência usa `update_transfer`, não `update_transaction`
 - [ ] Regras resolvem "gastei X" sem LLM
 - [ ] Data no wizard (`10/08/2026`) preenche `due_date` sem criar vários lançamentos
 - [ ] Narrativa com "ontem" + vários valores ainda abre multi-lançamento
+- [ ] `chat_md` escapa HTML e converte `*negrito*`
 
 ## Referência
 

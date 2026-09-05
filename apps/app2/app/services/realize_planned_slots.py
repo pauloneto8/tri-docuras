@@ -229,7 +229,7 @@ def try_process_realize_planned_wizard(
     if field is None:
         return SlotResult(tool_call=_wizard_to_tool_call(wizard))
 
-    if is_cancel_message(message):
+    if is_cancel_message(message, session):
         if field != "same_account" or _parse_same_account(message) is None:
             clear_wizard(session)
             return SlotResult(question="Realização cancelada.")

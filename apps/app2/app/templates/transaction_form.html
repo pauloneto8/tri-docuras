@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+{% block title %}Novo lançamento — AssistFin{% endblock %}
+{% block content %}
+<div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h1 class="text-lg font-semibold text-slate-100">Novo lançamento</h1>
+    <p class="text-sm text-slate-400">Cadastre despesa, receita ou transferência.</p>
+  </div>
+  <a href="/transactions" class="text-sm text-emerald-400 hover:text-emerald-300">← Voltar aos movimentos</a>
+</div>
+
+{% if error %}
+<p class="mb-4 rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-2 text-rose-300 text-sm">{{ error }}</p>
+{% endif %}
+
+<section class="max-w-xl rounded-xl bg-slate-900 border border-slate-800 p-5">
+  <form method="post" action="/transactions" class="space-y-3" id="tx-form">
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Tipo</label>
+      <select name="type" id="tx-type" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+        <option value="expense">Despesa</option>
+        <option value="income">Receita</option>
+        <option value="transfer">Transferência</option>
+      </select>
+    </div>
+
+    <div id="single-account-fields">
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Cartão <span class="text-slate-500">(opcional)</span></label>
+        <select name="card_id" id="card-id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+          <option value="">Nenhum</option>
+          {% for card in credit_cards %}
+          <option value="{{ card.id }}">{{ card.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Conta <span class="text-slate-500">(opcional se cartão)</span></label>
+        <select name="account_id" id="account-id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+          <option value="">Nenhuma</option>
+          {% for account in accounts %}
+          <option value="{{ account.id }}">{{ account.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div id="category-field">
+        <label class="block text-sm text-slate-400 mb-1">Categoria</label>
+        <select name="category_id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+          <option value="">Automática</option>
+          {% for cat in categories %}
+          <option value="{{ cat.id }}">{{ cat.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <label class="flex items-center gap-2 text-sm text-slate-300" id="planned-checkbox">
+        <input name="is_planned" id="is-planned" type="checkbox" class="rounded border-slate-600 bg-slate-800">
+        Lançamento previsto (não altera saldo até realizar)
+      </label>
+      <div id="recurring-fields" class="hidden space-y-3 pt-1">
+        <label class="flex items-center gap-2 text-sm text-slate-300">
+          <input name="is_recurring" id="is-recurring" type="checkbox" class="rounded border-slate-600 bg-slate-800">
+          Lançamento fixo (repete automaticamente)
+        </label>
+        <div id="recurring-options" class="hidden space-y-2 pl-1">
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Frequência</label>
+            <select name="frequency" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+              <option value="daily">Diária</option>
+              <option value="weekly">Semanal</option>
+              <option value="monthly" selected>Mensal</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Data de término <span class="text-slate-600">(opcional)</span></label>
+            <input name="recurrence_end_date" type="date" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+          </div>
+        </div>
+      </div>
+      <div id="installment-fields" class="hidden space-y-3 pt-1">
+        <label class="flex items-center gap-2 text-sm text-slate-300">
+          <input name="is_installmented" id="is-installmented" type="checkbox" class="rounded border-slate-600 bg-slate-800">
+          Lançamento parcelado
+        </label>
+        <div id="installment-options" class="hidden space-y-2 pl-1">
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Número de parcelas</label>
+            <input name="installment_count" type="number" min="2" max="360" value="12" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+          </div>
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Intervalo</label>
+            <select name="installment_interval" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+              <option value="monthly" selected>Mensal</option>
+              <option value="weekly">Semanal</option>
+              <option value="biweekly">Quinzenal</option>
+            </select>
+          </div>
+          <fieldset class="space-y-2">
+            <legend class="block text-sm text-slate-400 mb-1">O valor informado é</legend>
+            <label class="flex items-start gap-2 text-sm text-slate-300">
+              <input type="radio" name="installment_amount_basis" value="total" class="mt-1 rounded border-slate-600 bg-slate-800" checked>
+              <span>Valor informado é o <strong>total da compra</strong> (divide nas parcelas)</span>
+            </label>
+            <label class="flex items-start gap-2 text-sm text-slate-300">
+              <input type="radio" name="installment_amount_basis" value="installment" class="mt-1 rounded border-slate-600 bg-slate-800">
+              <span>Valor informado é o <strong>valor de cada parcela</strong> (repete N vezes)</span>
+            </label>
+          </fieldset>
+          <p id="installment-basis-hint" class="text-xs text-slate-500 pl-1"></p>
+        </div>
+      </div>
+    </div>
+
+    <div id="transfer-fields" class="hidden space-y-3">
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Conta de origem</label>
+        <select name="from_account_id" id="from-account-id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+          {% for account in accounts %}
+          <option value="{{ account.id }}">{{ account.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Conta de destino</label>
+        <select name="to_account_id" id="to-account-id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+          {% for account in accounts %}
+          <option value="{{ account.id }}" {% if loop.index == 2 %}selected{% endif %}>{{ account.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Valor (R$)</label>
+      <input name="amount" type="text" placeholder="45,90" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Descrição</label>
+      <input name="description" id="tx-description" type="text" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+    </div>
+
+    <div id="planned-date-fields" class="hidden space-y-3">
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Competência</label>
+        <input name="competence_date" id="competence-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Vencimento</label>
+        <input name="due_date" id="due-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+      </div>
+    </div>
+
+    <div id="actual-date-fields" class="space-y-3">
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Data da realização</label>
+        <input name="payment_date" id="payment-date" type="date" value="{{ today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+      </div>
+    </div>
+
+    <button class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium">Registrar</button>
+  </form>
+</section>
+
+<script>
+  const txType = document.getElementById('tx-type');
+  const singleFields = document.getElementById('single-account-fields');
+  const transferFields = document.getElementById('transfer-fields');
+  const accountId = document.getElementById('account-id');
+  const description = document.getElementById('tx-description');
+  const plannedCheckbox = document.getElementById('planned-checkbox');
+  const isPlanned = document.getElementById('is-planned');
+  const plannedDateFields = document.getElementById('planned-date-fields');
+  const actualDateFields = document.getElementById('actual-date-fields');
+  const paymentDate = document.getElementById('payment-date');
+  const competenceDate = document.getElementById('competence-date');
+  const dueDate = document.getElementById('due-date');
+  const recurringFields = document.getElementById('recurring-fields');
+  const isRecurring = document.getElementById('is-recurring');
+  const recurringOptions = document.getElementById('recurring-options');
+  const installmentFields = document.getElementById('installment-fields');
+  const isInstallmented = document.getElementById('is-installmented');
+  const installmentOptions = document.getElementById('installment-options');
+  const installmentBasisHint = document.getElementById('installment-basis-hint');
+  const installmentCountInput = document.querySelector('input[name="installment_count"]');
+  const installmentIntervalSelect = document.querySelector('select[name="installment_interval"]');
+  const amountInput = document.querySelector('input[name="amount"]');
+  const basisRadios = document.querySelectorAll('input[name="installment_amount_basis"]');
+
+  function parseBrAmount(text) {
+    if (!text) return null;
+    const raw = text.trim().replace(/\./g, '').replace(',', '.');
+    const n = parseFloat(raw);
+    return Number.isNaN(n) ? null : n;
+  }
+
+  function formatBr(n) {
+    return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function syncInstallmentBasisRequired() {
+    const required = isInstallmented.checked;
+    basisRadios.forEach((radio) => { radio.required = required; });
+  }
+
+  function updateInstallmentBasisHint() {
+    if (!installmentBasisHint || !isInstallmented.checked) {
+      if (installmentBasisHint) installmentBasisHint.textContent = '';
+      return;
+    }
+    const amount = parseBrAmount(amountInput?.value || '');
+    const count = parseInt(installmentCountInput?.value || '12', 10);
+    const basis = document.querySelector('input[name="installment_amount_basis"]:checked')?.value || 'total';
+    if (!amount || count < 2) {
+      installmentBasisHint.textContent = '';
+      return;
+    }
+    if (basis === 'installment') {
+      installmentBasisHint.textContent = `${count} × R$ ${formatBr(amount)} = R$ ${formatBr(amount * count)} no total`;
+    } else {
+      installmentBasisHint.textContent = `R$ ${formatBr(amount)} ÷ ${count} ≈ R$ ${formatBr(amount / count)} por parcela`;
+    }
+  }
+
+  function syncInstallmentFields() {
+    const isTransfer = txType.value === 'transfer';
+    const planned = isPlanned.checked && !isTransfer;
+    installmentFields.classList.toggle('hidden', !planned || isTransfer);
+    if (!planned || isTransfer) {
+      isInstallmented.checked = false;
+    }
+    installmentOptions.classList.toggle('hidden', !isInstallmented.checked);
+    syncInstallmentBasisRequired();
+    updateInstallmentBasisHint();
+    if (isInstallmented.checked && isRecurring.checked) {
+      isRecurring.checked = false;
+      recurringOptions.classList.add('hidden');
+    }
+  }
+
+  function syncRecurringFields() {
+    const isTransfer = txType.value === 'transfer';
+    const planned = isPlanned.checked && !isTransfer;
+    recurringFields.classList.toggle('hidden', !planned || isTransfer);
+    if (!planned || isTransfer) {
+      isRecurring.checked = false;
+    }
+    recurringOptions.classList.toggle('hidden', !isRecurring.checked);
+    if (isRecurring.checked && isInstallmented.checked) {
+      isInstallmented.checked = false;
+      installmentOptions.classList.add('hidden');
+    }
+  }
+
+  function syncDateFields() {
+    const isTransfer = txType.value === 'transfer';
+    const planned = isPlanned.checked && !isTransfer;
+
+    plannedDateFields.classList.toggle('hidden', !planned);
+    actualDateFields.classList.toggle('hidden', planned);
+
+    competenceDate.required = planned;
+    dueDate.required = planned;
+    paymentDate.required = !planned;
+
+    if (planned) {
+      paymentDate.value = '';
+    }
+  }
+
+  const cardId = document.getElementById('card-id');
+
+  function syncCardPlannedMode() {
+    const isTransfer = txType.value === 'transfer';
+    const onCard = cardId && cardId.value && txType.value === 'expense';
+    if (onCard && !isTransfer) {
+      isPlanned.checked = true;
+      isPlanned.disabled = true;
+    } else {
+      isPlanned.disabled = false;
+    }
+    syncDateFields();
+    syncRecurringFields();
+    syncInstallmentFields();
+  }
+
+  function syncFormMode() {
+    const isTransfer = txType.value === 'transfer';
+    singleFields.classList.toggle('hidden', isTransfer);
+    transferFields.classList.toggle('hidden', !isTransfer);
+    accountId.required = !isTransfer;
+    description.required = !isTransfer;
+    plannedCheckbox.classList.toggle('hidden', isTransfer);
+    if (isTransfer) {
+      isPlanned.checked = false;
+    }
+    syncCardPlannedMode();
+  }
+
+  txType.addEventListener('change', syncFormMode);
+  if (cardId) cardId.addEventListener('change', syncCardPlannedMode);
+  isPlanned.addEventListener('change', () => {
+    syncDateFields();
+    syncRecurringFields();
+    syncInstallmentFields();
+  });
+  isRecurring.addEventListener('change', syncRecurringFields);
+  isInstallmented.addEventListener('change', syncInstallmentFields);
+  if (amountInput) amountInput.addEventListener('input', updateInstallmentBasisHint);
+  if (installmentCountInput) installmentCountInput.addEventListener('input', updateInstallmentBasisHint);
+  if (installmentIntervalSelect) installmentIntervalSelect.addEventListener('change', updateInstallmentBasisHint);
+  basisRadios.forEach((radio) => radio.addEventListener('change', updateInstallmentBasisHint));
+  syncFormMode();
+</script>
+{% endblock %}

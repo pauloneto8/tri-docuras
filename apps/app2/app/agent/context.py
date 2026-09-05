@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.schemas import ListTransactionsInput
 from app.services import finance
 from app.services.account_wizard import get_wizard_context as get_account_wizard_context
+from app.services.card_wizard import get_wizard_context as get_card_wizard_context
 from app.services.category_wizard import get_wizard_context as get_category_wizard_context
 from app.services.conversations import SESSION_CONVERSATION_KEY, get_recent_messages
 from app.services.transaction_wizard import get_wizard_context as get_transaction_wizard_context
@@ -23,6 +24,9 @@ def build_intent_context(
     acc_ctx = get_account_wizard_context(session)
     if acc_ctx:
         parts.append(acc_ctx)
+    card_ctx = get_card_wizard_context(session)
+    if card_ctx:
+        parts.append(card_ctx)
     cat_ctx = get_category_wizard_context(session)
     if cat_ctx:
         parts.append(cat_ctx)
@@ -42,6 +46,23 @@ def build_intent_context(
             for acc in accounts
         ]
         parts.append("Contas do usuario:\n" + "\n".join(lines))
+
+    from app.services.credit_cards import list_credit_cards
+
+    cards = list_credit_cards(db, user_id)
+    if cards:
+        lines = [
+            f"- id={card['id']} {card['name']}"
+            + (f", {card['institution']}" if card.get("institution") else "")
+            + f", fechamento={card['closing_day']}, vencimento={card['due_day']}"
+            + (
+                f", liquidacao={card['settlement_account_name']}"
+                if card.get("settlement_account_name")
+                else ""
+            )
+            for card in cards
+        ]
+        parts.append("Cartoes do usuario:\n" + "\n".join(lines))
 
     categories = finance.list_user_categories(db, user_id)
     if categories:

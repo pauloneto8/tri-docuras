@@ -294,3 +294,129 @@ def test_opening_balance_ignored_before_declaration_date():
         assert sum(item["balance_cents"] for item in august_balances) == 88963 - 5000
     finally:
         _cleanup(db, user)
+
+
+def test_list_transactions_filters_by_period_dates():
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"recent_{suffix}@test.com",
+        password="secret1",
+        name="Recent User",
+        is_active=True,
+    )
+    try:
+        from app.schemas import ListTransactionsInput
+
+        _setup(db, user)
+        account = _create_account(db, user.id, f"Conta_{suffix}", opening_balance="1000")
+        finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="10",
+                description="Agosto",
+                account_name=account["name"],
+                category_name="Outros",
+                payment_date=date(2026, 8, 10),
+                transaction_date=date(2026, 8, 10),
+            ),
+        )
+        finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="20",
+                description="Setembro",
+                account_name=account["name"],
+                category_name="Outros",
+                payment_date=date(2026, 9, 5),
+                transaction_date=date(2026, 9, 5),
+            ),
+        )
+        september = finance.list_transactions(
+            db,
+            user.id,
+            ListTransactionsInput(
+                limit=10,
+                status="actual",
+                start_date=date(2026, 9, 1),
+                end_date=date(2026, 9, 30),
+            ),
+        )
+        assert len(september) == 1
+        assert september[0]["description"] == "Setembro"
+    finally:
+        _cleanup(db, user)
+
+
+def test_summary_category_breakdown():
+    engine = create_engine(settings.database_url)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"cat_{suffix}@test.com",
+        password="pass",
+        name="Cat User",
+        is_active=True,
+    )
+    try:
+        _setup(db, user)
+        account = _create_account(db, user.id, f"Conta_{suffix}", opening_balance="1000")
+        ref = date(2026, 9, 15)
+        finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="100",
+                description="Mercado",
+                account_name=account["name"],
+                category_name="Alimentação",
+                transaction_date=date(2026, 9, 5),
+            ),
+        )
+        finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="50",
+                description="Uber",
+                account_name=account["name"],
+                category_name="Transporte",
+                transaction_date=date(2026, 9, 8),
+            ),
+        )
+        finance.register_income(
+            db,
+            user.id,
+            RegisterIncomeInput(
+                amount="200",
+                description="Salário",
+                account_name=account["name"],
+                category_name="Salário",
+                transaction_date=date(2026, 9, 1),
+            ),
+        )
+
+        summary = finance.get_summary(
+            db, user.id, SummaryInput(period="month", ref_date=ref)
+        )
+
+        expenses = summary["expenses_by_category"]
+        assert [e["category"] for e in expenses] == ["Alimentação", "Transporte"]
+        assert expenses[0]["amount_cents"] == 10000
+        assert expenses[0]["percent"] == 66.7
+        assert expenses[1]["amount_cents"] == 5000
+        assert expenses[1]["percent"] == 33.3
+
+        income = summary["income_by_category"]
+        assert len(income) == 1
+        assert income[0]["category"] == "Salário"
+        assert income[0]["amount_cents"] == 20000
+        assert income[0]["percent"] == 100.0
+    finally:
+        _cleanup(db, user)

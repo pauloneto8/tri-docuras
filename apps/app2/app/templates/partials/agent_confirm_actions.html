@@ -1,0 +1,43 @@
+<div class="flex flex-wrap gap-1.5 agent-confirm-actions">
+  <form
+    class="inline"
+    hx-post="/agent/chat"
+    hx-target="closest .agent-exchange"
+    hx-swap="outerHTML"
+    hx-indicator="#htmx-indicator"
+    hx-timeout="45000"
+  >
+    <input type="hidden" name="message" value="Confirmar">
+    <input type="hidden" name="confirmed" value="true">
+    <input type="hidden" name="pending_action" value='{{ pending_action | tojson }}'>
+    <button
+      type="submit"
+      class="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 px-3 py-1 text-xs font-medium text-white transition-colors"
+    >
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+      </svg>
+      Confirmar
+    </button>
+  </form>
+  <form
+    class="inline"
+    hx-post="/agent/chat"
+    hx-target="closest .agent-exchange"
+    hx-swap="outerHTML"
+    hx-indicator="#htmx-indicator"
+    hx-timeout="45000"
+  >
+    <input type="hidden" name="message" value="cancelar">
+    <input type="hidden" name="confirmed" value="false">
+    <button
+      type="submit"
+      class="inline-flex items-center gap-1.5 rounded-full border border-rose-800/80 bg-rose-950/40 text-rose-200 hover:bg-rose-900/60 px-3 py-1 text-xs transition-colors"
+    >
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+      Cancelar
+    </button>
+  </form>
+</div>

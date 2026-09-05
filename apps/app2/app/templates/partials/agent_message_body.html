@@ -1,0 +1,71 @@
+{% if needs_confirmation and pending_action and pending_action.tool is defined and pending_action.arguments is defined %}
+  {% set args = pending_action.arguments %}
+  {% set title = agent_message.split('\n')[0] %}
+  <div class="chat-bubble-content">
+    <p class="font-medium mb-2">{{ title | chat_md }}</p>
+    <dl class="space-y-1 text-xs text-slate-300">
+      {% if args.get('description') %}
+      <div><dt class="inline text-slate-400">Descrição: </dt><dd class="inline">{{ args.description }}</dd></div>
+      {% endif %}
+      {% if args.get('amount') %}
+      <div><dt class="inline text-slate-400">Valor: </dt><dd class="inline">{% if args.amount is string and not args.amount.startswith('R$') %}R$ {% endif %}{{ args.amount }}</dd></div>
+      {% endif %}
+      {% if args.get('name') %}
+      <div><dt class="inline text-slate-400">Nome: </dt><dd class="inline">{{ args.name }}</dd></div>
+      {% endif %}
+      {% if args.get('account_name') %}
+      <div><dt class="inline text-slate-400">Conta: </dt><dd class="inline">{{ args.account_name }}</dd></div>
+      {% endif %}
+      {% if args.get('from_account_name') %}
+      <div><dt class="inline text-slate-400">Origem: </dt><dd class="inline">{{ args.from_account_name }}</dd></div>
+      {% endif %}
+      {% if args.get('to_account_name') %}
+      <div><dt class="inline text-slate-400">Destino: </dt><dd class="inline">{{ args.to_account_name }}</dd></div>
+      {% endif %}
+      {% if args.get('card_name') %}
+      <div><dt class="inline text-slate-400">Cartão: </dt><dd class="inline">{{ args.card_name }}</dd></div>
+      {% endif %}
+      {% if args.get('category_name') %}
+      <div><dt class="inline text-slate-400">Categoria: </dt><dd class="inline">{{ args.category_name }}</dd></div>
+      {% endif %}
+      {% if args.get('account_type') %}
+      <div><dt class="inline text-slate-400">Tipo: </dt><dd class="inline">{{ args.account_type }}</dd></div>
+      {% endif %}
+      {% if args.get('institution') %}
+      <div><dt class="inline text-slate-400">Instituição: </dt><dd class="inline">{{ args.institution }}</dd></div>
+      {% endif %}
+      {% if args.get('closing_day') %}
+      <div><dt class="inline text-slate-400">Fechamento: </dt><dd class="inline">dia {{ args.closing_day }}</dd></div>
+      {% endif %}
+      {% if args.get('due_day') %}
+      <div><dt class="inline text-slate-400">Vencimento: </dt><dd class="inline">dia {{ args.due_day }}</dd></div>
+      {% endif %}
+      {% if args.get('settlement_account_name') %}
+      <div><dt class="inline text-slate-400">Liquidação: </dt><dd class="inline">{{ args.settlement_account_name }}</dd></div>
+      {% endif %}
+      {% if args.get('credit_limit') %}
+      <div><dt class="inline text-slate-400">Limite: </dt><dd class="inline">R$ {{ args.credit_limit }}</dd></div>
+      {% endif %}
+      {% if args.get('opening_balance') %}
+      <div><dt class="inline text-slate-400">Saldo inicial: </dt><dd class="inline">R$ {{ args.opening_balance }}</dd></div>
+      {% endif %}
+      {% if args.get('opening_balance_date') %}
+      <div><dt class="inline text-slate-400">Data do saldo: </dt><dd class="inline">{{ args.opening_balance_date }}</dd></div>
+      {% endif %}
+      {% if args.get('payment_date') %}
+      <div><dt class="inline text-slate-400">Pagamento: </dt><dd class="inline">{{ args.payment_date }}</dd></div>
+      {% endif %}
+      {% if args.get('transaction_date') %}
+      <div><dt class="inline text-slate-400">Data: </dt><dd class="inline">{{ args.transaction_date }}</dd></div>
+      {% endif %}
+      {% if args.get('competence_date') %}
+      <div><dt class="inline text-slate-400">Competência: </dt><dd class="inline">{{ args.competence_date }}</dd></div>
+      {% endif %}
+      {% if args.get('due_date') %}
+      <div><dt class="inline text-slate-400">Vencimento: </dt><dd class="inline">{{ args.due_date }}</dd></div>
+      {% endif %}
+    </dl>
+  </div>
+{% else %}
+  <div class="chat-bubble-content">{{ agent_message | chat_md }}</div>
+{% endif %}

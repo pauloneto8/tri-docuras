@@ -45,6 +45,7 @@ class User(Base):
     )
 
     accounts: Mapped[list["Account"]] = relationship(back_populates="user")
+    credit_cards: Mapped[list["CreditCard"]] = relationship(back_populates="user")
     categories: Mapped[list["Category"]] = relationship(back_populates="user")
 
 
@@ -59,6 +60,9 @@ class Account(Base):
     account_type: Mapped[str] = mapped_column(String(20), nullable=False, default="corrente")
     opening_balance_cents: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     opening_balance_date: Mapped[date | None] = mapped_column(Date)
+    credit_limit_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    closing_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    due_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
     description: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -70,6 +74,80 @@ class Account(Base):
         back_populates="account",
         foreign_keys="[Transaction.account_id]",
     )
+    settlement_cards: Mapped[list["CreditCard"]] = relationship(
+        back_populates="settlement_account",
+        foreign_keys="[CreditCard.settlement_account_id]",
+    )
+
+
+class CreditCard(Base):
+    __tablename__ = "credit_cards"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_credit_card_user_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    institution: Mapped[str | None] = mapped_column(String(100))
+    credit_limit_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    closing_day: Mapped[int] = mapped_column(Integer, nullable=False)
+    due_day: Mapped[int] = mapped_column(Integer, nullable=False)
+    settlement_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id"), nullable=True
+    )
+    legacy_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id"), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="credit_cards")
+    settlement_account: Mapped["Account | None"] = relationship(
+        back_populates="settlement_cards",
+        foreign_keys=[settlement_account_id],
+    )
+    card_invoices: Mapped[list["CardInvoice"]] = relationship(
+        back_populates="card",
+        foreign_keys="[CardInvoice.card_id]",
+    )
+    transactions: Mapped[list["Transaction"]] = relationship(
+        back_populates="card",
+        foreign_keys="[Transaction.card_id]",
+    )
+
+
+class CardInvoice(Base):
+    __tablename__ = "card_invoices"
+    __table_args__ = (
+        UniqueConstraint("card_id", "due_date", name="uq_card_invoices_card_due"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    card_id: Mapped[int] = mapped_column(ForeignKey("credit_cards.id"), nullable=False, index=True)
+    cycle_start: Mapped[date] = mapped_column(Date, nullable=False)
+    cycle_end: Mapped[date] = mapped_column(Date, nullable=False)
+    due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    paid_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    paid_from_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id"), nullable=True
+    )
+    payment_transfer_group_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship()
+    card: Mapped["CreditCard"] = relationship(
+        back_populates="card_invoices",
+        foreign_keys=[card_id],
+    )
+    paid_from_account: Mapped["Account | None"] = relationship(
+        foreign_keys=[paid_from_account_id],
+    )
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="invoice")
 
 
 class Conversation(Base):
@@ -128,6 +206,30 @@ class Category(Base):
     budgets: Mapped[list["Budget"]] = relationship(back_populates="category")
 
 
+class InstallmentPlan(Base):
+    __tablename__ = "installment_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False)
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
+    type: Mapped[str] = mapped_column(String(20), nullable=False)
+    total_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    installment_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    interval: Mapped[str] = mapped_column(String(20), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    description: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship()
+    account: Mapped["Account"] = relationship()
+    category: Mapped["Category | None"] = relationship()
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="installment_plan")
+
+
 class RecurringRule(Base):
     __tablename__ = "recurring_rules"
 
@@ -158,11 +260,19 @@ class Transaction(Base):
     __tablename__ = "transactions"
     __table_args__ = (
         UniqueConstraint("recurrence_id", "due_date", name="uq_transactions_recurrence_due_date"),
+        UniqueConstraint(
+            "installment_plan_id",
+            "installment_index",
+            name="uq_transactions_installment_plan_index",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False)
+    account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"), nullable=True)
+    card_id: Mapped[int | None] = mapped_column(
+        ForeignKey("credit_cards.id"), nullable=True, index=True
+    )
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -180,11 +290,25 @@ class Transaction(Base):
     recurrence_id: Mapped[int | None] = mapped_column(
         ForeignKey("recurring_rules.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    installment_plan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("installment_plans.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    installment_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    invoice_id: Mapped[int | None] = mapped_column(
+        ForeignKey("card_invoices.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    account: Mapped["Account"] = relationship(back_populates="transactions", foreign_keys=[account_id])
+    account: Mapped["Account | None"] = relationship(
+        back_populates="transactions",
+        foreign_keys=[account_id],
+    )
+    card: Mapped["CreditCard | None"] = relationship(
+        back_populates="transactions",
+        foreign_keys=[card_id],
+    )
     counterparty_account: Mapped["Account | None"] = relationship(foreign_keys=[counterparty_account_id])
     category: Mapped["Category | None"] = relationship(back_populates="transactions")
     user: Mapped["User"] = relationship()
@@ -193,6 +317,10 @@ class Transaction(Base):
         foreign_keys=[source_planned_id],
     )
     recurrence: Mapped["RecurringRule | None"] = relationship(back_populates="transactions")
+    installment_plan: Mapped["InstallmentPlan | None"] = relationship(
+        back_populates="transactions"
+    )
+    invoice: Mapped["CardInvoice | None"] = relationship(back_populates="transactions")
 
 
 class Budget(Base):

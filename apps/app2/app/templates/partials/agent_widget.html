@@ -1,31 +1,69 @@
-<div id="agent-widget" class="fixed bottom-6 right-6 z-50">
-  <div id="agent-panel" class="hidden mb-4 w-[min(100vw-2rem,24rem)] h-[28rem] rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl flex flex-col overflow-hidden">
-    <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/95">
-      <div>
+<div id="agent-widget" class="fixed bottom-6 right-6 z-50 flex flex-col-reverse items-end">
+  <button
+    type="button"
+    id="agent-fab"
+    class="w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/50 flex items-center justify-center transition-transform hover:scale-105"
+    aria-label="Abrir assistente"
+    aria-expanded="false"
+    aria-controls="agent-panel"
+  >
+    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+    </svg>
+  </button>
+
+  <div
+    id="agent-panel"
+    class="hidden mb-4 w-[min(100vw-2rem,24rem)] h-[28rem] rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl flex flex-col overflow-hidden"
+    role="dialog"
+    aria-label="Assistente AssistFin"
+  >
+    <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900/95">
+      {% with role='assistant' %}
+      {% include "partials/agent_avatar.html" %}
+      {% endwith %}
+      <div class="flex-1 min-w-0">
         <p class="font-semibold text-emerald-400">Assistente</p>
         <p class="text-xs text-slate-400">AssistFin com IA</p>
       </div>
-      <button type="button" onclick="toggleAgentPanel(false)" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400" aria-label="Fechar chat">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      <button
+        type="button"
+        id="agent-panel-close"
+        class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400"
+        aria-label="Fechar chat"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
       </button>
     </div>
 
     <div id="agent-chat-log" class="flex-1 overflow-y-auto p-4 space-y-4">
-      <div id="agent-welcome" class="text-sm text-slate-400 space-y-2">
-        <p>Olá! Posso ajudar com:</p>
-        <ul class="list-disc list-inside space-y-1 text-slate-500">
-          <li>"gastei 45 no mercado ontem"</li>
-          <li>"resumo do mês"</li>
-          <li>"últimas despesas"</li>
-          <li>"status dos orçamentos"</li>
-          <li>"cadastrar uma conta do Nubank"</li>
-          <li>"cadastrar categoria Pet de despesa"</li>
-        </ul>
+      <div id="agent-welcome" class="flex items-end gap-2 justify-start">
+        {% with role='assistant' %}
+        {% include "partials/agent_avatar.html" %}
+        {% endwith %}
+        <div class="flex flex-col items-start gap-2 min-w-0 max-w-[85%]">
+          <div class="px-3.5 py-2.5 text-sm leading-relaxed rounded-2xl rounded-bl-md bg-slate-800 border border-slate-700 text-slate-100">
+            Olá! Posso ajudar com:
+          </div>
+          {% set suggestions = [
+            'gastei 45 no mercado ontem',
+            'resumo do mês',
+            'últimas despesas',
+            'status dos orçamentos',
+            'cadastrar uma conta do Nubank',
+            'cadastrar categoria Pet de despesa'
+          ] %}
+          {% set chip_target = '#agent-chat-log' %}
+          {% set chip_swap = 'beforeend' %}
+          {% include "partials/agent_suggestions.html" %}
+        </div>
       </div>
     </div>
 
     <div id="htmx-indicator" class="hidden px-4 py-2 text-sm text-slate-400 items-center gap-2 border-t border-slate-800">
-      <svg class="animate-spin h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24">
+      <svg class="animate-spin h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" aria-hidden="true">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
       </svg>
@@ -50,98 +88,153 @@
         required
         autocomplete="off"
       >
-      <button type="submit" class="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm font-medium shrink-0">
-        Enviar
+      <button
+        type="submit"
+        class="rounded-lg bg-emerald-600 hover:bg-emerald-500 p-2.5 shrink-0 transition-colors"
+        aria-label="Enviar"
+        title="Enviar"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+        </svg>
       </button>
     </form>
   </div>
-
-  <button
-    type="button"
-    id="agent-fab"
-    onclick="toggleAgentPanel()"
-    class="w-14 h-14 rounded-full bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/50 flex items-center justify-center transition-transform hover:scale-105"
-    aria-label="Abrir assistente"
-  >
-    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
-    </svg>
-  </button>
 </div>
 
 <script>
-  const AGENT_OPEN_KEY = 'assistfinAgentOpen';
+  (function () {
+    const AGENT_OPEN_KEY = 'assistfinAgentOpen';
 
-  function toggleAgentPanel(forceOpen) {
-    const panel = document.getElementById('agent-panel');
-    const isHidden = panel.classList.contains('hidden');
-    const open = forceOpen !== undefined ? forceOpen : isHidden;
-    panel.classList.toggle('hidden', !open);
-    try {
-      sessionStorage.setItem(AGENT_OPEN_KEY, open ? '1' : '0');
-    } catch (_) {}
-    if (open) {
-      panel.querySelector('input[name="message"]')?.focus();
-    }
-  }
+    function toggleAgentPanel(forceOpen) {
+      const panel = document.getElementById('agent-panel');
+      const fab = document.getElementById('agent-fab');
+      if (!panel) return;
 
-  function restoreAgentPanelState() {
-    try {
-      if (sessionStorage.getItem(AGENT_OPEN_KEY) === '1') {
-        toggleAgentPanel(true);
+      const isHidden = panel.classList.contains('hidden');
+      const open = forceOpen !== undefined ? forceOpen : isHidden;
+      panel.classList.toggle('hidden', !open);
+      panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+      if (fab) {
+        fab.setAttribute('aria-expanded', open ? 'true' : 'false');
       }
-    } catch (_) {}
-  }
+      try {
+        sessionStorage.setItem(AGENT_OPEN_KEY, open ? '1' : '0');
+      } catch (_) {}
+      if (open) {
+        panel.querySelector('input[name="message"]')?.focus();
+      }
+    }
 
-  function scrollAgentChat() {
-    const log = document.getElementById('agent-chat-log');
-    if (log) log.scrollTop = log.scrollHeight;
-  }
+    window.toggleAgentPanel = toggleAgentPanel;
 
-  const agentForm = document.getElementById('agent-form');
-  const agentInput = document.getElementById('agent-message-input');
-
-  agentForm?.addEventListener('htmx:beforeRequest', function() {
-    if (agentInput) agentInput.value = '';
-  });
-
-  document.body.addEventListener('htmx:afterSwap', function(evt) {
-    if (evt.detail.target?.id === 'agent-chat-log') {
-      document.getElementById('agent-welcome')?.remove();
-      scrollAgentChat();
-      agentInput?.focus();
-      const refreshNode = evt.detail.target.querySelector('[data-refresh-page="true"]');
-      if (refreshNode) {
-        const keepOpen = refreshNode.hasAttribute('data-keep-chat-open');
-        if (keepOpen) {
-          try { sessionStorage.setItem(AGENT_OPEN_KEY, '1'); } catch (_) {}
+    function restoreAgentPanelState() {
+      try {
+        if (sessionStorage.getItem(AGENT_OPEN_KEY) === '1') {
+          toggleAgentPanel(true);
         }
-        setTimeout(() => window.location.reload(), 800);
+      } catch (_) {}
+    }
+
+    function scrollAgentChat() {
+      const log = document.getElementById('agent-chat-log');
+      if (log) log.scrollTop = log.scrollHeight;
+    }
+
+    const agentForm = document.getElementById('agent-form');
+    const agentInput = document.getElementById('agent-message-input');
+    const agentFab = document.getElementById('agent-fab');
+    const agentClose = document.getElementById('agent-panel-close');
+
+    let pageRefreshTimer = null;
+
+    function cancelPageRefresh() {
+      if (pageRefreshTimer !== null) {
+        clearTimeout(pageRefreshTimer);
+        pageRefreshTimer = null;
       }
     }
-  });
 
-  function showAgentError(message) {
-    const log = document.getElementById('agent-chat-log');
-    if (!log) return;
-    const el = document.createElement('div');
-    el.className = 'rounded-lg bg-red-900/40 border border-red-700 px-3 py-2 text-sm text-red-200';
-    el.textContent = message;
-    log.appendChild(el);
-    scrollAgentChat();
-  }
-
-  document.body.addEventListener('htmx:responseError', function(evt) {
-    if (evt.detail.elt?.id === 'agent-form' || evt.detail.elt?.closest?.('#agent-form')) {
-      showAgentError('Não consegui responder a tempo. Envie de novo.');
+    function refreshPageMain() {
+      const main = document.getElementById('page-main');
+      if (!main || typeof htmx === 'undefined') {
+        window.location.reload();
+        return;
+      }
+      const url = window.location.pathname + window.location.search;
+      htmx.ajax('GET', url, {
+        target: '#page-main',
+        select: 'main',
+        swap: 'outerHTML',
+      });
     }
-  });
 
-  document.body.addEventListener('htmx:timeout', function(evt) {
-    if (evt.detail.elt?.id === 'agent-form' || evt.detail.elt?.closest?.('#agent-form')) {
-      showAgentError('Não consegui responder a tempo. Envie de novo.');
+    function schedulePageMainRefresh() {
+      cancelPageRefresh();
+      pageRefreshTimer = setTimeout(() => {
+        pageRefreshTimer = null;
+        refreshPageMain();
+      }, 400);
     }
-  });
 
-  restoreAgentPanelState();
+    agentFab?.addEventListener('click', function () {
+      toggleAgentPanel();
+    });
+
+    agentClose?.addEventListener('click', function () {
+      toggleAgentPanel(false);
+    });
+
+    agentForm?.addEventListener('htmx:beforeRequest', function () {
+      cancelPageRefresh();
+      if (agentInput) agentInput.value = '';
+    });
+
+    document.body.addEventListener('htmx:beforeRequest', function (evt) {
+      const elt = evt.detail.elt;
+      if (elt?.closest?.('#agent-chat-log')) {
+        cancelPageRefresh();
+      }
+    });
+
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+      if (evt.detail.target?.id === 'agent-chat-log') {
+        document.getElementById('agent-welcome')?.remove();
+        scrollAgentChat();
+        agentInput?.focus();
+        const refreshNode = evt.detail.target.querySelector('[data-refresh-page="true"]');
+        if (refreshNode) {
+          const keepOpen = refreshNode.hasAttribute('data-keep-chat-open');
+          if (keepOpen) {
+            try { sessionStorage.setItem(AGENT_OPEN_KEY, '1'); } catch (_) {}
+          }
+          schedulePageMainRefresh();
+        }
+      }
+    });
+
+    function showAgentError(message) {
+      const log = document.getElementById('agent-chat-log');
+      if (!log) return;
+      const el = document.createElement('div');
+      el.className = 'rounded-2xl rounded-bl-md bg-rose-950/50 border border-rose-800/80 px-3.5 py-2.5 text-sm text-rose-200 max-w-[85%]';
+      el.textContent = message;
+      log.appendChild(el);
+      scrollAgentChat();
+    }
+
+    document.body.addEventListener('htmx:responseError', function (evt) {
+      if (evt.detail.elt?.id === 'agent-form' || evt.detail.elt?.closest?.('#agent-form')) {
+        showAgentError('Não consegui responder a tempo. Envie de novo.');
+      }
+    });
+
+    document.body.addEventListener('htmx:timeout', function (evt) {
+      if (evt.detail.elt?.id === 'agent-form' || evt.detail.elt?.closest?.('#agent-form')) {
+        showAgentError('Não consegui responder a tempo. Envie de novo.');
+      }
+    });
+
+    restoreAgentPanelState();
+  })();
 </script>

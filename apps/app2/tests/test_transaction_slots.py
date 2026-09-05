@@ -6,15 +6,19 @@ from sqlalchemy.orm import sessionmaker
 
 from app.auth import create_user
 from app.models import Account, Category, Transaction, User
-from app.schemas import CreateAccountInput, ToolCall
+from app.schemas import CreateAccountInput, CreateCardInput, ToolCall
 from app.services import finance
 from app.services.transaction_slots import (
     ensure_transaction_slots,
     infer_account_name,
+    infer_card_name,
     infer_category_name,
+    parse_slot_date,
     process_slot_answer,
     resolve_transaction_date,
+    wants_card_payment,
 )
+from app.services.transaction_wizard import try_process_transaction_wizard
 from app.timezone import local_today
 from tests.wizard_helpers import decline_recurring_slot
 
@@ -109,6 +113,7 @@ async def test_two_accounts_asks_account_one_account_auto():
 
         status_slot = process_slot_answer(db, user.id, session, "realizado")
         status_slot = decline_recurring_slot(session, db, user.id) or status_slot
+        status_slot = process_slot_answer(db, user.id, session, "hoje") or status_slot
         assert status_slot.question is not None
         assert "conta" in status_slot.question.lower()
         assert session["transaction_wizard"]["category_name"] == "Transporte"
@@ -167,6 +172,7 @@ async def test_ontem_preserves_yesterday_date_through_account_slot():
 
         status_slot = process_slot_answer(db, user.id, session, "realizado")
         status_slot = decline_recurring_slot(session, db, user.id) or status_slot
+        status_slot = process_slot_answer(db, user.id, session, "ontem") or status_slot
         assert status_slot.question is not None
 
         slot = process_slot_answer(db, user.id, session, f"Mercado_{suffix}")
@@ -220,9 +226,13 @@ async def test_single_account_auto_fills():
 
         filled = process_slot_answer(db, user.id, session, "realizado")
         assert filled.question is not None
-        assert "realização" in filled.question.lower() or "realizacao" in filled.question.lower()
-        filled = process_slot_answer(db, user.id, session, "hoje")
+        assert (
+            "único" in filled.question.lower()
+            or "unico" in filled.question.lower()
+            or "parcelado" in filled.question.lower()
+        )
         filled = decline_recurring_slot(session, db, user.id) or filled
+        filled = process_slot_answer(db, user.id, session, "hoje")
         assert filled.tool_call is not None
         assert filled.tool_call.arguments["account_name"] == f"Nubank_{suffix}"
         assert filled.tool_call.arguments["category_name"] == "Transporte"
@@ -338,7 +348,14 @@ async def test_runner_asks_account_for_passagens_with_two_accounts():
         assert "realizado" in result.message.lower() or "previsto" in result.message.lower()
 
         result_status = await process_message(db, user.id, "realizado", session=session)
-        if "fixo" in result_status.message.lower():
+        if any(
+            word in result_status.message.lower()
+            for word in ("único", "unico", "fixo", "parcelado")
+        ):
+            result_status = await process_message(db, user.id, "Único", session=session)
+        if "realização" in result_status.message.lower() or "realizacao" in result_status.message.lower():
+            result_status = await process_message(db, user.id, "hoje", session=session)
+        elif "fixo" in result_status.message.lower():
             result_status = await process_message(db, user.id, "Não", session=session)
         assert "conta" in result_status.message.lower()
         assert "Transporte" in result_status.message or session["transaction_wizard"]["category_name"] == "Transporte"
@@ -407,6 +424,373 @@ async def test_planned_slots_ask_competence_then_due():
         assert not args.get("payment_date")
     finally:
         db.query(Transaction).filter(Transaction.user_id == user.id).delete(synchronize_session=False)
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+def test_parse_slot_date_tambem_copies_competence():
+    wizard = {"competence_date": "2026-09-01"}
+    assert parse_slot_date("também", wizard, slot="due_date") == "2026-09-01"
+    assert parse_slot_date("Também 01/09/2026", wizard, slot="due_date") == "2026-09-01"
+    assert parse_slot_date("mesma data", wizard, slot="due_date") == "2026-09-01"
+
+
+@pytest.mark.asyncio
+async def test_planned_installment_reuses_dates_without_reasking():
+    from app.config import settings
+    from app.services.transaction_wizard import begin_login_prompt
+
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"reuse_dates_{suffix}@test.com",
+        password="secret1",
+        name="Reuse Dates",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        _create_account(db, user.id, f"Flash_{suffix}")
+        session = {}
+        begin_login_prompt(session)
+        try_process_transaction_wizard(session, "receita", db=db, user_id=user.id)
+        try_process_transaction_wizard(session, "previsto", db=db, user_id=user.id)
+        try_process_transaction_wizard(session, "01/09/2026", db=db, user_id=user.id)
+        try_process_transaction_wizard(session, "também", db=db, user_id=user.id)
+        try_process_transaction_wizard(session, "parcelado", db=db, user_id=user.id)
+        try_process_transaction_wizard(session, "12", db=db, user_id=user.id)
+        try_process_transaction_wizard(session, "mensal", db=db, user_id=user.id)
+        result = try_process_transaction_wizard(session, "9", db=db, user_id=user.id)
+        wizard = session["transaction_wizard"]
+        assert wizard["competence_date"] == "2026-09-01"
+        assert wizard["due_date"] == "2026-09-01"
+        assert result is not None
+        assert "competência" not in (result.message or "").lower()
+        assert "vencimento" not in (result.message or "").lower()
+    finally:
+        db.query(Transaction).filter(Transaction.user_id == user.id).delete(
+            synchronize_session=False
+        )
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_card_payment_infers_card_not_account_when_names_match():
+    from app.config import settings
+    from app.models import CreditCard, CardInvoice
+
+    engine = create_engine(settings.database_url)
+    SessionLocal = sessionmaker(bind=engine)
+    db = SessionLocal()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"slots_card_{suffix}@test.com",
+        password="secret1",
+        name="Card Slots",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        account_name = f"Mercado Pago_{suffix}"
+        card_name = f"Mercado Pago_{suffix}"
+        _create_account(db, user.id, account_name)
+        finance.create_card(
+            db,
+            user.id,
+            CreateCardInput(
+                name=card_name,
+                closing_day=9,
+                due_day=14,
+                settlement_account_name=account_name,
+            ),
+        )
+        message = (
+            "R$ 17,54 referente a camisa de amigo secreto "
+            "lançado no cartão do mercado pago"
+        )
+        assert wants_card_payment(message)
+        assert infer_card_name(db, user.id, message) == card_name
+        assert infer_account_name(db, user.id, message) == account_name
+
+        session = {}
+        tool_call = ToolCall(
+            tool="register_expense",
+            arguments={
+                "amount": "17.54",
+                "description": "camisa de amigo secreto",
+            },
+        )
+        result = ensure_transaction_slots(db, user.id, session, tool_call, message)
+        wizard = session["transaction_wizard"]
+        assert wizard.get("card_name") is None
+        assert wizard.get("payment_source") is None
+        assert result.question is not None
+        assert "cartão" in result.question.lower()
+        assert "conta" in result.question.lower()
+
+        after_card = process_slot_answer(db, user.id, session, "cartão")
+        assert after_card.tool_call is not None or after_card.question is not None
+        if after_card.tool_call:
+            assert after_card.tool_call.arguments["status"] == "planned"
+    finally:
+        db.query(Transaction).filter(Transaction.user_id == user.id).delete(synchronize_session=False)
+        db.query(CardInvoice).filter(CardInvoice.user_id == user.id).delete(synchronize_session=False)
+        db.query(CreditCard).filter(CreditCard.user_id == user.id).delete(synchronize_session=False)
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_installment_planned_on_card_uses_card_name_in_tool_call():
+    from app.config import settings
+    from app.models import CreditCard, CardInvoice
+
+    engine = create_engine(settings.database_url)
+    SessionLocal = sessionmaker(bind=engine)
+    db = SessionLocal()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"slots_inst_card_{suffix}@test.com",
+        password="secret1",
+        name="Inst Card Slots",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        account_name = f"Mercado Pago_{suffix}"
+        card_name = f"Mercado Pago_{suffix}"
+        _create_account(db, user.id, account_name)
+        finance.create_card(
+            db,
+            user.id,
+            CreateCardInput(
+                name=card_name,
+                closing_day=9,
+                due_day=14,
+                settlement_account_name=account_name,
+            ),
+        )
+        message = (
+            "R$ 17,54 camisa amigo secreto lançado no cartão do mercado pago"
+        )
+        session = {}
+        tool_call = ToolCall(
+            tool="register_expense",
+            arguments={
+                "amount": "17.54",
+                "description": "camisa amigo secreto",
+            },
+        )
+        ensure_transaction_slots(db, user.id, session, tool_call, message)
+
+        process_slot_answer(db, user.id, session, "previsto")
+        process_slot_answer(db, user.id, session, "cartão")
+        process_slot_answer(db, user.id, session, card_name)
+        process_slot_answer(db, user.id, session, "15/09/2026")
+        process_slot_answer(db, user.id, session, "parcelado")
+        process_slot_answer(db, user.id, session, "10")
+        process_slot_answer(db, user.id, session, "mensal")
+        process_slot_answer(db, user.id, session, "10")
+        process_slot_answer(db, user.id, session, "15/09/2026")
+        process_slot_answer(db, user.id, session, "17.54")
+        process_slot_answer(db, user.id, session, "valor da parcela")
+        process_slot_answer(db, user.id, session, "camisa amigo secreto")
+
+        wizard = session["transaction_wizard"]
+        assert wizard.get("card_name") == card_name
+        assert wizard.get("account_name") == account_name
+
+        slot = process_slot_answer(db, user.id, session, "Outros")
+        assert slot.tool_call is not None
+        args = slot.tool_call.arguments
+        assert args.get("card_name") == card_name
+        assert args.get("account_name") == account_name
+        assert args.get("installment_count") == 10
+        assert args.get("installment_start_index") == 10
+        assert args.get("status") == "planned"
+    finally:
+        db.query(Transaction).filter(Transaction.user_id == user.id).delete(synchronize_session=False)
+        db.query(CardInvoice).filter(CardInvoice.user_id == user.id).delete(synchronize_session=False)
+        db.query(CreditCard).filter(CreditCard.user_id == user.id).delete(synchronize_session=False)
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_card_installment_skips_due_date_and_uses_invoice_due():
+    from app.config import settings
+    from app.models import CardInvoice, CreditCard
+
+    engine = create_engine(settings.database_url)
+    SessionLocal = sessionmaker(bind=engine)
+    db = SessionLocal()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"slots_card_due_{suffix}@test.com",
+        password="secret1",
+        name="Card Due Slots",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        account_name = f"Mercado Pago_{suffix}"
+        card_name = f"Mercado Pago_{suffix}"
+        _create_account(db, user.id, account_name)
+        finance.create_card(
+            db,
+            user.id,
+            CreateCardInput(
+                name=card_name,
+                closing_day=9,
+                due_day=14,
+                settlement_account_name=account_name,
+            ),
+        )
+        message = (
+            "Lance no cartão mercado pago a despesa de 17,47 referente ao presente de amigo secreto"
+        )
+        session = {}
+        tool_call = ToolCall(
+            tool="register_expense",
+            arguments={"amount": "17.47", "description": "presente amigo secreto"},
+        )
+        ensure_transaction_slots(db, user.id, session, tool_call, message)
+
+        process_slot_answer(db, user.id, session, "realizado")
+        process_slot_answer(db, user.id, session, "cartão")
+        process_slot_answer(db, user.id, session, card_name)
+        process_slot_answer(db, user.id, session, "parcelado")
+        process_slot_answer(db, user.id, session, "2")
+        process_slot_answer(db, user.id, session, "mensal")
+        process_slot_answer(db, user.id, session, "1")
+        result = process_slot_answer(db, user.id, session, "hoje")
+
+        assert result.question is not None
+        assert "vencimento" not in result.question.lower()
+        wizard = session["transaction_wizard"]
+        assert wizard.get("due_date") == "2026-09-14"
+    finally:
+        db.query(Transaction).filter(Transaction.user_id == user.id).delete(synchronize_session=False)
+        db.query(CardInvoice).filter(CardInvoice.user_id == user.id).delete(synchronize_session=False)
+        db.query(CreditCard).filter(CreditCard.user_id == user.id).delete(synchronize_session=False)
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_expense_asks_payment_source_before_status():
+    from app.config import settings
+    from app.models import CreditCard
+
+    engine = create_engine(settings.database_url)
+    SessionLocal = sessionmaker(bind=engine)
+    db = SessionLocal()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"slots_pay_src_{suffix}@test.com",
+        password="secret1",
+        name="Pay Source",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        account_name = f"Mercado Pago_{suffix}"
+        _create_account(db, user.id, account_name)
+        finance.create_card(
+            db,
+            user.id,
+            CreateCardInput(
+                name=f"Cartão_{suffix}",
+                closing_day=9,
+                due_day=14,
+                settlement_account_name=account_name,
+            ),
+        )
+        session = {}
+        tool_call = ToolCall(
+            tool="register_expense",
+            arguments={"amount": "40", "description": "mercado"},
+        )
+        result = ensure_transaction_slots(db, user.id, session, tool_call, "gastei 40 no mercado")
+        assert result.question is not None
+        assert "cartão" in result.question.lower()
+        assert "conta" in result.question.lower()
+    finally:
+        from app.models import CardInvoice
+
+        db.query(CardInvoice).filter(CardInvoice.user_id == user.id).delete(synchronize_session=False)
+        db.query(CreditCard).filter(CreditCard.user_id == user.id).delete(synchronize_session=False)
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_income_message_seeds_amount_without_asking_again():
+    from app.agent.runner import _seed_register_arguments, _resolve_intent
+
+    message = "Lance uma receita de 594 referente ao auxílio transporte"
+    seeded = _seed_register_arguments(message)
+    assert seeded.get("amount") == "594"
+    assert "auxílio" in seeded.get("description", "").lower() or "transporte" in seeded.get(
+        "description", ""
+    ).lower()
+
+    tool_call, source = await _resolve_intent(message)
+    assert tool_call is not None
+    assert tool_call.tool == "register_income"
+    assert tool_call.arguments.get("amount") == "594"
+    assert source == "rule"
+
+    from app.config import settings
+
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"seed_amt_{suffix}@test.com",
+        password="secret1",
+        name="Seed Amt",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        _create_account(db, user.id, f"Flash_{suffix}")
+        session = {}
+        result = ensure_transaction_slots(db, user.id, session, tool_call, message)
+        wizard = session["transaction_wizard"]
+        assert wizard.get("amount") == "594"
+        assert result.question is not None
+        assert "valor" not in result.question.lower()
+    finally:
+        db.query(Transaction).filter(Transaction.user_id == user.id).delete(
+            synchronize_session=False
+        )
         db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
         db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
         db.query(User).filter(User.id == user.id).delete(synchronize_session=False)

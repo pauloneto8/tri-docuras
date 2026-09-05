@@ -61,7 +61,8 @@ Definidos em `app/main.py` e espelhados no Nginx:
 - Confirmação obrigatória antes de persistir lançamentos
 - LLM não recebe senhas nem executa SQL direto
 - Ferramentas validadas por Pydantic antes de `execute_tool`
-- Logs de conversa para auditoria (sem dados de cartão — app não armazena)
+- Logs de conversa para auditoria (sem dados de cartão — app não armazena PAN)
+- Mensagens do assistente passam por `chat_md`: HTML escapado antes de negrito/listas (XSS)
 
 ## Checklist de deploy seguro
 

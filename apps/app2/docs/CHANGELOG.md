@@ -2,6 +2,71 @@
 
 Registro das principais evoluções do projeto (App 2).
 
+## Unreleased
+
+- Dashboard: seção **Cartões e faturas** (total a pagar, vencimento no período, status, limite disponível). Dados em `get_summary()["card_invoices"]` via `invoice_dashboard()`.
+- Testes: `test_summary_includes_card_invoices`; suite **246**.
+
+## 2026-09-02 — Visual completo do chat
+
+- Avatares: assistente (ícone) à esquerda, inicial do usuário à direita
+- Balões assimétricos (`rounded-2xl` + canto cortado); chips e Confirmar/Cancelar **fora** do balão
+- Filtro Jinja `chat_md` (`app/chat_format.py`): `*negrito*` / `**negrito**`, listas `- `, HTML escapado
+- Welcome com chips clicáveis; cabeçalho do painel com avatar
+- Testes: `tests/test_chat_format.py`
+- Suite: **244** testes
+
+## 2026-09-02 — Parcelamento: total vs parcela, parcela inicial e datas
+
+- Parcelamento — valor: pergunta se o valor informado é o **total da compra** ou o **valor de cada parcela** (`installment_amount_basis`; wizard + formulário Movimentos)
+- Parcelamento — parcela inicial: pergunta qual parcela está sendo lançada (`installment_start_index`); gera somente da parcela informada até a última (ex.: 180/360 → parcelas 180…360)
+- Parcelamento — datas no wizard: competência e vencimento da **parcela atual** perguntados após N/intervalo/índice; cronograma ancora no `due_date`; em realizado, `payment_date` **não** sobrescreve competência/vencimento
+- Parcelamento — inferência: datas relativas da mensagem inicial (`ontem`, `hoje`) **não** preenchem slots de parcelamento; ao escolher *parcelado*, datas genéricas anteriores são limpas
+- Realizado no wizard: pergunta `payment_mode` (único/fixo/parcelado) **antes** de `payment_date` quando ainda não há modo definido
+- Confirmação de parcelamento: exibe competência, vencimento e data de realização separadamente
+
+## 2026-09-02 — Corrigir transferência (`update_transfer`)
+
+- Nova ferramenta `update_transfer` para alterar origem, destino, valor ou data de um par já lançado
+- Heurística e prompt: "corrija a transferência…" **não** usa `update_transaction` nem cria outra transferência
+- Testes: `tests/test_update_transfer.py`
+
+## 2026-09-01 — Cartões como entidade separada e CRUD no assistente
+
+- Nova tabela `credit_cards` — cartão **não** é mais conta bancária (`account_type=cartao` legado migrado e desativado; migração `016`)
+- `CardInvoice` referencia `card_id`; `Transaction` aceita `card_id` opcional + `account_id` opcional (pelo menos um obrigatório)
+- Compras no cartão não alteram saldo bancário; pagamento de fatura = despesa na conta de débito (não transferência para “conta-cartão”)
+- UI: menu **Cartões** → `/accounts/cards`; formulário próprio com conta de liquidação obrigatória
+- Movimentos: campos **Cartão** e **Conta** independentes
+- Assistente:
+  - `create_card` — wizard (`card_wizard.py`): apelido, fechamento, vencimento, limite, conta de liquidação
+  - `update_card` — editar apelido, instituição, limite, fechamento, vencimento, liquidação (confirmação obrigatória)
+  - `delete_card` — exclusão lógica (`is_active=false`; histórico preservado)
+  - `list_invoices`, `pay_invoice` — consultar e pagar faturas
+- Testes: `test_credit_cards.py`, `test_card_wizard.py`, `test_update_card.py`, `test_runner_update_card.py`
+- Suite: **222** testes
+
+## 2026-09-01 — Cartões de crédito e faturas (inicial)
+
+- Contas `cartao` com limite, dia de fechamento e vencimento (substituídas pela entidade `credit_cards` na revisão `016`)
+- Tabela `card_invoices` e `transactions.invoice_id` (migração `015`)
+- Compras no cartão atribuídas à fatura do ciclo
+- UI em `/accounts`: fatura atual, limite disponível, **Pagar fatura**
+- Skill `assistfin-credit-cards`
+
+## 2026-08-31 — Lançamentos parcelados
+
+- Despesas e receitas **parceladas** em N vezes iguais (intervalo mensal, semanal ou quinzenal)
+- Nova tabela `installment_plans` e campos `installment_plan_id` / `installment_index` em transações (migração `014`)
+- Valor informado = total; `split_cents()` divide em parcelas (resto de centavos na última)
+- Todas as N ocorrências geradas na criação; futuras como `planned`; 1ª pode ser `actual`
+- Formulário em Movimentos: checkbox **Parcelado**, número de parcelas e intervalo (mutuamente exclusivo com fixo)
+- Selo `3/12 · mensal` na lista **A realizar**; ação **Cancelar parcelas** (`POST /transactions/installments/{id}/stop`)
+- Wizard do assistente: slot `payment_mode` (único / fixo / parcelado), depois parcelas e intervalo
+- Skill de projeto: `.cursor/skills/assistfin-installments/SKILL.md`
+- Testes em `tests/test_installments.py`
+- Suite: **202** testes
+
 ## 2026-08-31 — Lançamentos fixos (recorrência)
 
 - Despesas e receitas **fixas** com frequência diária, semanal ou mensal

@@ -8,9 +8,12 @@ KNOWN_TOOLS = frozenset(
         "register_income",
         "register_transfer",
         "realize_planned",
+        "update_transfer",
         "update_transaction",
         "delete_transaction",
         "update_account",
+        "update_card",
+        "delete_card",
         "list_transactions",
         "list_accounts",
         "list_categories",
@@ -18,7 +21,10 @@ KNOWN_TOOLS = frozenset(
         "get_budget_status",
         "categorize",
         "create_account",
+        "create_card",
         "create_category",
+        "list_invoices",
+        "pay_invoice",
         "unsupported_action",
     }
 )
@@ -26,8 +32,8 @@ KNOWN_TOOLS = frozenset(
 DEFAULT_UNSUPPORTED_MESSAGE = (
     "Essa ação ainda não está disponível no assistente. "
     "Posso ajudar a: lançar despesas e receitas (incluindo previsões), realizar previsões, "
-    "corrigir ou excluir lançamentos, editar contas (saldo inicial, apelido), "
-    "listar contas, categorias e transações, ver resumo do mês, cadastrar contas ou categorias."
+    "corrigir ou excluir lançamentos, editar contas e cartões, "
+    "listar contas, categorias e transações, ver resumo do mês, cadastrar contas, cartões ou categorias."
 )
 
 
@@ -42,8 +48,8 @@ def unsupported_tool_call(
         message = (
             f"A ação '{requested_tool}' ainda não está disponível no assistente. "
             "Posso ajudar a: lançar despesas e receitas, corrigir ou excluir lançamentos, "
-            "editar contas (saldo inicial, apelido), listar contas, categorias e transações, "
-            "ver resumo do mês, cadastrar contas ou cadastrar categorias."
+            "editar contas e cartões, listar contas, categorias e transações, "
+            "ver resumo do mês, cadastrar contas, cartões ou categorias."
         )
     else:
         message = DEFAULT_UNSUPPORTED_MESSAGE

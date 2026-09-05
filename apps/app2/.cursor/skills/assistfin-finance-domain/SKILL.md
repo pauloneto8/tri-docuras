@@ -5,7 +5,7 @@ description: >-
   transferências, orçamentos e regras de negócio. Use ao alterar dashboard,
   finance.py, modelos, onboarding, contas, movimentos, resumos por período
   ou saldo inicial com data.
-paths: app/services/finance.py, app/models.py, app/schemas.py, app/services/recurrence.py, app/templates/dashboard.html, app/templates/accounts.html, app/templates/transactions.html, app/templates/budgets.html, app/routers/pages.py, tests/test_summary.py, tests/test_transfers.py, tests/test_planned_transactions.py, tests/test_recurrence.py
+paths: app/services/finance.py, app/models.py, app/schemas.py, app/services/recurrence.py, app/services/installments.py, app/services/credit_cards.py, app/templates/dashboard.html, app/templates/accounts.html, app/templates/transactions.html, app/templates/budgets.html, app/routers/pages.py, tests/test_summary.py, tests/test_transfers.py, tests/test_update_transfer.py, tests/test_planned_transactions.py, tests/test_recurrence.py, tests/test_installments.py, tests/test_credit_cards.py
 ---
 
 # AssistFin — Domínio financeiro
@@ -40,12 +40,25 @@ Realizar: `realize_planned()` cria lançamento `actual` com `source_planned_id`.
 
 | Seção | Query / regra | Exibição |
 |-------|---------------|----------|
-| **A realizar** | `status=planned`, `not is_realized` | Vencimento; selo Previsto ou `Fixo · mensal/semanal/diária`; ação Realizar / Encerrar série |
+| **A realizar** | `status=planned`, `not is_realized` | Vencimento; selo Previsto ou `Fixo · mensal/semanal/diária` ou `3/12 · mensal`; ação Realizar / Encerrar série / Cancelar parcelas |
 | **Extrato** | `status=actual` | Pagamento; selo Realizado; “de previsto” se `source_planned_id` |
 
 Previstos liquidados **não** aparecem na lista. `ListTransactionsInput.status`: `actual` | `planned` | `all` (default `all` — chat/API inalterados).
 
-Formulário manual: realizado → data da realização; previsto → competência + vencimento; **fixo** → frequência + término opcional. **Realizar**: pagamento obrigatório; valor/descrição opcionais; mesma conta ou outra conta.
+Formulário manual: realizado → data da realização; previsto → competência + vencimento; **fixo** → frequência + término opcional; **parcelado** → N parcelas + intervalo + radios total vs parcela (`installment_amount_basis`). O form cria da parcela 1; o wizard pergunta `installment_start_index`. **Realizar**: pagamento obrigatório; valor/descrição opcionais; mesma conta ou outra conta.
+
+## Lançamentos parcelados
+
+- Tabela `installment_plans`; transações geradas têm `installment_plan_id`. Ver skill `assistfin-installments`.
+
+## Cartões de crédito e faturas
+
+- Entidade `CreditCard` (`credit_cards`) — **separada** de contas bancárias
+- Campos: `closing_day`, `due_day`, `credit_limit_cents`, `settlement_account_id`
+- Tabela `card_invoices`; transações têm `card_id` e/ou `account_id` (pelo menos um)
+- Compra no cartão = despesa na fatura; **não** altera saldo bancário
+- Pagar fatura = despesa na conta de débito (liquidação)
+- Ver skill `assistfin-credit-cards`
 
 ## Lançamentos fixos
 
@@ -75,6 +88,7 @@ Formulário manual: realizado → data da realização; previsto → competênci
 | Saldo anterior | Soma dos saldos das contas no dia anterior ao período |
 | Resultado final | Soma dos saldos ao fim do período |
 | Saldos por conta | `_account_balance_at(account, period_end)` |
+| Cartões e faturas | `invoice_dashboard()` — total em aberto, fatura atual, vencimento no período, limite; **não** mistura com saldo bancário |
 
 **Saldo inicial** (`opening_balance_cents` + `opening_balance_date`): entra no saldo da conta, não é receita do período. Só vale a partir da data declarada.
 
@@ -87,7 +101,8 @@ Formulário manual: realizado → data da realização; previsto → competênci
 
 ## Entidades
 
-- Contas: `corrente`, `poupanca`, `carteira`, `cartao`
+- Contas bancárias: `corrente`, `poupanca`, `carteira`
+- Cartões: entidade `CreditCard` (`credit_cards`) — não misturar com contas
 - Categorias: `expense` | `income`
 - Isolamento por `user_id`
 
@@ -96,12 +111,13 @@ Formulário manual: realizado → data da realização; previsto → competênci
 1. `finance.py` (fonte da verdade)
 2. `format_tool_result` se o agente expõe
 3. Templates com rótulos claros
-4. Testes (`test_summary.py`, `test_transfers.py`, `test_planned_transactions.py`, `test_recurrence.py`)
+4. Testes (`test_summary.py`, `test_transfers.py`, `test_update_transfer.py`, `test_planned_transactions.py`, `test_recurrence.py`, `test_installments.py`)
 
 ## Armadilhas
 
 - `list_accounts` ≠ `list_transactions` (intents)
 - Transferência ≠ despesa/receita nos cards do período
+- Corrigir transferência = `update_transfer`, não `update_transaction`
 - Página `/accounts` = saldo **atual**; dashboard = saldo **histórico** ao fim do período
 - Página `/transactions` = **A realizar** + **Extrato**; não misturar previsto liquidado com realizado na lista
 - Lançamentos exigem confirmação no agente

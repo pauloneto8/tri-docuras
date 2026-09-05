@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Editar conta — AssistFin{% endblock %}
+{% block content %}
+<div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h1 class="text-lg font-semibold text-slate-100">Editar conta</h1>
+    <p class="text-sm text-slate-400">{{ account.name }}</p>
+  </div>
+  <a href="/accounts" class="text-sm text-emerald-400 hover:text-emerald-300">← Voltar às contas</a>
+</div>
+
+{% if error %}
+<p class="mb-4 rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-2 text-rose-300 text-sm">{{ error }}</p>
+{% endif %}
+
+<section class="max-w-xl rounded-xl bg-slate-900 border border-slate-800 p-5">
+  <form method="post" action="/accounts/{{ account.id }}" class="space-y-3">
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Apelido</label>
+      <input name="name" type="text" value="{{ account.name }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Tipo</label>
+      <select name="account_type" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2" required>
+        <option value="corrente" {% if account.account_type == 'corrente' %}selected{% endif %}>Corrente</option>
+        <option value="poupanca" {% if account.account_type == 'poupanca' %}selected{% endif %}>Poupança</option>
+        <option value="carteira" {% if account.account_type == 'carteira' %}selected{% endif %}>Carteira</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Instituição <span class="text-slate-500">(opcional)</span></label>
+      <input name="institution" type="text" value="{{ account.institution or '' }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Saldo inicial</label>
+      <input name="opening_balance" type="text" value="{{ account.opening_balance }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Data do saldo inicial</label>
+      <input name="opening_balance_date" type="date" value="{{ account.opening_balance_date or today }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+    </div>
+    <div class="flex flex-col sm:flex-row gap-2 pt-2">
+      <button type="submit" class="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium">Salvar</button>
+      <a href="/accounts" class="flex-1 rounded-lg border border-slate-700 px-4 py-2 text-center text-slate-300 hover:bg-slate-800">Cancelar</a>
+    </div>
+  </form>
+  <form method="post" action="/accounts/{{ account.id }}/delete" class="mt-4 pt-4 border-t border-slate-800" onsubmit="return confirm('Desativar esta conta?')">
+    <button type="submit" class="w-full rounded-lg border border-rose-700 text-rose-300 hover:bg-rose-950/40 px-4 py-2 text-sm">Desativar conta</button>
+  </form>
+</section>
+{% endblock %}

@@ -10,13 +10,17 @@
 | `app/agent/ollama.py` | API Ollama local |
 | `app/agent/prompt.py` | SYSTEM_PROMPT + `extract_json` |
 | `app/agent/tool_parse.py` | KNOWN_TOOLS, unsupported_action |
-| `app/services/intents.py` | listar/cadastrar conta/categoria, transferência |
+| `app/services/intents.py` | listar/cadastrar conta/categoria/cartão, transferência, update/delete cartão |
 | `app/services/tools.py` | Regras, execute, formatação, `parse_user_date`, `is_date_only_message` |
+| `app/chat_format.py` | Filtro Jinja `chat_md` (negrito, listas, escape HTML) |
 | `app/services/multi_movements.py` | Parser de vários lançamentos em uma mensagem |
 | `app/services/multi_movement_flow.py` | Fluxo guiado de confirmação multi |
-| `app/services/transaction_slots.py` | Slots de transação (status, datas, recorrência, conta, categoria) |
+| `app/services/transaction_slots.py` | Slots de transação (status, modo, parcelas, datas, recorrência, conta, categoria) |
+| `app/services/installments.py` | Motor de parcelas (`split_cents`, `repeat_cents`, `create_installment_plan`) |
 | `app/services/recurrence.py` | Regras fixas, horizonte de previstos, encerrar série |
 | `app/services/realize_planned_slots.py` | Wizard de realizar previsto (pagamento, mesma/outra conta) |
+| `app/services/card_wizard.py` | Wizard de cadastro de cartão (`create_card`) |
+| `app/services/pay_invoice_slots.py` | Wizard de pagamento de fatura |
 | `app/services/transfer_slots.py` | Wizard de transferência |
 | `app/services/agent_suggestions.py` | Chips clicáveis |
 | `app/services/agent_state.py` | Limpar estado ao cancelar |
@@ -27,15 +31,21 @@
 
 | Ferramenta | Argumentos principais |
 |------------|----------------------|
-| `register_expense` | amount, description, account_name?, category_name?, competence_date?, due_date?, payment_date?, transaction_date?, frequency?, recurrence_end_date? — **sem** `status` (wizard pergunta) |
+| `register_expense` | amount, description, account_name?, card_name?, category_name?, competence_date?, due_date?, payment_date?, transaction_date?, frequency?, recurrence_end_date?, installment_count?, installment_interval? — **sem** `status`, `installment_amount_basis`, `installment_start_index` (wizard pergunta) |
 | `register_income` | idem |
 | `register_transfer` | amount, from_account_name?, to_account_name?, description?, transaction_date? |
+| `update_transfer` | transaction_id?, amount?, from_account_name?, to_account_name?, description?, transaction_date? — **não** usar `update_transaction` |
 | `realize_planned` | planned_id?, description?, amount?, account_name?, category_name?, competence_date?, due_date?, payment_date?, transaction_date? |
 | `update_transaction` | transaction_id?, amount?, description?, account_name?, category_name?, transaction_date?, competence_date?, due_date?, payment_date? |
 | `delete_transaction` | transaction_id?, amount?, description? |
-| `update_account` | account_id?, account_name?, opening_balance?, opening_balance_date?, … |
+| `update_account` | account_id?, account_name?, opening_balance?, opening_balance_date?, name?, institution?, account_type? |
+| `create_card` | name, settlement_account_name, closing_day, due_day, institution?, credit_limit? — wizard se faltar dado |
+| `update_card` | card_id?, card_name?, name?, institution?, credit_limit?, closing_day?, due_day?, settlement_account_name? |
+| `delete_card` | card_id?, card_name? |
+| `list_invoices` | account_name?, limit? |
+| `pay_invoice` | account_name?, invoice_id?, from_account_name, payment_date? |
 | `list_transactions` | limit?, type?, status? (`actual` \| `planned` \| `all`) |
-| `list_accounts` | {} |
+| `list_accounts` | {} — retorna contas **e** cartões |
 | `list_categories` | {} |
 | `get_summary` | year?, month? |
 | `get_budget_status` | year?, month? |
@@ -67,10 +77,17 @@ docker compose exec -T app2 python -m pytest \
   tests/test_multi_movements.py \
   tests/test_account_wizard.py \
   tests/test_category_wizard.py \
+  tests/test_card_wizard.py \
+  tests/test_credit_cards.py \
+  tests/test_update_card.py \
+  tests/test_runner_update_card.py \
   tests/test_list_accounts.py \
   tests/test_list_categories.py \
   tests/test_agent_suggestions.py \
   tests/test_agent_cancel.py \
+  tests/test_update_transfer.py \
+  tests/test_chat_format.py \
+  tests/test_installments.py \
   -q
 ```
 

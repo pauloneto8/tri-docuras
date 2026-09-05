@@ -10,8 +10,9 @@ AssistFin é finanças pessoais multiusuário com chat híbrido (regras + Groq +
 
 1. Leia o [README.md](README.md) e a skill relevante em `.cursor/skills/`.
 2. Mudança no agente → `assistfin-ai-agent` + `assistfin-agent-tests`.
-3. Mudança financeira → `assistfin-finance-domain` + testes em `tests/test_summary.py`, `tests/test_transfers.py`, `tests/test_planned_transactions.py`, `tests/test_recurrence.py`.
-4. Deploy → `assistfin-deploy-nginx` + `assistfin-implementation`.
+3. Mudança financeira → `assistfin-finance-domain` + testes em `tests/test_summary.py`, `tests/test_transfers.py`, `tests/test_update_transfer.py`, `tests/test_planned_transactions.py`, `tests/test_recurrence.py`, `tests/test_installments.py`.
+4. Cartões → `assistfin-credit-cards`. Parcelas → `assistfin-installments`.
+5. Deploy → `assistfin-deploy-nginx` + `assistfin-implementation`.
 
 ## Regras de ouro
 
@@ -42,29 +43,59 @@ Dashboard: `get_summary()` com `period` + `ref_date`. Saldos por conta usam `acc
 | `payment_date` | Quando o caixa se moveu (somente `actual`) |
 | `transaction_date` | Data de caixa no sistema (= `due_date` ou `payment_date`) |
 
-Wizard de transação (`transaction_slots.py`): após tipo e status, pergunta datas, depois **recorrência** (fixo/frequência/término), então valor/descrição/conta/categoria.
+Wizard de transação (`transaction_slots.py`):
+
+| Status | Ordem resumida |
+|--------|----------------|
+| **Previsto** | tipo → status → competência + vencimento (se **não** parcelado) → modo → … |
+| **Realizado** | tipo → status → modo (se ainda indefinido) → pagamento (se **não** parcelado) → … |
+| **Parcelado** | … → N parcelas → intervalo → **parcela atual** (`installment_start_index`) → **competência** + **vencimento** da parcela → pagamento (se realizado) → valor → total vs parcela → descrição → conta → categoria |
+
+Regras de datas no parcelamento: `apply_inferred_dates` não copia `ontem`/`hoje` da mensagem; `payment_date` não altera competência/vencimento já informados; `create_installment_plan` usa `due_date` como âncora do cronograma.
 
 Wizard de realizar previsto (`realize_planned_slots.py`): identifica previsto → data de pagamento → mesma conta? → conta (se diferente).
+
+Corrigir transferência: ferramenta `update_transfer` (origem, destino, valor, data). **Não** usar `update_transaction` nem `register_transfer`.
 
 ### Lançamentos fixos
 
 - Tabela `recurring_rules`; transações geradas têm `recurrence_id`
 - Motor: `app/services/recurrence.py` — horizonte 3 meses, idempotente
 - Encerrar série: `deactivate_recurring_rule()` + rota `POST /transactions/recurring/{rule_id}/stop`
-- Responder **não** no slot `is_recurring` **não** cancela o wizard
+- Responder no slot `payment_mode` ou `is_recurring` **não** cancela o wizard
+
+### Lançamentos parcelados
+
+- Tabela `installment_plans`; transações têm `installment_plan_id` + `installment_index` (1..N)
+- Motor: `app/services/installments.py` — skill `assistfin-installments`
+- Valor: `installment_amount_basis` = `total` (divide) ou `installment` (repete N vezes)
+- Parcela inicial: `installment_start_index` — só cria da parcela informada até N (índices e descrições `k/N` preservados)
+- Datas: competência e vencimento da parcela atual no wizard; cronograma a partir do vencimento; caixa (`payment_date`) independente em realizado
+- `INSTALLMENT_SLOTS`: `installment_count`, `installment_interval`, `installment_start_index`, `installment_amount_basis`
+
+### Cartões de crédito e faturas
+
+- Entidade `CreditCard` (`credit_cards`) — separada de contas bancárias
+- Campos: `closing_day`, `due_day`, `credit_limit_cents`, `settlement_account_id` (conta de liquidação padrão)
+- Tabela `card_invoices`; transações têm `card_id` e/ou `account_id`
+- Motor: `app/services/credit_cards.py` — skill `assistfin-credit-cards`
+- Compra no cartão = despesa na fatura; **não** altera saldo bancário
+- Pagar fatura = despesa na conta de débito (liquidação); não duplica despesa da compra
+- Assistente: `create_card`, `update_card`, `delete_card`, `list_invoices`, `pay_invoice`
+- Wizard de cadastro: `card_wizard.py`
 
 ### UI Movimentos (`/transactions`)
 
 | Seção | Conteúdo |
 |-------|----------|
-| **A realizar** | `status = planned` pendente (`not is_realized`); vencimento; selo `Fixo · …` se recorrente; **Realizar** / **Encerrar série** |
+| **A realizar** | `status = planned` pendente (`not is_realized`); vencimento; selo `Fixo · …` se recorrente; selo `3/12 · mensal` se parcelado; **Realizar** / **Encerrar série** / **Cancelar parcelas** |
 | **Extrato** | Somente `status = actual`; data de pagamento; “de previsto” quando `source_planned_id` |
 
 Previstos liquidados **não** listados (evita duplicata). Pares previsto/realizado no dashboard (`plan_vs_actual`). Consultas separadas: `ListTransactionsInput(status="planned")` e `status="actual"`.
 
 ### Wizard vs multi-lançamentos
 
-- Slots de data (`competence_date`, `due_date`, `payment_date`) e recorrência (`RECURRENCE_SLOTS`) têm prioridade sobre `parse_multi_movements`
+- Slots de data (`competence_date`, `due_date`, `payment_date`), modo (`payment_mode`) e parcelas (`INSTALLMENT_SLOTS`) / recorrência (`RECURRENCE_SLOTS`) têm prioridade sobre `parse_multi_movements`
 - `is_date_only_message()` — data isolada (`10/08/2026`) não vira vários lançamentos
 - Testes: `tests/test_multi_movements.py`
 
@@ -81,22 +112,28 @@ Previstos liquidados **não** listados (evita duplicata). Pares previsto/realiza
 
 | Área | Arquivos |
 |------|----------|
-| Cálculos | `app/services/finance.py`, `app/services/recurrence.py` |
-| Agente | `app/agent/runner.py`, `app/services/tools.py` |
-| Wizards | `transaction_wizard.py`, `transaction_slots.py`, `realize_planned_slots.py`, `account_wizard.py`, `category_wizard.py`, `transfer_slots.py` |
+| Cálculos | `app/services/finance.py`, `app/services/recurrence.py`, `app/services/installments.py`, `app/services/credit_cards.py` |
+| Agente | `app/agent/runner.py`, `app/services/tools.py`, `app/agent/prompt.py` |
+| Wizards | `transaction_wizard.py`, `transaction_slots.py`, `realize_planned_slots.py`, `account_wizard.py`, `category_wizard.py`, `card_wizard.py`, `transfer_slots.py`, `pay_invoice_slots.py` |
 | UI movimentos | `templates/transactions.html`, `routers/pages.py` (`_transactions_page_context`) |
-| UI chat | `templates/partials/agent_*.html` |
+| UI chat | `templates/partials/agent_*.html`, `app/chat_format.py` |
 | Auth | `app/auth.py`, `app/routers/auth.py`, `app/main.py` |
 
 ## Skills disponíveis
 
 - `assistfin-implementation` — deploy, testes, convenções
 - `assistfin-finance-domain` — saldos, períodos, transferências
-- `assistfin-ai-agent` — runner, LLM, ferramentas
+- `assistfin-ai-agent` — runner, LLM, ferramentas, visual do chat
+- `assistfin-installments` — parcelas (total vs parcela, índice, datas)
 - `assistfin-onboarding` — primeira conta
 - `assistfin-agent-tests` — pytest do agente
 - `assistfin-deploy-nginx` — infra e proxy
-- `ai-agent-design-patterns` — padrões de agentes
+- `assistfin-credit-cards` — cartões, faturas, ciclo, pagamento
+- `ai-agent-design-patterns` — padrões de orquestração (LLM-first, wizards, confirmação)
+
+## Planos em `.cursor/plans/`
+
+Já implementados (não reexecutar): [chat-visual-completo.md](.cursor/plans/chat-visual-completo.md), [valor-total-ou-parcela.md](.cursor/plans/valor-total-ou-parcela.md). Sem briefing pendente.
 
 ## Não editar
 
