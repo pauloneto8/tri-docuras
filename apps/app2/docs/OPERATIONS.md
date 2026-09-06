@@ -36,7 +36,7 @@ Na tela `/admin` (usuário root):
 
 1. **Criar backup agora** — gera `assistfin_YYYYMMDD_HHMMSS.dump` (formato custom `pg_dump -Fc`)
 2. **Baixar** / **Excluir** arquivos listados
-3. **Restaurar** — digite exatamente `RESTAURAR` e confirme; usa `pg_restore --clean --if-exists`
+3. **Restaurar** — digite exatamente `RESTAURAR` e confirme. O serviço encerra outras conexões, recria o schema `public` e aplica o dump com `pg_restore` (sem `--single-transaction`, que falhava em silêncio com cliente 17 × servidor 16).
 
 Arquivos ficam no volume Docker `app2_backups` (`/app/data/backups` no container). Mantém os últimos 20 dumps.
 
@@ -94,6 +94,7 @@ DELETE FROM conversation_messages;
 DELETE FROM conversations;
 DELETE FROM ofx_import_lines;
 DELETE FROM ofx_import_batches;
+DELETE FROM ofx_category_memory;
 DELETE FROM transactions;
 DELETE FROM card_invoices;
 DELETE FROM installment_plans;

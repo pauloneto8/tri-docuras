@@ -9,6 +9,7 @@
 
 Legado: contas `account_type=cartao` migradas para `credit_cards` na revisão `016` e desativadas.
 Migração `017`: `ofx_fitid` + tabelas de importação.
+Migração `018`: `ofx_category_memory` + categoria nas linhas do lote.
 
 ## API interna (`finance.py`)
 
@@ -55,8 +56,11 @@ summary = apply_batch(db, user_id, card, batch.id, choices)
 | `match` | Débito com candidato (valor + data ±3d + memo) | Grava `ofx_fitid` no lançamento |
 | `pay_invoice` | Crédito ≈ total de fatura aberta/fechada | `pay_invoice` + `ofx_fitid` na despesa bancária |
 | `link_invoice_payment` | Crédito ≈ fatura já paga | Anexa `ofx_fitid` ao pagamento existente |
-| `skip` | Estorno / sem candidato | No-op |
+| `skip` | Só com confirmação explícita na revisão | No-op |
 | `already_imported` | FITID já em `transactions` | No-op |
+| `pending` | Crédito sem match automático | Exige escolha do usuário (não aplica sozinho) |
+
+Cada linha (exceto já importada) exige seleção de **fatura** ao criar/conciliar/pagar.
 
 ## Schemas
 
@@ -84,6 +88,7 @@ Importação OFX **não** tem ferramenta de chat na v1 (somente UI).
 - `/accounts/cards` — hierarquia expansível: cartão → faturas → movimentos (`cards_with_nested_invoices` / `list_invoice_movements`)
 - CRUD: `/accounts/cards/new`, `/accounts/cards/{id}/edit` (conta de liquidação obrigatória)
 - **Pagar fatura** dentro da fatura expandida
+- **Excluir fatura** — remove a fatura e compras do cartão ligadas; pagamento na conta (se pago) permanece
 - **Importar OFX**: `/accounts/cards/{id}/ofx` → revisão → aplicar (`card_ofx_upload.html`, `card_ofx_review.html`)
 
 ## Reset de dados

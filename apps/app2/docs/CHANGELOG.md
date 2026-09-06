@@ -5,7 +5,10 @@ Registro das principais evoluções do projeto (App 2).
 ## Unreleased
 
 - **OFX cartão** — importação com revisão em `/accounts/cards/{id}/ofx`: cria compras, concilia por FITID/valor/data/descrição e trata créditos como pagar/vincular fatura; staging `ofx_import_*` + `transactions.ofx_fitid`; docs em ARCHITECTURE/OPERATIONS/SECURITY e skill `assistfin-credit-cards`
+- **OFX revisão** — nenhum lançamento é ignorado sem confirmação; cada movimento exige escolha de fatura de vínculo; categoria memorizada por descrição OFX
+- **Excluir fatura** — botão na UI de cartões; remove fatura e movimentos do cartão ligados; pagamento na conta de liquidação (se pago) é mantido
 - **Admin** — backup e restauração do PostgreSQL em `/admin` (criar, baixar, restaurar com confirmação `RESTAURAR`, excluir); dumps em volume `app2_backups`; cliente `postgresql-client` no container
+- **Restore** — correção: reset do schema `public` + validação pós-restore (antes `--single-transaction` + `SET transaction_timeout` do pg_dump 17 faziam o restore falhar sem alterar dados); evita 500 ao fechar a sessão HTTP após `pg_terminate_backend`
 - **LLM** — Ollama removido; intenção via LLM usa **somente Groq**; fallback de regras se a API falhar/rate-limit
 - Serviço `ollama` removido do `docker-compose.yml`
 - **Wizard de lançamento** — extrai da mensagem cartão/conta, status, datas e modo; só pergunta o que faltar; modo único/fixo/parcelado não defaulta `single` só por ter valor
@@ -13,7 +16,8 @@ Registro das principais evoluções do projeto (App 2).
 - **Editar parcela** — se houver parcelas seguintes, pergunta escopo `this` (só esta) ou `subsequent` (esta e as seguintes); valor/descrição/conta/categoria/tipo propagam; datas só na parcela editada (UI + assistente via `installment_scope`)
 - **Categorias no assistente** — `list_categories`, `update_category`, `delete_category` ligados; cadastro em lote (`names`); nome com “e” sem vírgula (ex.: *Vale e Auxílio*) permanece um nome; se o nome já existe com outro tipo, `create_category` atualiza o tipo; sem tipo explícito o wizard pergunta (não assume despesa)
 - **Dashboard** — previsto × realizado por categoria (`planned_*` / `actual_*` / `variance_*` em `expenses_by_category` / `income_by_category`)
-- Suite: **315** testes.
+- **Formulário de movimentos** — `category_id` (e outros ints opcionais) aceitam string vazia do HTML select
+- Suite: **316** testes.
 
 ## 2026-09-04 — CRUD nas telas, filtros, cartões aninhados e resumo no chat
 

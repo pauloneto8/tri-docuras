@@ -12,7 +12,16 @@ from typing import Any, Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Account, CardInvoice, CreditCard, OfxImportBatch, OfxImportLine, Transaction
+from app.models import (
+    Account,
+    CardInvoice,
+    Category,
+    CreditCard,
+    OfxCategoryMemory,
+    OfxImportBatch,
+    OfxImportLine,
+    Transaction,
+)
 from app.schemas import TransactionCreate
 from app.timezone import local_now
 
@@ -24,6 +33,7 @@ Action = Literal[
     "link_invoice_payment",
     "skip",
     "already_imported",
+    "pending",
 ]
 
 DATE_WINDOW_DAYS = 3
@@ -279,7 +289,108 @@ def _invoice_payment_suggestion(
             payment_tx_id = int(inv.payment_transfer_group_id)
         return "link_invoice_payment", payment_tx_id, inv.id
 
-    return "skip", None, None
+    # Nunca ignorar automaticamente — usuário confirma na revisão
+    return "pending", None, None
+
+
+def _suggested_invoice_for_purchase(
+    db: Session, card: CreditCard, posted_date: date
+) -> int:
+    from app.services.credit_cards import get_or_create_invoice
+
+    return get_or_create_invoice(db, card, posted_date).id
+
+
+def memo_key(memo: str) -> str:
+    return normalize_memo(memo)[:255]
+
+
+def lookup_category_memory(db: Session, user_id: int, memo: str) -> int | None:
+    key = memo_key(memo)
+    if not key:
+        return None
+    row = db.scalar(
+        select(OfxCategoryMemory).where(
+            OfxCategoryMemory.user_id == user_id,
+            OfxCategoryMemory.memo_key == key,
+        )
+    )
+    if row is None:
+        return None
+    cat = db.get(Category, row.category_id)
+    if cat is None or cat.user_id != user_id:
+        return None
+    return cat.id
+
+
+def remember_category(db: Session, user_id: int, memo: str, category_id: int) -> None:
+    key = memo_key(memo)
+    if not key:
+        return
+    cat = db.get(Category, category_id)
+    if cat is None or cat.user_id != user_id:
+        raise ValueError("Categoria inválida.")
+    row = db.scalar(
+        select(OfxCategoryMemory).where(
+            OfxCategoryMemory.user_id == user_id,
+            OfxCategoryMemory.memo_key == key,
+        )
+    )
+    if row is None:
+        db.add(
+            OfxCategoryMemory(
+                user_id=user_id,
+                memo_key=key,
+                category_id=category_id,
+            )
+        )
+    else:
+        row.category_id = category_id
+    db.flush()
+
+
+def suggest_category_id(
+    db: Session,
+    user_id: int,
+    memo: str,
+    *,
+    matched_tx: Transaction | None = None,
+    tx_type: str = "expense",
+) -> int | None:
+    """Ordem: memória OFX → categoria do lançamento conciliado → keywords."""
+    memorized = lookup_category_memory(db, user_id, memo)
+    if memorized is not None:
+        return memorized
+    if matched_tx is not None and matched_tx.category_id is not None:
+        return matched_tx.category_id
+    from app.services.finance import suggest_category_by_keywords
+
+    suggested = suggest_category_by_keywords(db, user_id, memo, tx_type)
+    return suggested.id if suggested else None
+
+
+def _resolve_category(
+    db: Session,
+    user_id: int,
+    category_id: int | None,
+    *,
+    memo: str,
+) -> int | None:
+    if category_id is None:
+        return None
+    cat = db.get(Category, category_id)
+    if cat is None or cat.user_id != user_id:
+        raise ValueError(f"Categoria inválida para o lançamento ({memo}).")
+    return cat.id
+
+
+def _expense_categories(db: Session, user_id: int) -> list[dict[str, Any]]:
+    rows = db.scalars(
+        select(Category)
+        .where(Category.user_id == user_id, Category.type == "expense")
+        .order_by(Category.name.asc())
+    ).all()
+    return [{"id": c.id, "name": c.name} for c in rows]
 
 
 def suggest_for_txn(
@@ -299,10 +410,11 @@ def suggest_for_txn(
         return _invoice_payment_suggestion(db, user_id, card, txn)
 
     match, _score = _best_debit_match(txn, card_txs, used_tx_ids)
+    inv_id = _suggested_invoice_for_purchase(db, card, txn.posted_date)
     if match is not None:
         used_tx_ids.add(match.id)
-        return "match", match.id, None
-    return "create", None, None
+        return "match", match.id, match.invoice_id or inv_id
+    return "create", None, inv_id
 
 
 def create_batch(
@@ -312,7 +424,10 @@ def create_batch(
     filename: str,
     content: str | bytes,
 ) -> OfxImportBatch:
+    from app.services.credit_cards import ensure_invoices_for_card
+
     expire_stale_batches(db, user_id)
+    ensure_invoices_for_card(db, card)
     txns = parse_ofx(content)
     known = _existing_fitids(db, user_id)
     card_txs = _card_transactions(db, user_id, card.id)
@@ -337,9 +452,18 @@ def create_batch(
             card_txs=card_txs,
             used_tx_ids=used_tx_ids,
         )
-        if action == "already_imported":
-            # keep known set accurate within batch
-            pass
+        matched_tx = None
+        if tx_id is not None:
+            matched_tx = next((t for t in card_txs if t.id == tx_id), None)
+            if matched_tx is None:
+                matched_tx = db.get(Transaction, tx_id)
+        cat_id = None
+        if txn.direction == "debit" and action not in ("already_imported",):
+            cat_id = suggest_category_id(
+                db, user_id, txn.memo, matched_tx=matched_tx, tx_type="expense"
+            )
+        # pending: sem ação pré-escolhida — exige confirmação na UI
+        chosen = None if action == "pending" else action
         line = OfxImportLine(
             batch_id=batch.id,
             fitid=txn.fitid,
@@ -350,9 +474,11 @@ def create_batch(
             suggested_action=action,
             suggested_transaction_id=tx_id,
             suggested_invoice_id=inv_id,
-            chosen_action=action,
-            chosen_transaction_id=tx_id,
-            chosen_invoice_id=inv_id,
+            suggested_category_id=cat_id,
+            chosen_action=chosen,
+            chosen_transaction_id=tx_id if chosen else None,
+            chosen_invoice_id=inv_id if chosen else inv_id,
+            chosen_category_id=cat_id,
         )
         db.add(line)
 
@@ -428,30 +554,37 @@ def _match_candidates_for_line(
     return out
 
 
-def _unpaid_invoices_near_amount(
+def _all_card_invoices(
     db: Session,
     user_id: int,
     card_id: int,
-    amount_cents: int,
 ) -> list[CardInvoice]:
-    from app.services.credit_cards import invoice_totals
-
-    invoices = list(
+    return list(
         db.scalars(
-            select(CardInvoice).where(
+            select(CardInvoice)
+            .where(
                 CardInvoice.user_id == user_id,
                 CardInvoice.card_id == card_id,
-                CardInvoice.status.in_(("open", "closed")),
             )
+            .order_by(CardInvoice.due_date.desc())
         ).all()
     )
-    matched = [
-        inv
-        for inv in invoices
-        if abs(invoice_totals(db, inv) - amount_cents) <= AMOUNT_TOLERANCE_CENTS
-    ]
-    matched.sort(key=lambda inv: inv.due_date)
-    return matched
+
+
+def _resolve_invoice(
+    db: Session,
+    user_id: int,
+    card: CreditCard,
+    invoice_id: int | None,
+    *,
+    memo: str,
+) -> CardInvoice:
+    if not invoice_id:
+        raise ValueError(f"Selecione a fatura para o lançamento ({memo}).")
+    inv = db.get(CardInvoice, invoice_id)
+    if inv is None or inv.user_id != user_id or inv.card_id != card.id:
+        raise ValueError(f"Fatura inválida para o lançamento ({memo}).")
+    return inv
 
 
 def line_review_payload(
@@ -463,6 +596,9 @@ def line_review_payload(
     from app.services.credit_cards import format_invoice, invoice_totals
     from app.schemas import format_brl as brl
 
+    chosen = line.chosen_action or (
+        None if line.suggested_action == "pending" else line.suggested_action
+    )
     payload: dict[str, Any] = {
         "id": line.id,
         "fitid": line.fitid,
@@ -472,12 +608,21 @@ def line_review_payload(
         "direction": line.direction,
         "memo": line.memo,
         "suggested_action": line.suggested_action,
-        "chosen_action": line.chosen_action or line.suggested_action,
+        "chosen_action": chosen,
         "chosen_transaction_id": line.chosen_transaction_id or line.suggested_transaction_id,
         "chosen_invoice_id": line.chosen_invoice_id or line.suggested_invoice_id,
+        "chosen_category_id": line.chosen_category_id or line.suggested_category_id,
         "candidates": [],
         "invoice_options": [],
+        "category_options": _expense_categories(db, user_id) if line.direction == "debit" else [],
+        "requires_confirmation": line.suggested_action
+        in ("pending", "skip")
+        or line.chosen_action is None,
     }
+    for inv in _all_card_invoices(db, user_id, card_id):
+        total = invoice_totals(db, inv)
+        payload["invoice_options"].append(format_invoice(inv, total))
+
     if line.direction == "debit":
         for tx in _match_candidates_for_line(db, user_id, card_id, line):
             payload["candidates"].append(
@@ -486,21 +631,10 @@ def line_review_payload(
                     "description": tx.description,
                     "status": tx.status,
                     "competence_date": tx.competence_date.isoformat(),
+                    "invoice_id": tx.invoice_id,
                     "score": round(description_score(line.memo, tx.description), 2),
                 }
             )
-    else:
-        for inv in _unpaid_invoices_near_amount(db, user_id, card_id, line.amount_cents):
-            total = invoice_totals(db, inv)
-            payload["invoice_options"].append(format_invoice(inv, total))
-        # Also include suggested paid invoice if linking
-        if line.suggested_invoice_id:
-            inv = db.get(CardInvoice, line.suggested_invoice_id)
-            if inv and inv.user_id == user_id:
-                total = invoice_totals(db, inv)
-                opt = format_invoice(inv, total)
-                if not any(o["id"] == opt["id"] for o in payload["invoice_options"]):
-                    payload["invoice_options"].append(opt)
     return payload
 
 
@@ -522,6 +656,7 @@ def batch_review_context(db: Session, batch: OfxImportBatch) -> dict[str, Any]:
             "link_invoice_payment": sum(
                 1 for ln in lines if ln["suggested_action"] == "link_invoice_payment"
             ),
+            "pending": sum(1 for ln in lines if ln["suggested_action"] == "pending"),
             "skip": sum(1 for ln in lines if ln["suggested_action"] == "skip"),
             "already_imported": sum(
                 1 for ln in lines if ln["suggested_action"] == "already_imported"
@@ -530,7 +665,7 @@ def batch_review_context(db: Session, batch: OfxImportBatch) -> dict[str, Any]:
     }
 
 
-def _parse_choice_action(raw: str | None, fallback: str) -> Action:
+def _parse_choice_action(raw: str | None, fallback: str | None) -> Action:
     allowed: set[str] = {
         "create",
         "match",
@@ -539,7 +674,11 @@ def _parse_choice_action(raw: str | None, fallback: str) -> Action:
         "skip",
         "already_imported",
     }
-    value = (raw or fallback or "skip").strip()
+    value = (raw if raw is not None and str(raw).strip() != "" else (fallback or "")).strip()
+    if not value or value == "pending":
+        raise ValueError(
+            "Confirme a ação de cada lançamento — nenhum movimento é ignorado automaticamente."
+        )
     if value not in allowed:
         raise ValueError(f"Ação inválida: {value}")
     return value  # type: ignore[return-value]
@@ -580,9 +719,26 @@ def apply_batch(
 
     for line in batch.lines:
         choice = choices.get(line.id, {})
-        action = _parse_choice_action(choice.get("action"), line.chosen_action or line.suggested_action)
+        # Já importado: permite confirmar sem reprocessar
+        if line.suggested_action == "already_imported" and not choice.get("action"):
+            action: Action = "already_imported"
+        else:
+            # skip só vale se veio explicitamente no formulário (ou chosen já era skip confirmado)
+            raw_action = choice.get("action")
+            if raw_action is None or str(raw_action).strip() == "":
+                # Sem escolha no form: usa chosen apenas se não for skip implícito de pending
+                fallback = line.chosen_action
+                if fallback == "skip" and "action" not in choice:
+                    raise ValueError(
+                        f"Confirme se deseja ignorar: {line.memo} ({line.posted_date})."
+                    )
+                action = _parse_choice_action(None, fallback)
+            else:
+                action = _parse_choice_action(str(raw_action), None)
+
         tx_id = choice.get("transaction_id")
         inv_id = choice.get("invoice_id")
+        cat_id = choice.get("category_id")
         if tx_id is not None and tx_id != "":
             tx_id = int(tx_id)
         else:
@@ -591,10 +747,21 @@ def apply_batch(
             inv_id = int(inv_id)
         else:
             inv_id = line.chosen_invoice_id or line.suggested_invoice_id
+        if cat_id is not None and cat_id != "":
+            cat_id = int(cat_id)
+        else:
+            cat_id = line.chosen_category_id or line.suggested_category_id
 
         line.chosen_action = action
         line.chosen_transaction_id = tx_id if action == "match" else None
-        line.chosen_invoice_id = inv_id if action in ("pay_invoice", "link_invoice_payment") else None
+        line.chosen_invoice_id = (
+            inv_id
+            if action in ("create", "match", "pay_invoice", "link_invoice_payment")
+            else None
+        )
+        line.chosen_category_id = (
+            cat_id if action in ("create", "match") else None
+        )
 
         if action in ("skip", "already_imported"):
             summary["skipped" if action == "skip" else "already_imported"] += 1
@@ -615,23 +782,27 @@ def apply_batch(
         if action == "create":
             if line.direction != "debit":
                 raise ValueError("Só é possível criar compra a partir de débito OFX.")
-            from app.services.credit_cards import invoice_due_for_purchase
-
-            due = invoice_due_for_purchase(card, line.posted_date)
+            inv = _resolve_invoice(db, user_id, card, inv_id, memo=line.memo)
+            resolved_cat = _resolve_category(db, user_id, cat_id, memo=line.memo)
             finance.create_transaction(
                 db,
                 user_id,
                 TransactionCreate(
                     card_id=card.id,
+                    category_id=resolved_cat,
                     type="expense",
                     amount_cents=line.amount_cents,
                     description=line.memo or "Compra cartão",
                     competence_date=line.posted_date,
-                    due_date=due,
+                    due_date=inv.due_date,
                     status="planned",
+                    invoice_id=inv.id,
                     ofx_fitid=line.fitid,
                 ),
             )
+            if resolved_cat is not None:
+                remember_category(db, user_id, line.memo, resolved_cat)
+                db.commit()
             summary["created"] += 1
             continue
 
@@ -648,14 +819,19 @@ def apply_batch(
                 raise ValueError("Lançamento inválido para conciliação.")
             if tx.ofx_fitid and tx.ofx_fitid != line.fitid:
                 raise ValueError("Lançamento já conciliado com outro FITID.")
+            inv = _resolve_invoice(db, user_id, card, inv_id, memo=line.memo)
+            resolved_cat = _resolve_category(db, user_id, cat_id, memo=line.memo)
             tx.ofx_fitid = line.fitid
+            tx.invoice_id = inv.id
+            if resolved_cat is not None:
+                tx.category_id = resolved_cat
+                remember_category(db, user_id, line.memo, resolved_cat)
             db.commit()
             summary["matched"] += 1
             continue
 
         if action == "pay_invoice":
-            if not inv_id:
-                raise ValueError(f"Selecione a fatura para pagamento ({line.memo}).")
+            inv = _resolve_invoice(db, user_id, card, inv_id, memo=line.memo)
             if not card.settlement_account_id:
                 raise ValueError("Cartão sem conta de liquidação.")
             settlement = db.get(Account, card.settlement_account_id)
@@ -664,7 +840,7 @@ def apply_batch(
             result = pay_invoice(
                 db,
                 user_id,
-                invoice_id=inv_id,
+                invoice_id=inv.id,
                 from_account_name=settlement.name,
                 payment_date=line.posted_date,
             )
@@ -678,11 +854,7 @@ def apply_batch(
             continue
 
         if action == "link_invoice_payment":
-            if not inv_id:
-                raise ValueError("Fatura inválida para vínculo.")
-            inv = db.get(CardInvoice, inv_id)
-            if inv is None or inv.user_id != user_id or inv.card_id != card.id:
-                raise ValueError("Fatura inválida.")
+            inv = _resolve_invoice(db, user_id, card, inv_id, memo=line.memo)
             pay_tx = None
             if inv.payment_transfer_group_id and str(inv.payment_transfer_group_id).isdigit():
                 pay_tx = db.get(Transaction, int(inv.payment_transfer_group_id))

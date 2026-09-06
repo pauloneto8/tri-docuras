@@ -25,4 +25,11 @@ def get_db():
     try:
         yield db
     finally:
-        db.close()
+        # Após restore/admin o backend pode ter sido terminado; close() não pode 500.
+        try:
+            db.close()
+        except Exception:
+            try:
+                db.invalidate()
+            except Exception:
+                pass

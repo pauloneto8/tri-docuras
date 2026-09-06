@@ -728,3 +728,85 @@ def test_register_expense_chat_includes_invoice_or_account_summary():
     finally:
         _cleanup(db, user.id)
         db.close()
+
+
+def test_delete_invoice_removes_card_movements_keeps_bank_payment():
+    from app.config import settings
+    from app.services.credit_cards import delete_invoice, pay_invoice
+
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"delinv_{suffix}@test.com",
+        password="secret1",
+        name="Del Inv",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        debit = _create_debit(db, user.id, f"Corrente_{suffix}")
+        card = _create_card(db, user.id, f"Cartao_{suffix}", debit["name"])
+        cat = db.scalar(
+            select(Category).where(Category.user_id == user.id, Category.type == "expense")
+        )
+        finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="150",
+                description="Compra fatura",
+                card_name=card["name"],
+                category_name=cat.name,
+                competence_date=date(2026, 8, 5),
+                status="planned",
+            ),
+        )
+        tx = db.scalar(
+            select(Transaction).where(
+                Transaction.user_id == user.id,
+                Transaction.card_id == card["id"],
+            )
+        )
+        assert tx is not None and tx.invoice_id is not None
+        inv = db.get(CardInvoice, tx.invoice_id)
+        assert inv is not None
+        pay_invoice(
+            db,
+            user.id,
+            invoice_id=inv.id,
+            from_account_name=debit["name"],
+            payment_date=date(2026, 8, 17),
+        )
+        bank_before = db.scalar(
+            select(func.count()).select_from(Transaction).where(
+                Transaction.user_id == user.id,
+                Transaction.card_id.is_(None),
+                Transaction.type == "expense",
+            )
+        )
+        result = delete_invoice(db, user.id, inv.id)
+        assert result["deleted_movements"] == 1
+        assert result["payment_kept"] is True
+        assert db.get(CardInvoice, inv.id) is None
+        assert (
+            db.scalar(
+                select(func.count()).select_from(Transaction).where(
+                    Transaction.user_id == user.id,
+                    Transaction.card_id == card["id"],
+                )
+            )
+            == 0
+        )
+        bank_after = db.scalar(
+            select(func.count()).select_from(Transaction).where(
+                Transaction.user_id == user.id,
+                Transaction.card_id.is_(None),
+                Transaction.type == "expense",
+            )
+        )
+        assert bank_after == bank_before
+    finally:
+        _cleanup(db, user.id)
+        db.close()

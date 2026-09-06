@@ -19,7 +19,7 @@ paths: app/services/credit_cards.py, app/services/finance.py, app/services/card_
 - Pagar fatura = despesa na conta de débito (`pay_invoice`); marca fatura como `paid` — **não** duplica despesa da compra.
 - Ciclo: compra após fechamento vai para a **próxima** fatura.
 - Exclusão de cartão = `is_active=false` (soft delete); histórico de faturas e lançamentos preservado.
-- **OFX** — importação com revisão; débitos criam/conciliam compras (`ofx_fitid`); créditos sugerem pagar/vincular fatura; estornos sem fatura = ignorar.
+- **OFX** — importação com revisão; débitos criam/conciliam compras (`ofx_fitid`); créditos sugerem pagar/vincular fatura; **nada é ignorado sem confirmação**; cada linha exige fatura de vínculo; categoria sugerida/memorizada por descrição (`ofx_category_memory`).
 
 ## Arquivos
 
@@ -53,6 +53,7 @@ paths: app/services/credit_cards.py, app/services/finance.py, app/services/card_
 - `POST /accounts/cards` — criar cartão; `POST /accounts/cards/{id}` — editar; desativar via delete
 - `/accounts/cards/{id}/ofx` — upload OFX → revisão → aplicar (criar / conciliar / pagar fatura)
 - `POST /accounts/invoices/{id}/pay` — pagar fatura (dentro da fatura expandida)
+- `POST /accounts/invoices/{id}/delete` — excluir fatura e movimentos do cartão ligados (pagamento bancário permanece)
 - Chat: após compra no cartão, `invoice_context_summary` via `enrich_register_result`
 
 ## Testes

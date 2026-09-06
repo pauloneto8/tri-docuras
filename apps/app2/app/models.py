@@ -373,6 +373,12 @@ class OfxImportLine(Base):
     chosen_invoice_id: Mapped[int | None] = mapped_column(
         ForeignKey("card_invoices.id", ondelete="SET NULL"), nullable=True
     )
+    suggested_category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
+    chosen_category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
 
     batch: Mapped["OfxImportBatch"] = relationship(back_populates="lines")
     suggested_transaction: Mapped["Transaction | None"] = relationship(
@@ -387,6 +393,36 @@ class OfxImportLine(Base):
     chosen_invoice: Mapped["CardInvoice | None"] = relationship(
         foreign_keys=[chosen_invoice_id]
     )
+    suggested_category: Mapped["Category | None"] = relationship(
+        foreign_keys=[suggested_category_id]
+    )
+    chosen_category: Mapped["Category | None"] = relationship(
+        foreign_keys=[chosen_category_id]
+    )
+
+
+class OfxCategoryMemory(Base):
+    """Associa descrição OFX normalizada → categoria do usuário (aprendizado)."""
+
+    __tablename__ = "ofx_category_memory"
+    __table_args__ = (
+        UniqueConstraint("user_id", "memo_key", name="uq_ofx_category_memory_user_memo"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    memo_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    category_id: Mapped[int] = mapped_column(
+        ForeignKey("categories.id", ondelete="CASCADE"), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship()
+    category: Mapped["Category"] = relationship()
 
 
 class Budget(Base):

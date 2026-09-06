@@ -7,13 +7,15 @@ from sqlalchemy.orm import sessionmaker
 
 from app.auth import create_user
 from app.config import settings
-from app.models import Account, CardInvoice, Category, CreditCard, OfxImportBatch, Transaction, User
+from app.models import Account, CardInvoice, Category, CreditCard, OfxCategoryMemory, OfxImportBatch, Transaction, User
 from app.schemas import CreateAccountInput, CreateCardInput, RegisterExpenseInput
 from app.services import finance
 from app.services.ofx_card_import import (
     apply_batch,
     create_batch,
+    lookup_category_memory,
     parse_ofx,
+    remember_category,
 )
 
 
@@ -54,6 +56,9 @@ def _create_card(db, user_id, name, settlement_account_name, closing=10, due=17,
 
 def _cleanup(db, user_id):
     db.query(OfxImportBatch).filter(OfxImportBatch.user_id == user_id).delete(
+        synchronize_session=False
+    )
+    db.query(OfxCategoryMemory).filter(OfxCategoryMemory.user_id == user_id).delete(
         synchronize_session=False
     )
     db.query(Transaction).filter(Transaction.user_id == user_id).delete(
@@ -129,17 +134,25 @@ def test_ofx_create_and_match_and_idempotent():
         by_fitid = {ln.fitid: ln for ln in batch.lines}
         assert by_fitid["FIT-MERCADO-001"].suggested_action == "match"
         assert by_fitid["FIT-UBER-002"].suggested_action == "create"
-        # Credit without matching invoice total -> skip
-        assert by_fitid["FIT-PAGTO-003"].suggested_action == "skip"
+        assert by_fitid["FIT-UBER-002"].suggested_invoice_id is not None
+        # Crédito sem fatura correspondente → pendente (usuário confirma)
+        assert by_fitid["FIT-PAGTO-003"].suggested_action == "pending"
+        assert by_fitid["FIT-PAGTO-003"].chosen_action is None
 
-        choices = {
-            ln.id: {
-                "action": ln.suggested_action,
-                "transaction_id": ln.suggested_transaction_id,
-                "invoice_id": ln.suggested_invoice_id,
-            }
-            for ln in batch.lines
-        }
+        choices = {}
+        for ln in batch.lines:
+            if ln.suggested_action == "pending":
+                choices[ln.id] = {
+                    "action": "skip",
+                    "invoice_id": "",
+                }
+            else:
+                choices[ln.id] = {
+                    "action": ln.suggested_action,
+                    "transaction_id": ln.suggested_transaction_id,
+                    "invoice_id": ln.suggested_invoice_id,
+                    "category_id": cat.id,
+                }
         summary = apply_batch(db, user.id, card, batch.id, choices)
         assert summary["matched"] == 1
         assert summary["created"] == 1
@@ -162,16 +175,22 @@ def test_ofx_create_and_match_and_idempotent():
         assert created.status == "planned"
         assert created.card_id == card.id
         assert created.invoice_id is not None
+        assert created.invoice_id == by_fitid["FIT-UBER-002"].suggested_invoice_id
+        assert created.category_id == cat.id
+        assert lookup_category_memory(db, user.id, "UBER TRIP") == cat.id
 
-        # Reimport: FITIDs aplicados → already_imported; crédito só ignorado continua skip
+        # Reimport: FITIDs aplicados → already_imported; crédito ainda pendente
         batch2 = create_batch(db, user.id, card, "card_sample.ofx", content)
         by2 = {ln.fitid: ln.suggested_action for ln in batch2.lines}
         assert by2["FIT-MERCADO-001"] == "already_imported"
         assert by2["FIT-UBER-002"] == "already_imported"
-        assert by2["FIT-PAGTO-003"] == "skip"
-        choices2 = {
-            ln.id: {"action": ln.suggested_action} for ln in batch2.lines
-        }
+        assert by2["FIT-PAGTO-003"] == "pending"
+        choices2 = {}
+        for ln in batch2.lines:
+            if ln.suggested_action == "pending":
+                choices2[ln.id] = {"action": "skip"}
+            else:
+                choices2[ln.id] = {"action": "already_imported"}
         summary2 = apply_batch(db, user.id, card, batch2.id, choices2)
         assert summary2["already_imported"] == 2
         assert summary2["skipped"] == 1
@@ -262,6 +281,104 @@ def test_ofx_pay_invoice_from_credit():
         assert pay_tx is not None
         assert pay_tx.card_id is None
         assert pay_tx.type == "expense"
+    finally:
+        _cleanup(db, user.id)
+        db.close()
+
+
+def test_ofx_pending_requires_explicit_action():
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"ofxpend_{suffix}@test.com",
+        password="secret1",
+        name="OFX Pend",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        debit = _create_debit(db, user.id, f"Corrente_{suffix}")
+        card_data = _create_card(db, user.id, f"Elo_{suffix}", debit["name"])
+        card = finance.find_card(db, user.id, card_id=card_data["id"])
+        assert card is not None
+        ofx = """
+<OFX>
+<BANKTRANLIST>
+<STMTTRN>
+<TRNTYPE>CREDIT
+<DTPOSTED>20260820
+<TRNAMT>10.00
+<FITID>FIT-CREDIT-SMALL
+<MEMO>ESTORNO
+</STMTTRN>
+</BANKTRANLIST>
+</OFX>
+"""
+        batch = create_batch(db, user.id, card, "credit.ofx", ofx)
+        line = batch.lines[0]
+        assert line.suggested_action == "pending"
+        try:
+            apply_batch(db, user.id, card, batch.id, {line.id: {}})
+            assert False, "deveria exigir confirmação"
+        except ValueError as exc:
+            assert "ignorado automaticamente" in str(exc).lower() or "confirme" in str(exc).lower()
+    finally:
+        _cleanup(db, user.id)
+        db.close()
+
+
+def test_ofx_category_memory_suggests_on_next_import():
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"ofxmem_{suffix}@test.com",
+        password="secret1",
+        name="OFX Mem",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        debit = _create_debit(db, user.id, f"Corrente_{suffix}")
+        card_data = _create_card(db, user.id, f"Master_{suffix}", debit["name"])
+        card = finance.find_card(db, user.id, card_id=card_data["id"])
+        assert card is not None
+        cat = db.scalar(
+            select(Category).where(
+                Category.user_id == user.id,
+                Category.type == "expense",
+                Category.name == "Transporte",
+            )
+        )
+        if cat is None:
+            cat = db.scalar(
+                select(Category).where(Category.user_id == user.id, Category.type == "expense")
+            )
+        assert cat is not None
+        remember_category(db, user.id, "UBER TRIP", cat.id)
+        db.commit()
+
+        ofx = """
+<OFX>
+<BANKTRANLIST>
+<STMTTRN>
+<TRNTYPE>DEBIT
+<DTPOSTED>20260812
+<TRNAMT>-50.00
+<FITID>FIT-UBER-MEM
+<MEMO>UBER TRIP
+</STMTTRN>
+</BANKTRANLIST>
+</OFX>
+"""
+        batch = create_batch(db, user.id, card, "uber.ofx", ofx)
+        line = batch.lines[0]
+        assert line.suggested_action == "create"
+        assert line.suggested_category_id == cat.id
+        assert line.chosen_category_id == cat.id
     finally:
         _cleanup(db, user.id)
         db.close()

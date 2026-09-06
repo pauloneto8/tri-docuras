@@ -819,3 +819,51 @@ def pay_invoice(
         "settled_count": len(settled),
         "from_account_name": from_account.name,
     }
+
+
+def delete_invoice(db: Session, user_id: int, invoice_id: int) -> dict:
+    """Exclui a fatura e os movimentos do cartão ligados a ela.
+
+    Não remove o pagamento bancário (despesa na conta de liquidação), se existir.
+    """
+    invoice = db.scalar(
+        select(CardInvoice).where(
+            CardInvoice.id == invoice_id,
+            CardInvoice.user_id == user_id,
+        )
+    )
+    if invoice is None:
+        raise ValueError("Fatura não encontrada.")
+
+    card = db.get(CreditCard, invoice.card_id)
+    label = format_invoice_label(invoice)
+    total_cents = invoice_totals(db, invoice)
+    status = invoice.status
+
+    card_txs = list(
+        db.scalars(
+            select(Transaction).where(
+                Transaction.user_id == user_id,
+                Transaction.invoice_id == invoice.id,
+                Transaction.card_id.is_not(None),
+            )
+        ).all()
+    )
+    deleted_movements = len(card_txs)
+    for tx in card_txs:
+        db.delete(tx)
+
+    db.delete(invoice)
+    db.commit()
+
+    return {
+        "invoice_id": invoice_id,
+        "invoice_label": label,
+        "card_name": card.name if card else None,
+        "status": status,
+        "total_cents": total_cents,
+        "deleted_movements": deleted_movements,
+        "payment_kept": bool(
+            status == "paid"
+        ),  # pagamento na conta permanece se a fatura estava paga
+    }

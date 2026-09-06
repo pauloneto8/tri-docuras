@@ -87,6 +87,7 @@ Corrigir transferência: ferramenta `update_transfer` (origem, destino, valor, d
 - Assistente: `create_card`, `update_card`, `delete_card`, `list_invoices`, `pay_invoice`
 - Wizard de cadastro: `card_wizard.py`
 - UI `/accounts/cards`: hierarquia expansível cartão → faturas → movimentos (`cards_with_nested_invoices`)
+- Excluir fatura: `POST /accounts/invoices/{id}/delete` — remove fatura + movimentos do cartão; pagamento bancário (se houver) permanece
 - Import OFX: `/accounts/cards/{id}/ofx` — upload → revisão → criar/conciliar/pagar (`ofx_card_import.py`); `transactions.ofx_fitid` para idempotência; créditos ≈ fatura → `pay_invoice` / vínculo; estornos → ignorar
 - Chat após lançamento: `enrich_register_result` anexa `context_summary` (fatura do cartão ou saldo da conta)
 

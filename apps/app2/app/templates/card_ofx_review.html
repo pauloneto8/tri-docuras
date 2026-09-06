@@ -8,6 +8,9 @@
       {{ card.name }} · {{ review.filename }}
       · {{ review.counts.total }} linha{% if review.counts.total != 1 %}s{% endif %}
     </p>
+    <p class="text-xs text-amber-200/90 mt-1">
+      Nenhum lançamento é ignorado automaticamente. Confirme a ação e a fatura de cada item.
+    </p>
   </div>
   <a href="/accounts/cards/{{ card.id }}/ofx" class="text-sm text-emerald-400 hover:text-emerald-300">← Outro arquivo</a>
 </div>
@@ -27,15 +30,15 @@
   {% if review.counts.match %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.match }} conciliar</span>{% endif %}
   {% if review.counts.pay_invoice %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.pay_invoice }} pagar fatura</span>{% endif %}
   {% if review.counts.link_invoice_payment %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.link_invoice_payment }} vincular pagamento</span>{% endif %}
-  {% if review.counts.skip %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.skip }} ignorar</span>{% endif %}
+  {% if review.counts.pending %}<span class="rounded-full border border-amber-700 text-amber-300 px-2 py-1">{{ review.counts.pending }} aguardando decisão</span>{% endif %}
   {% if review.counts.already_imported %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.already_imported }} já importados</span>{% endif %}
 </div>
 
-<form method="post" action="/accounts/cards/{{ card.id }}/ofx/{{ review.batch_id }}/apply" class="space-y-3">
+<form method="post" action="/accounts/cards/{{ card.id }}/ofx/{{ review.batch_id }}/apply" class="space-y-3" id="ofx-review-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
   {% for line in review.lines %}
-  <section class="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
+  <section class="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3 {% if line.suggested_action == 'pending' %}border-amber-800/60{% endif %}">
     <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
       <div class="min-w-0">
         <p class="font-medium text-slate-100 truncate">{{ line.memo }}</p>
@@ -52,24 +55,27 @@
 
     {% if line.suggested_action == 'already_imported' %}
     <input type="hidden" name="action_{{ line.id }}" value="already_imported">
-    <p class="text-sm text-slate-400">Já importado anteriormente — será ignorado.</p>
+    <p class="text-sm text-slate-400">Já importado anteriormente — mantido sem alteração.</p>
     {% else %}
     <div>
-      <label class="block text-xs text-slate-400 mb-1">Ação</label>
-      <select name="action_{{ line.id }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+      <label class="block text-xs text-slate-400 mb-1">Ação <span class="text-amber-400">*</span></label>
+      <select name="action_{{ line.id }}" required class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+        {% if not line.chosen_action or line.suggested_action == 'pending' %}
+        <option value="" selected disabled>Selecione a ação…</option>
+        {% endif %}
         {% if line.direction == 'debit' %}
         <option value="create" {% if line.chosen_action == 'create' %}selected{% endif %}>Criar compra no cartão</option>
         <option value="match" {% if line.chosen_action == 'match' %}selected{% endif %}>Conciliar com lançamento existente</option>
-        <option value="skip" {% if line.chosen_action == 'skip' %}selected{% endif %}>Ignorar</option>
+        <option value="skip" {% if line.chosen_action == 'skip' %}selected{% endif %}>Ignorar (confirmar)</option>
         {% else %}
         <option value="pay_invoice" {% if line.chosen_action == 'pay_invoice' %}selected{% endif %}>Pagar fatura</option>
         <option value="link_invoice_payment" {% if line.chosen_action == 'link_invoice_payment' %}selected{% endif %}>Vincular a pagamento existente</option>
-        <option value="skip" {% if line.chosen_action == 'skip' or line.chosen_action not in ['pay_invoice', 'link_invoice_payment'] %}selected{% endif %}>Ignorar</option>
+        <option value="skip" {% if line.chosen_action == 'skip' %}selected{% endif %}>Ignorar (confirmar)</option>
         {% endif %}
       </select>
     </div>
 
-    {% if line.direction == 'debit' and line.candidates %}
+    {% if line.direction == 'debit' %}
     <div>
       <label class="block text-xs text-slate-400 mb-1">Lançamento para conciliar</label>
       <select name="transaction_id_{{ line.id }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
@@ -80,26 +86,39 @@
         </option>
         {% endfor %}
       </select>
+      {% if not line.candidates %}
+      <p class="text-xs text-slate-500 mt-1">Nenhum candidato automático — use “Criar compra” ou ignore com confirmação.</p>
+      {% endif %}
     </div>
-    {% elif line.direction == 'debit' %}
-    <input type="hidden" name="transaction_id_{{ line.id }}" value="">
     {% endif %}
 
-    {% if line.direction == 'credit' and line.invoice_options %}
     <div>
-      <label class="block text-xs text-slate-400 mb-1">Fatura</label>
-      <select name="invoice_id_{{ line.id }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
-        <option value="">Selecione…</option>
+      <label class="block text-xs text-slate-400 mb-1">Fatura <span class="text-amber-400">*</span></label>
+      <select name="invoice_id_{{ line.id }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm"
+              {% if line.chosen_action != 'skip' %}required{% endif %}>
+        <option value="">Selecione a fatura…</option>
         {% for inv in line.invoice_options %}
         <option value="{{ inv.id }}" {% if line.chosen_invoice_id == inv.id %}selected{% endif %}>
-          {{ inv.invoice_label }} · R$ {{ inv.total }} · {{ inv.status_label }}
+          {{ inv.invoice_label }} · vence {{ inv.due_date_label }} · R$ {{ inv.total }} · {{ inv.status_label }}
         </option>
         {% endfor %}
       </select>
+      {% if not line.invoice_options %}
+      <p class="text-xs text-rose-300 mt-1">Nenhuma fatura neste cartão. Cadastre o ciclo ou aguarde a geração automática.</p>
+      {% endif %}
     </div>
-    {% elif line.direction == 'credit' %}
-    <input type="hidden" name="invoice_id_{{ line.id }}" value="">
-    <p class="text-xs text-slate-500">Nenhuma fatura com valor próximo — crédito tende a ser ignorado (estorno).</p>
+
+    {% if line.direction == 'debit' %}
+    <div>
+      <label class="block text-xs text-slate-400 mb-1">Categoria</label>
+      <select name="category_id_{{ line.id }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+        <option value="">Sem categoria</option>
+        {% for cat in line.category_options %}
+        <option value="{{ cat.id }}" {% if line.chosen_category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-slate-500 mt-1">A escolha é lembrada para descrições iguais nas próximas importações.</p>
+    </div>
     {% endif %}
     {% endif %}
   </section>
@@ -107,7 +126,7 @@
 
   <div class="flex flex-col sm:flex-row gap-2 pt-2">
     <button type="submit" class="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium"
-            onclick="return confirm('Aplicar as ações selecionadas?')">Confirmar importação</button>
+            onclick="return confirm('Aplicar as ações confirmadas? Itens marcados como ignorar serão descartados.')">Confirmar importação</button>
     <button type="submit" form="cancel-ofx" class="flex-1 rounded-lg border border-slate-700 px-4 py-2 text-slate-300 hover:bg-slate-800">Descartar</button>
   </div>
 </form>
@@ -115,5 +134,26 @@
 <form id="cancel-ofx" method="post" action="/accounts/cards/{{ card.id }}/ofx/{{ review.batch_id }}/cancel">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 </form>
+
+<script>
+(function () {
+  const form = document.getElementById('ofx-review-form');
+  if (!form) return;
+  form.querySelectorAll('select[name^="action_"]').forEach(function (sel) {
+    const lineId = sel.name.replace('action_', '');
+    const inv = form.querySelector('select[name="invoice_id_' + lineId + '"]');
+    function sync() {
+      if (!inv) return;
+      if (sel.value === 'skip' || sel.value === 'already_imported') {
+        inv.removeAttribute('required');
+      } else if (sel.value) {
+        inv.setAttribute('required', 'required');
+      }
+    }
+    sel.addEventListener('change', sync);
+    sync();
+  });
+})();
+</script>
 {% endif %}
 {% endblock %}

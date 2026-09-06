@@ -10,11 +10,21 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from sqlalchemy import create_engine, text
+
 from app.config import settings
 
 BACKUP_NAME_RE = re.compile(r"^assistfin_\d{8}_\d{6}\.dump$")
 RESTORE_CONFIRM_WORD = "RESTAURAR"
 DEFAULT_KEEP = 20
+
+# Erros de SET gerados por cliente pg_dump mais novo que o servidor (ex.: 17 → 16).
+_IGNORABLE_RESTORE_SNIPPETS = (
+    'unrecognized configuration parameter "transaction_timeout"',
+    'unrecognized configuration parameter "idle_session_timeout"',
+)
+
+_ESSENTIAL_TABLES = ("users", "accounts", "transactions", "alembic_version")
 
 
 @dataclass(frozen=True)
@@ -170,6 +180,76 @@ def create_backup() -> BackupInfo:
     )
 
 
+def _reset_public_schema() -> None:
+    """Encerra sessões e recria o schema public (substitui --clean frágil)."""
+    eng = create_engine(settings.database_url, isolation_level="AUTOCOMMIT")
+    try:
+        with eng.connect() as conn:
+            conn.execute(
+                text(
+                    """
+                    SELECT pg_terminate_backend(pid)
+                    FROM pg_stat_activity
+                    WHERE datname = current_database()
+                      AND pid <> pg_backend_pid()
+                    """
+                )
+            )
+            conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+            conn.execute(text("GRANT ALL ON SCHEMA public TO public"))
+            conn.execute(text("GRANT ALL ON SCHEMA public TO CURRENT_USER"))
+    finally:
+        eng.dispose()
+
+
+def _assert_restore_complete() -> None:
+    eng = create_engine(settings.database_url)
+    try:
+        with eng.connect() as conn:
+            placeholders = ", ".join(f"'{t}'" for t in _ESSENTIAL_TABLES)
+            found = conn.execute(
+                text(
+                    f"""
+                    SELECT count(*) FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name IN ({placeholders})
+                    """
+                )
+            ).scalar()
+            if int(found or 0) < len(_ESSENTIAL_TABLES):
+                raise ValueError(
+                    "Restauração incompleta: tabelas essenciais ausentes após o restore."
+                )
+    finally:
+        eng.dispose()
+
+
+def _dispose_app_pool() -> None:
+    """Descarta conexões do pool da app (schema/dados mudaram)."""
+    try:
+        from app.db import engine
+
+        engine.dispose()
+    except Exception:
+        pass
+
+
+def _restore_stderr_is_fatal(stderr: str) -> bool:
+    """True se houver erro de pg_restore que não seja SET incompatível."""
+    text_l = stderr.lower()
+    if "authentication failed" in text_l or "could not connect" in text_l:
+        return True
+    for block in re.split(r"(?=pg_restore: error:)", stderr):
+        block = block.strip()
+        if not block.startswith("pg_restore: error:"):
+            continue
+        if any(snip in block.lower() for snip in _IGNORABLE_RESTORE_SNIPPETS):
+            continue
+        return True
+    return False
+
+
 def restore_backup(filename: str, *, confirm: str) -> str:
     """Restaura dump. Exige confirmação literal RESTAURAR."""
     if (confirm or "").strip() != RESTORE_CONFIRM_WORD:
@@ -182,6 +262,13 @@ def restore_backup(filename: str, *, confirm: str) -> str:
         raise ValueError("Arquivo de backup não encontrado.")
 
     conn = _db_conn()
+    # Libera conexões do pool da app antes de terminar backends / drop schema.
+    _dispose_app_pool()
+    try:
+        _reset_public_schema()
+    except Exception as exc:
+        raise ValueError(f"Falha ao preparar o banco para restauração: {exc}") from exc
+
     cmd = [
         "pg_restore",
         "-h",
@@ -192,11 +279,8 @@ def restore_backup(filename: str, *, confirm: str) -> str:
         conn["user"],
         "-d",
         conn["dbname"],
-        "--clean",
-        "--if-exists",
         "--no-owner",
         "--no-acl",
-        "--single-transaction",
         str(path),
     ]
     try:
@@ -215,18 +299,22 @@ def restore_backup(filename: str, *, confirm: str) -> str:
     except subprocess.TimeoutExpired as exc:
         raise ValueError("Tempo esgotado ao restaurar o backup.") from exc
 
-    # pg_restore pode retornar 1 com avisos não fatais; 0 = ok
+    stderr = result.stderr or ""
     if result.returncode not in {0, 1}:
-        err = (result.stderr or result.stdout or "falha desconhecida").strip()
-        raise ValueError(f"Falha ao restaurar backup: {err[:400]}")
+        raise ValueError(
+            f"Falha ao restaurar backup: {(stderr or result.stdout or 'falha desconhecida').strip()[:400]}"
+        )
+    if result.returncode == 1 and _restore_stderr_is_fatal(stderr):
+        raise ValueError(f"Falha ao restaurar backup: {stderr.strip()[:400]}")
 
-    # returncode 1 with real errors in stderr about FATAL should fail
-    stderr = (result.stderr or "").lower()
-    if result.returncode == 1 and ("fatal" in stderr or "error:" in stderr):
-        # Many pg_restore warnings are ERROR for missing objects with --clean; still often OK.
-        # Only fail hard on connection/auth fatals.
-        if "authentication failed" in stderr or "could not connect" in stderr:
-            raise ValueError(f"Falha ao restaurar backup: {(result.stderr or '')[:400]}")
+    try:
+        _assert_restore_complete()
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(f"Falha ao validar restauração: {exc}") from exc
+    finally:
+        _dispose_app_pool()
 
     return filename
 

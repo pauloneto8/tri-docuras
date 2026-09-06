@@ -47,6 +47,18 @@ def get_templates(request: Request):
     return request.app.state.templates
 
 
+def _form_optional_int(value: str | int | None) -> int | None:
+    """HTML <select> envia '' quando sem opção — não dá para tipar como int | None direto."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, int):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    return int(text)
+
+
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(
     request: Request,
@@ -835,6 +847,9 @@ async def card_ofx_apply(
         elif key.startswith("invoice_id_"):
             line_id = int(key.removeprefix("invoice_id_"))
             choices.setdefault(line_id, {})["invoice_id"] = str(value)
+        elif key.startswith("category_id_"):
+            line_id = int(key.removeprefix("category_id_"))
+            choices.setdefault(line_id, {})["category_id"] = str(value)
     try:
         summary = ofx_card_import.apply_batch(db, user.id, card, batch_id, choices)
         msg = ofx_card_import.format_apply_summary(summary)
@@ -909,6 +924,31 @@ async def pay_invoice_form(
         )
 
 
+@router.post("/accounts/invoices/{invoice_id}/delete", response_class=HTMLResponse)
+async def delete_invoice_form(
+    invoice_id: int,
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    from app.services.credit_cards import delete_invoice
+
+    try:
+        result = delete_invoice(db, user.id, invoice_id)
+        n = result["deleted_movements"]
+        if n == 0:
+            msg = "Fatura excluída."
+        elif n == 1:
+            msg = "Fatura excluída (1 movimento do cartão removido)."
+        else:
+            msg = f"Fatura excluída ({n} movimentos do cartão removidos)."
+        if result.get("payment_kept"):
+            msg += " O pagamento na conta bancária foi mantido."
+        return _flash_and_redirect(request, "/accounts/cards", success=msg)
+    except ValueError as exc:
+        return _flash_and_redirect(request, "/accounts/cards", error=str(exc))
+
+
 @router.post("/accounts/deactivate", response_class=HTMLResponse)
 async def deactivate_account_form(
     request: Request,
@@ -926,11 +966,11 @@ async def deactivate_account_form(
 @router.post("/transactions", response_class=HTMLResponse)
 async def create_transaction_form(
     request: Request,
-    account_id: int | None = Form(None),
-    card_id: int | None = Form(None),
-    from_account_id: int | None = Form(None),
-    to_account_id: int | None = Form(None),
-    category_id: int | None = Form(None),
+    account_id: str | None = Form(None),
+    card_id: str | None = Form(None),
+    from_account_id: str | None = Form(None),
+    to_account_id: str | None = Form(None),
+    category_id: str | None = Form(None),
     type: str = Form(...),
     amount: str = Form(...),
     description: str = Form(""),
@@ -942,13 +982,19 @@ async def create_transaction_form(
     frequency: str | None = Form(None),
     recurrence_end_date: str | None = Form(None),
     is_installmented: str | None = Form(None),
-    installment_count: int | None = Form(None),
+    installment_count: str | None = Form(None),
     installment_interval: str | None = Form(None),
     installment_amount_basis: str | None = Form(None),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
     templates = get_templates(request)
+    account_id = _form_optional_int(account_id)
+    card_id = _form_optional_int(card_id)
+    from_account_id = _form_optional_int(from_account_id)
+    to_account_id = _form_optional_int(to_account_id)
+    category_id = _form_optional_int(category_id)
+    installment_count = _form_optional_int(installment_count)
 
     try:
         if type == "transfer":
@@ -1015,7 +1061,7 @@ async def create_transaction_form(
                 TransactionCreate(
                     account_id=account_id,
                     card_id=card_id,
-                    category_id=category_id or None,
+                    category_id=category_id,
                     type=type,
                     amount_cents=decimal_to_cents(amount),
                     description=description or "Lançamento",
@@ -1086,10 +1132,10 @@ async def update_transaction_form(
     request: Request,
     amount: str = Form(...),
     description: str = Form(""),
-    account_id: int | None = Form(None),
-    category_id: int | None = Form(None),
-    from_account_id: int | None = Form(None),
-    to_account_id: int | None = Form(None),
+    account_id: str | None = Form(None),
+    category_id: str | None = Form(None),
+    from_account_id: str | None = Form(None),
+    to_account_id: str | None = Form(None),
     type: str | None = Form(None),
     competence_date: str | None = Form(None),
     due_date: str | None = Form(None),
@@ -1099,6 +1145,10 @@ async def update_transaction_form(
     db: Session = Depends(get_db),
 ):
     templates = get_templates(request)
+    account_id = _form_optional_int(account_id)
+    category_id = _form_optional_int(category_id)
+    from_account_id = _form_optional_int(from_account_id)
+    to_account_id = _form_optional_int(to_account_id)
     tx = finance.find_transaction(db, user.id, transaction_id=tx_id)
     if not tx:
         return _flash_and_redirect_transactions(
@@ -1625,10 +1675,16 @@ async def admin_backup_restore(
     confirm: str = Form(...),
     csrf_token: str = Form(...),
     user: User = Depends(require_root),
+    db: Session = Depends(get_db),
 ):
     from app.services import db_backup
 
     validate_csrf_token(request, csrf_token)
+    # Invalidate a conexão da request antes do terminate_backend do restore.
+    try:
+        db.invalidate()
+    except Exception:
+        pass
     try:
         restored = db_backup.restore_backup(filename, confirm=confirm)
         return _flash_and_redirect(
@@ -1641,6 +1697,12 @@ async def admin_backup_restore(
         )
     except ValueError as exc:
         return _flash_and_redirect(request, "/admin", error=str(exc))
+    except Exception as exc:
+        return _flash_and_redirect(
+            request,
+            "/admin",
+            error=f"Falha inesperada na restauração: {exc}",
+        )
 
 
 @router.post("/admin/backup/delete")

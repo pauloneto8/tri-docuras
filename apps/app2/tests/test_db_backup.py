@@ -85,14 +85,86 @@ def test_restore_backup_calls_pg_restore(backup_tmpdir, monkeypatch):
     name = "assistfin_20260101_120000.dump"
     (backup_tmpdir / name).write_bytes(b"dump")
 
-    with patch(
-        "app.services.db_backup.subprocess.run",
-        return_value=MagicMock(returncode=0, stderr="", stdout=""),
-    ) as mocked:
+    with (
+        patch("app.services.db_backup._reset_public_schema") as reset,
+        patch("app.services.db_backup._assert_restore_complete") as assert_ok,
+        patch("app.services.db_backup._dispose_app_pool") as dispose,
+        patch(
+            "app.services.db_backup.subprocess.run",
+            return_value=MagicMock(returncode=0, stderr="", stdout=""),
+        ) as mocked,
+    ):
         restored = db_backup.restore_backup(name, confirm="RESTAURAR")
 
     assert restored == name
+    reset.assert_called_once()
+    assert_ok.assert_called_once()
+    assert dispose.call_count == 2
     cmd = mocked.call_args[0][0]
     assert cmd[0] == "pg_restore"
-    assert "--clean" in cmd
-    assert "--if-exists" in cmd
+    assert "--clean" not in cmd
+    assert "--single-transaction" not in cmd
+    assert "--no-owner" in cmd
+
+
+def test_restore_ignores_transaction_timeout_error(backup_tmpdir, monkeypatch):
+    monkeypatch.setattr(
+        db_backup.settings,
+        "database_url",
+        "postgresql://app2:secret@app2-db:5432/app2",
+    )
+    name = "assistfin_20260101_120000.dump"
+    (backup_tmpdir / name).write_bytes(b"dump")
+    stderr = (
+        'pg_restore: error: could not execute query: ERROR:  '
+        'unrecognized configuration parameter "transaction_timeout"\n'
+        "Command was: SET transaction_timeout = 0;\n"
+        "pg_restore: warning: errors ignored on restore: 1\n"
+    )
+
+    with (
+        patch("app.services.db_backup._reset_public_schema"),
+        patch("app.services.db_backup._assert_restore_complete"),
+        patch("app.services.db_backup._dispose_app_pool"),
+        patch(
+            "app.services.db_backup.subprocess.run",
+            return_value=MagicMock(returncode=1, stderr=stderr, stdout=""),
+        ),
+    ):
+        assert db_backup.restore_backup(name, confirm="RESTAURAR") == name
+
+
+def test_restore_fails_on_real_pg_restore_error(backup_tmpdir, monkeypatch):
+    monkeypatch.setattr(
+        db_backup.settings,
+        "database_url",
+        "postgresql://app2:secret@app2-db:5432/app2",
+    )
+    name = "assistfin_20260101_120000.dump"
+    (backup_tmpdir / name).write_bytes(b"dump")
+    stderr = (
+        "pg_restore: error: could not execute query: ERROR:  "
+        "relation \"users\" already exists\n"
+    )
+
+    with (
+        patch("app.services.db_backup._reset_public_schema"),
+        patch("app.services.db_backup._assert_restore_complete"),
+        patch("app.services.db_backup._dispose_app_pool"),
+        patch(
+            "app.services.db_backup.subprocess.run",
+            return_value=MagicMock(returncode=1, stderr=stderr, stdout=""),
+        ),
+    ):
+        with pytest.raises(ValueError, match="Falha ao restaurar"):
+            db_backup.restore_backup(name, confirm="RESTAURAR")
+
+
+def test_restore_stderr_is_fatal_helpers():
+    assert not db_backup._restore_stderr_is_fatal(
+        'unrecognized configuration parameter "transaction_timeout"'
+    )
+    assert db_backup._restore_stderr_is_fatal(
+        "pg_restore: error: could not execute query: ERROR:  boom"
+    )
+    assert db_backup._restore_stderr_is_fatal("FATAL: password authentication failed")
