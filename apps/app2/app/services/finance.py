@@ -361,6 +361,7 @@ def create_transaction(db: Session, user_id: int, data: TransactionCreate) -> Tr
         installment_plan_id=data.installment_plan_id,
         installment_index=data.installment_index,
         invoice_id=data.invoice_id,
+        ofx_fitid=data.ofx_fitid,
     )
     db.add(tx)
     db.flush()

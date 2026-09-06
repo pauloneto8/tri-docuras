@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     trusted_hosts: str = "localhost,127.0.0.1"
     app_timezone: str = "America/Recife"
     debug: bool = False
+    backup_dir: str = "/app/data/backups"
+    backup_keep: int = 20
 
     @field_validator("secret_key")
     @classmethod

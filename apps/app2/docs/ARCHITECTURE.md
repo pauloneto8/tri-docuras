@@ -35,7 +35,7 @@
 - Sidebar: Dashboard, Contas, Cartões, Movimentos, Orçamentos, Admin (root)
 - **CRUD** nas entidades: lista + páginas `/new` e `/{id}/edit` (movimentos, contas, cartões, orçamentos)
 - **Movimentos** (`/transactions`): filtro de período (padrão mês); **A realizar** / **Extrato**; sem formulário lateral
-- **Cartões** (`/accounts/cards`): cartão expansível → faturas → movimentos
+- **Cartões** (`/accounts/cards`): cartão expansível → faturas → movimentos; **Importar OFX** com tela de revisão
 
 ### API / rotas
 
@@ -47,6 +47,7 @@
 
 - `services/finance.py` — única fonte de verdade para cálculos
 - `services/credit_cards.py` — ciclo de faturas, limite, pagamento
+- `services/ofx_card_import.py` — importação OFX (parse, matching, revisão, apply)
 - `services/recurrence.py` — regras fixas e horizonte de previstos
 - `services/installments.py` — planos parcelados (`split_cents` / `repeat_cents`)
 - `schemas.py` — validação Pydantic, `ToolCall`, formatação BRL
@@ -85,7 +86,9 @@ mensagem do usuário
 | `CreditCard` | name, institution, credit_limit_cents, closing_day, due_day, settlement_account_id, is_active |
 | `CardInvoice` | card_id, cycle_start, cycle_end, due_date, status (`open`/`closed`/`paid`) |
 | `Category` | name, type (expense/income), keywords |
-| `Transaction` | type, amount_cents, account_id?, card_id?, invoice_id?, category_id?, status (`planned`/`actual`), competence_date, due_date, payment_date, transaction_date, transfer_group_id?, counterparty_account_id?, source_planned_id?, recurrence_id?, installment_plan_id?, installment_index? |
+| `Transaction` | type, amount_cents, account_id?, card_id?, invoice_id?, ofx_fitid?, category_id?, status (`planned`/`actual`), competence_date, due_date, payment_date, transaction_date, transfer_group_id?, counterparty_account_id?, source_planned_id?, recurrence_id?, installment_plan_id?, installment_index? |
+| `OfxImportBatch` | user_id, card_id, filename, status (`pending`/`applied`/`cancelled`) — staging da revisão OFX |
+| `OfxImportLine` | batch_id, fitid, posted_date, amount_cents, direction, memo, suggested_*/chosen_* actions |
 | `RecurringRule` | user_id, account_id, category_id, type, amount_cents, description, frequency (`daily`/`weekly`/`monthly`), start_date, end_date?, is_active, anchor_day, anchor_weekday |
 | `InstallmentPlan` | user_id, account_id, category_id?, type, total_cents, installment_count, interval (`monthly`/`weekly`/`biweekly`), start_date, description, is_active |
 | `Budget` | category_id, year, month, limit_cents |
@@ -234,6 +237,28 @@ pay_invoice  --despesa na conta de débito-->  card_invoices.status = paid
 - Assistente: `create_card` (wizard `card_wizard.py`), `update_card`, `delete_card`, `list_invoices`, `pay_invoice` (wizard `pay_invoice_slots.py`).
 - Compras no cartão **não** alteram saldo bancário; pagamento da fatura não duplica despesa da compra.
 
+### Importação OFX (cartão)
+
+Migração `017`: `transactions.ofx_fitid` + staging `ofx_import_batches` / `ofx_import_lines`.
+
+```mermaid
+flowchart LR
+  upload[Upload OFX] --> parse[parse_ofx]
+  parse --> batch[ofx_import_batches]
+  batch --> review[Revisao UI]
+  review --> apply[apply_batch]
+  apply --> createTx[create expense planned]
+  apply --> matchTx[grava ofx_fitid]
+  apply --> payInv[pay_invoice]
+```
+
+- Serviço: `services/ofx_card_import.py` (parser SGML/XML leve, sem lib externa).
+- UI: `/accounts/cards/{id}/ofx` → revisão → aplicar/cancelar (CSRF).
+- Débito: `create` ou `match` (mesmo cartão, valor igual, data ±3 dias, similaridade de memo).
+- Crédito: `pay_invoice` / `link_invoice_payment` se valor ≈ fatura; senão `skip`.
+- Idempotência: FITID já presente → `already_imported`. Lotes `pending` expiram em 24h.
+- Fora de escopo v1: OFX de conta corrente, agente/chat, estornos parciais automáticos.
+
 ### Corrigir transferência
 
 `update_transfer` altera o par `transfer_out`/`transfer_in` (origem, destino, valor, datas). Identifica pelo `transaction_id` ou pelo valor. **Não** usar `update_transaction` (só despesa/receita) nem criar outra transferência.
@@ -268,4 +293,4 @@ Valor, descrição, conta, categoria e tipo podem propagar; datas ficam só na p
 
 - Todas as queries filtram por `user_id`
 - Root usa `read_scope_id()` — visão **pessoal** (não global nos dashboards normais)
-- Admin em `/admin` para aprovar usuários
+- Admin em `/admin` para aprovar usuários e fazer backup/restauração do banco

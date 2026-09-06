@@ -297,6 +297,7 @@ class Transaction(Base):
     invoice_id: Mapped[int | None] = mapped_column(
         ForeignKey("card_invoices.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    ofx_fitid: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -321,6 +322,71 @@ class Transaction(Base):
         back_populates="transactions"
     )
     invoice: Mapped["CardInvoice | None"] = relationship(back_populates="transactions")
+
+
+class OfxImportBatch(Base):
+    __tablename__ = "ofx_import_batches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    card_id: Mapped[int] = mapped_column(
+        ForeignKey("credit_cards.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship()
+    card: Mapped["CreditCard"] = relationship()
+    lines: Mapped[list["OfxImportLine"]] = relationship(
+        back_populates="batch",
+        cascade="all, delete-orphan",
+        order_by="OfxImportLine.id",
+    )
+
+
+class OfxImportLine(Base):
+    __tablename__ = "ofx_import_lines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    batch_id: Mapped[int] = mapped_column(
+        ForeignKey("ofx_import_batches.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    fitid: Mapped[str] = mapped_column(String(128), nullable=False)
+    posted_date: Mapped[date] = mapped_column(Date, nullable=False)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    direction: Mapped[str] = mapped_column(String(10), nullable=False)
+    memo: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    suggested_action: Mapped[str] = mapped_column(String(32), nullable=False)
+    suggested_transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
+    )
+    suggested_invoice_id: Mapped[int | None] = mapped_column(
+        ForeignKey("card_invoices.id", ondelete="SET NULL"), nullable=True
+    )
+    chosen_action: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    chosen_transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
+    )
+    chosen_invoice_id: Mapped[int | None] = mapped_column(
+        ForeignKey("card_invoices.id", ondelete="SET NULL"), nullable=True
+    )
+
+    batch: Mapped["OfxImportBatch"] = relationship(back_populates="lines")
+    suggested_transaction: Mapped["Transaction | None"] = relationship(
+        foreign_keys=[suggested_transaction_id]
+    )
+    suggested_invoice: Mapped["CardInvoice | None"] = relationship(
+        foreign_keys=[suggested_invoice_id]
+    )
+    chosen_transaction: Mapped["Transaction | None"] = relationship(
+        foreign_keys=[chosen_transaction_id]
+    )
+    chosen_invoice: Mapped["CardInvoice | None"] = relationship(
+        foreign_keys=[chosen_invoice_id]
+    )
 
 
 class Budget(Base):

@@ -18,15 +18,15 @@ app/
   main.py          # FastAPI, middleware, CSP, onboarding gate, filtro chat_md
   chat_format.py   # markdown leve e seguro do chat
   auth.py          # sessão, root, escopo, bcrypt
-  models.py        # SQLAlchemy (transfer_group_id, status, recurrence_id, card_id)
+  models.py        # SQLAlchemy (transfer_group_id, status, recurrence_id, card_id, ofx_fitid)
   schemas.py       # Pydantic, ToolCall, format_brl
   routers/         # pages (HTML), api (JSON), auth
-  services/        # finance, recurrence, installments, credit_cards, wizards, tools, intents
+  services/        # finance, recurrence, installments, credit_cards, ofx_card_import, wizards, tools, intents
   agent/           # runner, llm, groq, prompt
   security/        # csrf, rate_limit
-  templates/       # Jinja2 + HTMX + agent partials
-tests/             # pytest (306 testes no container)
-alembic/           # migrações 001–016
+  templates/       # Jinja2 + HTMX + agent partials + card_ofx_*
+tests/             # pytest (315 testes no container)
+alembic/           # migrações 001–017
 docs/              # ARCHITECTURE, OPERATIONS, SECURITY, CHANGELOG
 ```
 

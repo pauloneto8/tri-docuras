@@ -26,6 +26,7 @@
 | "cadastrar cartão Nubank" | `create_card` + wizard | `test_card_wizard.py` |
 | "altere vencimento do cartão Nubank para dia 20" | `update_card` | `test_update_card.py` |
 | "excluir cartão Nubank" | `delete_card` | `test_update_card.py` |
+| Importar OFX no cartão (UI) | create/match/pay + FITID | `test_ofx_card_import.py` |
 | realizar previsto em outra conta | wizard pergunta mesma conta → conta | `test_realize_planned_wizard.py` |
 | "Ontem despesas 54... e 30 recarga" | fluxo multi-lançamento | `test_multi_movements.py` |
 | realizado: "hoje" | replica em payment/competence/due | `test_transaction_dates.py` |

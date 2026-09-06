@@ -92,6 +92,9 @@ services:
       ROOT_EMAILS: ${APP2_ROOT_EMAILS:-pauloneto8@gmail.com}
       TZ: America/Recife
       APP_TIMEZONE: America/Recife
+      BACKUP_DIR: /app/data/backups
+    volumes:
+      - app2_backups:/app/data/backups
     networks:
       - proxy
       - app2_internal
@@ -145,3 +148,5 @@ volumes:
     name: app1_db_data
   app2_db_data:
     name: app2_db_data
+  app2_backups:
+    name: app2_backups

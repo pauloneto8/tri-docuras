@@ -87,6 +87,7 @@ Corrigir transferência: ferramenta `update_transfer` (origem, destino, valor, d
 - Assistente: `create_card`, `update_card`, `delete_card`, `list_invoices`, `pay_invoice`
 - Wizard de cadastro: `card_wizard.py`
 - UI `/accounts/cards`: hierarquia expansível cartão → faturas → movimentos (`cards_with_nested_invoices`)
+- Import OFX: `/accounts/cards/{id}/ofx` — upload → revisão → criar/conciliar/pagar (`ofx_card_import.py`); `transactions.ofx_fitid` para idempotência; créditos ≈ fatura → `pay_invoice` / vínculo; estornos → ignorar
 - Chat após lançamento: `enrich_register_result` anexa `context_summary` (fatura do cartão ou saldo da conta)
 
 ### UI Movimentos (`/transactions`)
@@ -123,11 +124,12 @@ Previstos liquidados **não** listados (evita duplicata). Pares previsto/realiza
 | Área | Arquivos |
 |------|----------|
 | Cálculos | `app/services/finance.py`, `app/services/recurrence.py`, `app/services/installments.py`, `app/services/credit_cards.py` |
+| Import OFX | `app/services/ofx_card_import.py`, templates `card_ofx_*.html` |
 | Agente | `app/agent/runner.py`, `app/services/tools.py`, `app/agent/prompt.py` |
 | Escopo de parcela | `app/services/installment_scope_flow.py`, `app/services/installments.py` |
 | Wizards | `transaction_wizard.py`, `transaction_slots.py`, `realize_planned_slots.py`, `account_wizard.py`, `category_wizard.py`, `card_wizard.py`, `transfer_slots.py`, `pay_invoice_slots.py` |
 | UI movimentos | `templates/transactions.html`, `transaction_form.html`, `transaction_edit.html`, `routers/pages.py` |
-| UI contas/cartões | `templates/accounts.html`, `account_*.html`, `card_*.html` |
+| UI contas/cartões | `templates/accounts.html`, `account_*.html`, `card_*.html`, `card_ofx_*.html` |
 | UI orçamentos | `templates/budgets.html`, `budget_form.html`, `budget_edit.html` |
 | UI chat | `templates/partials/agent_*.html`, `app/chat_format.py` |
 | Auth | `app/auth.py`, `app/routers/auth.py`, `app/main.py` |
@@ -141,7 +143,7 @@ Previstos liquidados **não** listados (evita duplicata). Pares previsto/realiza
 - `assistfin-onboarding` — primeira conta
 - `assistfin-agent-tests` — pytest do agente
 - `assistfin-deploy-nginx` — infra e proxy
-- `assistfin-credit-cards` — cartões, faturas, ciclo, pagamento
+- `assistfin-credit-cards` — cartões, faturas, ciclo, pagamento, importação OFX
 - `ai-agent-design-patterns` — padrões de orquestração (LLM-first, wizards, confirmação)
 
 ## Planos em `.cursor/plans/`

@@ -6,6 +6,13 @@
   <p class="text-sm text-slate-400 mt-1">Visão global de todos os usuários e movimentações do sistema.</p>
 </div>
 
+{% if success %}
+<p class="mb-4 rounded-lg border border-emerald-800 bg-emerald-950/40 px-4 py-2 text-emerald-300 text-sm">{{ success }}</p>
+{% endif %}
+{% if error %}
+<p class="mb-4 rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-2 text-rose-300 text-sm">{{ error }}</p>
+{% endif %}
+
 <div class="grid md:grid-cols-3 gap-4 mb-8">
   <div class="rounded-xl bg-slate-900 border border-slate-800 p-5">
     <p class="text-slate-400 text-sm">Receitas globais ({{ summary.month }}/{{ summary.year }})</p>
@@ -20,6 +27,70 @@
     <p class="text-2xl font-bold">R$ {{ summary.balance }}</p>
   </div>
 </div>
+
+<section class="rounded-xl bg-slate-900 border border-slate-800 p-5 mb-8">
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+    <div>
+      <h2 class="text-lg font-semibold">Backup do banco</h2>
+      <p class="text-sm text-slate-400 mt-1">
+        Gera um dump completo do PostgreSQL. Restaurar substitui os dados atuais.
+      </p>
+    </div>
+    <form method="post" action="/admin/backup/create">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-sm font-medium">
+        Criar backup agora
+      </button>
+    </form>
+  </div>
+
+  {% if backups %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="text-slate-400 border-b border-slate-800">
+        <tr>
+          <th class="text-left py-2">Arquivo</th>
+          <th class="text-left py-2">Criado em</th>
+          <th class="text-left py-2">Tamanho</th>
+          <th class="text-left py-2">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in backups %}
+        <tr class="border-b border-slate-800/60 align-top">
+          <td class="py-3 font-mono text-xs text-slate-200">{{ b.filename }}</td>
+          <td class="py-3 text-slate-400">{{ b.created_label }}</td>
+          <td class="py-3 text-slate-400">{{ b.size_label }}</td>
+          <td class="py-3 space-y-2">
+            <div class="flex flex-wrap gap-2">
+              <a href="/admin/backup/download/{{ b.filename }}" class="text-emerald-400 hover:text-emerald-300 text-xs">Baixar</a>
+              <form method="post" action="/admin/backup/delete" class="inline" onsubmit="return confirm('Excluir este backup?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="filename" value="{{ b.filename }}">
+                <button type="submit" class="text-rose-400 hover:text-rose-300 text-xs">Excluir</button>
+              </form>
+            </div>
+            <form method="post" action="/admin/backup/restore" class="mt-2 space-y-2 rounded-lg border border-amber-800/50 bg-amber-950/20 p-3" onsubmit="return confirm('Isso substitui TODOS os dados atuais pelo backup. Continuar?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="filename" value="{{ b.filename }}">
+              <label class="block text-xs text-amber-200/90">
+                Para restaurar, digite <span class="font-mono font-semibold">{{ restore_confirm_word }}</span>
+                <input name="confirm" type="text" autocomplete="off" placeholder="{{ restore_confirm_word }}" class="mt-1 w-full rounded bg-slate-800 border border-slate-700 px-2 py-1.5 text-sm" required>
+              </label>
+              <button type="submit" class="rounded border border-amber-700 text-amber-200 hover:bg-amber-950/50 px-3 py-1.5 text-xs">
+                Restaurar este backup
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-sm text-slate-500">Nenhum backup ainda. Clique em <em>Criar backup agora</em>.</p>
+  {% endif %}
+</section>
 
 <section class="rounded-xl bg-slate-900 border border-slate-800 p-5">
   <h2 class="text-lg font-semibold mb-4">Usuários</h2>

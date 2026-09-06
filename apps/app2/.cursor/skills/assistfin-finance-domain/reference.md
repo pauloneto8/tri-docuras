@@ -16,6 +16,7 @@
 | `update_transaction` / `delete_transaction` | Editar/excluir (par em transferências na exclusão); edição aceita `type` e `installment_scope` |
 | `update_account` | Editar conta bancária (saldo inicial, data, apelido…) |
 | `create_card` / `update_card` / `deactivate_card` | CRUD de cartão de crédito |
+| `ofx_card_import` (serviço) | Parse/matching/apply OFX de cartão — ver skill `assistfin-credit-cards` |
 | `create_account` / `create_category` | Cadastros; `create_category` com mesmo nome e outro tipo **atualiza** o tipo |
 | `update_category` / `delete_category` | Alterar ou excluir categoria |
 | `complete_onboarding` | Primeira conta |
@@ -51,6 +52,7 @@
 | 014 | `installment_plans`, `transactions.installment_plan_id` / `installment_index` |
 | 015 | `card_invoices`, `transactions.invoice_id` |
 | 016 | `credit_cards`, `transactions.card_id`; migração de contas `cartao` legadas |
+| 017 | `transactions.ofx_fitid`; `ofx_import_batches` / `ofx_import_lines` (revisão OFX) |
 
 ## Formatação BRL
 

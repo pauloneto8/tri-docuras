@@ -63,6 +63,7 @@ Formulário (`transaction_form.html` / `transaction_edit.html`): realizado → d
 - Tabela `card_invoices`; transações têm `card_id` e/ou `account_id` (pelo menos um)
 - Compra no cartão = despesa na fatura; **não** altera saldo bancário
 - Pagar fatura = despesa na conta de débito (liquidação)
+- **OFX**: importação com revisão (`ofx_card_import.py`); débitos criam/conciliam (`ofx_fitid`); créditos podem pagar/vincular fatura
 - Ver skill `assistfin-credit-cards`
 
 ## Lançamentos fixos

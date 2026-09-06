@@ -49,6 +49,7 @@ class TransactionCreate(BaseModel):
     installment_plan_id: int | None = None
     installment_index: int | None = None
     invoice_id: int | None = None
+    ofx_fitid: str | None = Field(default=None, max_length=128)
 
     @field_validator("description")
     @classmethod

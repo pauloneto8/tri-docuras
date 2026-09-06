@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Importar OFX — AssistFin{% endblock %}
+{% block content %}
+<div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h1 class="text-lg font-semibold text-slate-100">Importar OFX</h1>
+    <p class="text-sm text-slate-400">{{ card.name }}{% if card.institution %} · {{ card.institution }}{% endif %}</p>
+  </div>
+  <a href="/accounts/cards" class="text-sm text-emerald-400 hover:text-emerald-300">← Voltar aos cartões</a>
+</div>
+
+{% if error %}
+<p class="mb-4 rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-2 text-rose-300 text-sm">{{ error }}</p>
+{% endif %}
+
+<section class="max-w-xl rounded-xl bg-slate-900 border border-slate-800 p-5 space-y-4">
+  <p class="text-sm text-slate-400">
+    Envie o extrato OFX do cartão. Na próxima tela você revisa o que criar, conciliar ou pagar.
+  </p>
+  <form method="post" action="/accounts/cards/{{ card.id }}/ofx" enctype="multipart/form-data" class="space-y-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div>
+      <label class="block text-sm text-slate-400 mb-1">Arquivo OFX</label>
+      <input name="file" type="file" accept=".ofx,.OFX,.qfx,.QFX,application/x-ofx,text/xml" required
+             class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-slate-700 file:px-3 file:py-1 file:text-slate-200">
+    </div>
+    <div class="flex flex-col sm:flex-row gap-2 pt-2">
+      <button type="submit" class="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium">Continuar</button>
+      <a href="/accounts/cards" class="flex-1 rounded-lg border border-slate-700 px-4 py-2 text-center text-slate-300 hover:bg-slate-800">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

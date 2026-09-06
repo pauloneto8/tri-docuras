@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Revisar OFX — AssistFin{% endblock %}
+{% block content %}
+<div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h1 class="text-lg font-semibold text-slate-100">Revisar importação OFX</h1>
+    <p class="text-sm text-slate-400">
+      {{ card.name }} · {{ review.filename }}
+      · {{ review.counts.total }} linha{% if review.counts.total != 1 %}s{% endif %}
+    </p>
+  </div>
+  <a href="/accounts/cards/{{ card.id }}/ofx" class="text-sm text-emerald-400 hover:text-emerald-300">← Outro arquivo</a>
+</div>
+
+{% if error %}
+<p class="mb-4 rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-2 text-rose-300 text-sm">{{ error }}</p>
+{% endif %}
+
+{% if review.status != 'pending' %}
+<p class="mb-4 rounded-lg border border-amber-800 bg-amber-950/40 px-4 py-2 text-amber-200 text-sm">
+  Este lote já foi {{ review.status }}. Envie o OFX novamente se precisar.
+</p>
+{% else %}
+
+<div class="mb-4 flex flex-wrap gap-2 text-xs text-slate-400">
+  {% if review.counts.create %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.create }} criar</span>{% endif %}
+  {% if review.counts.match %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.match }} conciliar</span>{% endif %}
+  {% if review.counts.pay_invoice %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.pay_invoice }} pagar fatura</span>{% endif %}
+  {% if review.counts.link_invoice_payment %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.link_invoice_payment }} vincular pagamento</span>{% endif %}
+  {% if review.counts.skip %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.skip }} ignorar</span>{% endif %}
+  {% if review.counts.already_imported %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.already_imported }} já importados</span>{% endif %}
+</div>
+
+<form method="post" action="/accounts/cards/{{ card.id }}/ofx/{{ review.batch_id }}/apply" class="space-y-3">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  {% for line in review.lines %}
+  <section class="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+      <div class="min-w-0">
+        <p class="font-medium text-slate-100 truncate">{{ line.memo }}</p>
+        <p class="text-xs text-slate-500 mt-1">
+          {{ line.posted_date }}
+          · {% if line.direction == 'debit' %}Compra{% else %}Crédito{% endif %}
+          · FITID {{ line.fitid }}
+        </p>
+      </div>
+      <p class="font-mono shrink-0 {% if line.direction == 'debit' %}text-rose-400{% else %}text-emerald-400{% endif %}">
+        R$ {{ line.amount }}
+      </p>
+    </div>
+
+    {% if line.suggested_action == 'already_imported' %}
+    <input type="hidden" name="action_{{ line.id }}" value="already_imported">
+    <p class="text-sm text-slate-400">Já importado anteriormente — será ignorado.</p>
+    {% else %}
+    <div>
+      <label class="block text-xs text-slate-400 mb-1">Ação</label>
+      <select name="action_{{ line.id }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+        {% if line.direction == 'debit' %}
+        <option value="create" {% if line.chosen_action == 'create' %}selected{% endif %}>Criar compra no cartão</option>
+        <option value="match" {% if line.chosen_action == 'match' %}selected{% endif %}>Conciliar com lançamento existente</option>
+        <option value="skip" {% if line.chosen_action == 'skip' %}selected{% endif %}>Ignorar</option>
+        {% else %}
+        <option value="pay_invoice" {% if line.chosen_action == 'pay_invoice' %}selected{% endif %}>Pagar fatura</option>
+        <option value="link_invoice_payment" {% if line.chosen_action == 'link_invoice_payment' %}selected{% endif %}>Vincular a pagamento existente</option>
+        <option value="skip" {% if line.chosen_action == 'skip' or line.chosen_action not in ['pay_invoice', 'link_invoice_payment'] %}selected{% endif %}>Ignorar</option>
+        {% endif %}
+      </select>
+    </div>
+
+    {% if line.direction == 'debit' and line.candidates %}
+    <div>
+      <label class="block text-xs text-slate-400 mb-1">Lançamento para conciliar</label>
+      <select name="transaction_id_{{ line.id }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+        <option value="">Selecione…</option>
+        {% for c in line.candidates %}
+        <option value="{{ c.id }}" {% if line.chosen_transaction_id == c.id %}selected{% endif %}>
+          #{{ c.id }} · {{ c.description }} · {{ c.competence_date }} · {{ c.status }}{% if c.score %} ({{ c.score }}){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% elif line.direction == 'debit' %}
+    <input type="hidden" name="transaction_id_{{ line.id }}" value="">
+    {% endif %}
+
+    {% if line.direction == 'credit' and line.invoice_options %}
+    <div>
+      <label class="block text-xs text-slate-400 mb-1">Fatura</label>
+      <select name="invoice_id_{{ line.id }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+        <option value="">Selecione…</option>
+        {% for inv in line.invoice_options %}
+        <option value="{{ inv.id }}" {% if line.chosen_invoice_id == inv.id %}selected{% endif %}>
+          {{ inv.invoice_label }} · R$ {{ inv.total }} · {{ inv.status_label }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% elif line.direction == 'credit' %}
+    <input type="hidden" name="invoice_id_{{ line.id }}" value="">
+    <p class="text-xs text-slate-500">Nenhuma fatura com valor próximo — crédito tende a ser ignorado (estorno).</p>
+    {% endif %}
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  <div class="flex flex-col sm:flex-row gap-2 pt-2">
+    <button type="submit" class="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium"
+            onclick="return confirm('Aplicar as ações selecionadas?')">Confirmar importação</button>
+    <button type="submit" form="cancel-ofx" class="flex-1 rounded-lg border border-slate-700 px-4 py-2 text-slate-300 hover:bg-slate-800">Descartar</button>
+  </div>
+</form>
+
+<form id="cancel-ofx" method="post" action="/accounts/cards/{{ card.id }}/ofx/{{ review.batch_id }}/cancel">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+</form>
+{% endif %}
+{% endblock %}

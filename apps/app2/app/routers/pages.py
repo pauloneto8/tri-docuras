@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -29,6 +29,7 @@ from app.schemas import (
     decimal_to_cents,
 )
 from app.services import admin, finance
+from app.services import ofx_card_import
 from app.timezone import local_today
 from app.services.conversations import get_or_create_conversation, log_message
 from app.services.transaction_wizard import (
@@ -696,6 +697,175 @@ async def delete_card_form(
     )
 
 
+@router.get("/accounts/cards/{card_id}/ofx", response_class=HTMLResponse)
+async def card_ofx_upload_page(
+    card_id: int,
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    templates = get_templates(request)
+    from app.services.credit_cards import format_credit_card
+
+    card = finance.find_card(db, user.id, card_id=card_id)
+    if not card:
+        return _flash_and_redirect(
+            request, "/accounts/cards", error="Cartão não encontrado."
+        )
+    ofx_card_import.expire_stale_batches(db, user.id)
+    return templates.TemplateResponse(
+        "card_ofx_upload.html",
+        {
+            "request": request,
+            "user": user,
+            "card": format_credit_card(card, db=db),
+            "csrf_token": ensure_csrf_token(request),
+            "error": request.session.pop("flash_error", None),
+        },
+    )
+
+
+@router.post("/accounts/cards/{card_id}/ofx", response_class=HTMLResponse)
+async def card_ofx_upload(
+    card_id: int,
+    request: Request,
+    csrf_token: str = Form(...),
+    file: UploadFile = File(...),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    templates = get_templates(request)
+    from app.services.credit_cards import format_credit_card
+
+    validate_csrf_token(request, csrf_token)
+    card = finance.find_card(db, user.id, card_id=card_id)
+    if not card:
+        return _flash_and_redirect(
+            request, "/accounts/cards", error="Cartão não encontrado."
+        )
+    try:
+        raw = await file.read()
+        if not raw:
+            raise ValueError("Arquivo OFX vazio.")
+        if len(raw) > 5 * 1024 * 1024:
+            raise ValueError("Arquivo OFX muito grande (máx. 5 MB).")
+        batch = ofx_card_import.create_batch(
+            db,
+            user.id,
+            card,
+            filename=file.filename or "extrato.ofx",
+            content=raw,
+        )
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            "card_ofx_upload.html",
+            {
+                "request": request,
+                "user": user,
+                "card": format_credit_card(card, db=db),
+                "csrf_token": ensure_csrf_token(request),
+                "error": str(exc),
+            },
+            status_code=400,
+        )
+    return RedirectResponse(
+        url=f"/accounts/cards/{card_id}/ofx/{batch.id}",
+        status_code=303,
+    )
+
+
+@router.get("/accounts/cards/{card_id}/ofx/{batch_id}", response_class=HTMLResponse)
+async def card_ofx_review_page(
+    card_id: int,
+    batch_id: int,
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    templates = get_templates(request)
+    from app.services.credit_cards import format_credit_card
+
+    card = finance.find_card(db, user.id, card_id=card_id)
+    if not card:
+        return _flash_and_redirect(
+            request, "/accounts/cards", error="Cartão não encontrado."
+        )
+    try:
+        batch = ofx_card_import.get_batch(db, user.id, card_id, batch_id)
+        review = ofx_card_import.batch_review_context(db, batch)
+    except ValueError as exc:
+        return _flash_and_redirect(request, f"/accounts/cards/{card_id}/ofx", error=str(exc))
+    return templates.TemplateResponse(
+        "card_ofx_review.html",
+        {
+            "request": request,
+            "user": user,
+            "card": format_credit_card(card, db=db),
+            "review": review,
+            "csrf_token": ensure_csrf_token(request),
+            "error": request.session.pop("flash_error", None),
+        },
+    )
+
+
+@router.post("/accounts/cards/{card_id}/ofx/{batch_id}/apply", response_class=HTMLResponse)
+async def card_ofx_apply(
+    card_id: int,
+    batch_id: int,
+    request: Request,
+    csrf_token: str = Form(...),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    validate_csrf_token(request, csrf_token)
+    card = finance.find_card(db, user.id, card_id=card_id)
+    if not card:
+        return _flash_and_redirect(
+            request, "/accounts/cards", error="Cartão não encontrado."
+        )
+    form = await request.form()
+    choices: dict[int, dict] = {}
+    for key, value in form.multi_items():
+        if key.startswith("action_"):
+            line_id = int(key.removeprefix("action_"))
+            choices.setdefault(line_id, {})["action"] = str(value)
+        elif key.startswith("transaction_id_"):
+            line_id = int(key.removeprefix("transaction_id_"))
+            choices.setdefault(line_id, {})["transaction_id"] = str(value)
+        elif key.startswith("invoice_id_"):
+            line_id = int(key.removeprefix("invoice_id_"))
+            choices.setdefault(line_id, {})["invoice_id"] = str(value)
+    try:
+        summary = ofx_card_import.apply_batch(db, user.id, card, batch_id, choices)
+        msg = ofx_card_import.format_apply_summary(summary)
+    except ValueError as exc:
+        return _flash_and_redirect(
+            request,
+            f"/accounts/cards/{card_id}/ofx/{batch_id}",
+            error=str(exc),
+        )
+    return _flash_and_redirect(request, "/accounts/cards", success=msg)
+
+
+@router.post("/accounts/cards/{card_id}/ofx/{batch_id}/cancel", response_class=HTMLResponse)
+async def card_ofx_cancel(
+    card_id: int,
+    batch_id: int,
+    request: Request,
+    csrf_token: str = Form(...),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    validate_csrf_token(request, csrf_token)
+    try:
+        ofx_card_import.cancel_batch(db, user.id, card_id, batch_id)
+    except ValueError as exc:
+        return _flash_and_redirect(request, "/accounts/cards", error=str(exc))
+    return _flash_and_redirect(
+        request, "/accounts/cards", success="Importação OFX descartada."
+    )
+
+
 @router.post("/accounts/invoices/{invoice_id}/pay", response_class=HTMLResponse)
 async def pay_invoice_form(
     invoice_id: int,
@@ -1350,9 +1520,13 @@ async def admin_page(
     user: User = Depends(require_root),
     db: Session = Depends(get_db),
 ):
+    from app.services import db_backup
+
     templates = get_templates(request)
     users = admin.list_users_overview(db)
     summary = finance.get_summary(db, None, SummaryInput())
+    flash_success, flash_error = _consume_flash(request)
+    backups = db_backup.list_backups()
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -1361,6 +1535,10 @@ async def admin_page(
             "is_root": True,
             "users": users,
             "summary": summary,
+            "backups": backups,
+            "restore_confirm_word": db_backup.RESTORE_CONFIRM_WORD,
+            "success": flash_success,
+            "error": flash_error,
             "today": local_today(),
             "csrf_token": ensure_csrf_token(request),
         },
@@ -1418,6 +1596,92 @@ async def admin_revoke_user(
     validate_csrf_token(request, csrf_token)
     admin.set_user_active(db, user_id, active=False)
     return RedirectResponse(url="/admin", status_code=303)
+
+
+@router.post("/admin/backup/create")
+async def admin_backup_create(
+    request: Request,
+    csrf_token: str = Form(...),
+    user: User = Depends(require_root),
+):
+    from app.services import db_backup
+
+    validate_csrf_token(request, csrf_token)
+    try:
+        info = db_backup.create_backup()
+        return _flash_and_redirect(
+            request,
+            "/admin",
+            success=f"Backup criado: {info.filename} ({info.size_label}).",
+        )
+    except ValueError as exc:
+        return _flash_and_redirect(request, "/admin", error=str(exc))
+
+
+@router.post("/admin/backup/restore")
+async def admin_backup_restore(
+    request: Request,
+    filename: str = Form(...),
+    confirm: str = Form(...),
+    csrf_token: str = Form(...),
+    user: User = Depends(require_root),
+):
+    from app.services import db_backup
+
+    validate_csrf_token(request, csrf_token)
+    try:
+        restored = db_backup.restore_backup(filename, confirm=confirm)
+        return _flash_and_redirect(
+            request,
+            "/admin",
+            success=(
+                f"Banco restaurado a partir de {restored}. "
+                "Faça logout e login se a sessão ficar inconsistente."
+            ),
+        )
+    except ValueError as exc:
+        return _flash_and_redirect(request, "/admin", error=str(exc))
+
+
+@router.post("/admin/backup/delete")
+async def admin_backup_delete(
+    request: Request,
+    filename: str = Form(...),
+    csrf_token: str = Form(...),
+    user: User = Depends(require_root),
+):
+    from app.services import db_backup
+
+    validate_csrf_token(request, csrf_token)
+    try:
+        db_backup.delete_backup(filename)
+        return _flash_and_redirect(
+            request, "/admin", success=f"Backup {filename} excluído."
+        )
+    except ValueError as exc:
+        return _flash_and_redirect(request, "/admin", error=str(exc))
+
+
+@router.get("/admin/backup/download/{filename}")
+async def admin_backup_download(
+    filename: str,
+    user: User = Depends(require_root),
+):
+    from fastapi.responses import FileResponse
+
+    from app.services import db_backup
+
+    try:
+        path = db_backup.backup_path(filename)
+        if not path.is_file():
+            raise ValueError("Arquivo de backup não encontrado.")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(
+        path,
+        filename=filename,
+        media_type="application/octet-stream",
+    )
 
 
 def _log_chat_exchange(

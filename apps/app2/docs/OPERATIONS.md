@@ -30,10 +30,41 @@ Nova revisão:
 docker compose exec -T app2 alembic revision -m "descricao" --autogenerate
 ```
 
+## Backup e restauração (admin)
+
+Na tela `/admin` (usuário root):
+
+1. **Criar backup agora** — gera `assistfin_YYYYMMDD_HHMMSS.dump` (formato custom `pg_dump -Fc`)
+2. **Baixar** / **Excluir** arquivos listados
+3. **Restaurar** — digite exatamente `RESTAURAR` e confirme; usa `pg_restore --clean --if-exists`
+
+Arquivos ficam no volume Docker `app2_backups` (`/app/data/backups` no container). Mantém os últimos 20 dumps.
+
+Via CLI (equivalente):
+
+```bash
+docker compose exec -T app2-db pg_dump -U app2 -d app2 -Fc -f /tmp/manual.dump
+# ou pela UI em /admin
+```
+
+## Importação OFX de cartão
+
+Em `/accounts/cards`, use **Importar OFX** no cartão:
+
+1. Envie o arquivo `.ofx` (ou `.qfx`) do cartão — limite na app **5 MB** (respeite também `client_max_body_size` do Nginx)
+2. Revise cada linha:
+   - **Criar** compra prevista no cartão
+   - **Conciliar** com lançamento existente (mesmo valor, data ±3 dias, descrição parecida)
+   - **Pagar fatura** / **vincular pagamento** (créditos OFX com valor ≈ fatura)
+   - **Ignorar** (estornos sem fatura correspondente)
+3. Confirme — FITIDs ficam em `transactions.ofx_fitid` (reimportação é idempotente)
+
+Lotes pendentes (`ofx_import_batches`) expiram em **24h**. Serviço: `app/services/ofx_card_import.py`. Testes: `tests/test_ofx_card_import.py`.
+
 ## Testes
 
 ```bash
-# Suite completa (306 testes)
+# Suite completa
 docker compose exec -T app2 python -m pytest -q
 
 # Área específica
@@ -44,6 +75,7 @@ docker compose exec -T app2 python -m pytest tests/test_planned_transactions.py 
 docker compose exec -T app2 python -m pytest tests/test_recurrence.py -q
 docker compose exec -T app2 python -m pytest tests/test_installments.py -q
 docker compose exec -T app2 python -m pytest tests/test_credit_cards.py -q
+docker compose exec -T app2 python -m pytest tests/test_ofx_card_import.py -q
 docker compose exec -T app2 python -m pytest tests/test_realize_planned_wizard.py -q
 docker compose exec -T app2 python -m pytest tests/test_multi_movements.py -q
 docker compose exec -T app2 python -m pytest tests/test_chat_format.py -q
@@ -60,6 +92,8 @@ docker compose exec -T app2-db psql -U "$(grep APP2_DB_USER .env | cut -d= -f2)"
   -d "$(grep APP2_DB_NAME .env | cut -d= -f2)" -c "
 DELETE FROM conversation_messages;
 DELETE FROM conversations;
+DELETE FROM ofx_import_lines;
+DELETE FROM ofx_import_batches;
 DELETE FROM transactions;
 DELETE FROM card_invoices;
 DELETE FROM installment_plans;
@@ -74,7 +108,7 @@ UPDATE users SET onboarding_completed = false;
 
 Usuários e senhas são preservados. Após o reset, faça **logout e login** se a sessão ou o onboarding parecerem inconsistentes.
 
-O que é removido: movimentos, cartões, faturas, planos de parcelas, regras de recorrência, contas, categorias, orçamentos, conversas do agente. O que permanece: usuários, aprovações e credenciais.
+O que é removido: movimentos, lotes OFX, cartões, faturas, planos de parcelas, regras de recorrência, contas, categorias, orçamentos, conversas do agente. O que permanece: usuários, aprovações e credenciais.
 
 ### Zerar tudo (incluindo usuários)
 

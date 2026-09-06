@@ -56,13 +56,14 @@
           </p>
         </div>
       </div>
-      <div class="flex items-center gap-3 sm:pl-4 shrink-0" onclick="event.preventDefault(); event.stopPropagation();">
+      <div class="flex items-center gap-3 sm:pl-4 shrink-0" onclick="event.stopPropagation();">
         {% if a.current_invoice_total %}
         <div class="text-right">
           <p class="text-xs text-slate-500">Fatura atual</p>
           <p class="font-semibold text-amber-300">R$ {{ a.current_invoice_total }}</p>
         </div>
         {% endif %}
+        <a href="/accounts/cards/{{ a.id }}/ofx" class="text-sm text-emerald-400 hover:text-emerald-300">Importar OFX</a>
         <a href="/accounts/cards/{{ a.id }}/edit" class="text-sm text-emerald-400 hover:text-emerald-300">Editar</a>
         <form method="post" action="/accounts/cards/{{ a.id }}/delete" onsubmit="return confirm('Desativar este cartão?')">
           <button type="submit" class="text-sm text-slate-400 hover:text-rose-400">Desativar</button>
