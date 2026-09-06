@@ -1,4 +1,31 @@
-from app.services.text_correction import correct_category_name, correct_movement_description
+from app.services.text_correction import (
+    correct_category_name,
+    correct_movement_description,
+    sanitize_movement_description,
+)
+from app.services.tools import extract_description, parse_amount
+
+
+def test_sanitize_strips_command_and_account():
+    assert (
+        sanitize_movement_description("Comprando carne no mercado na carteira")
+        == "compra de carne no mercado"
+    )
+    assert (
+        correct_movement_description("Comprando carne no mercado na carteira")
+        == "Compra de carne no mercado"
+    )
+
+
+def test_extract_description_keeps_compra_de():
+    msg = "fiz compra de carne no mercado na carteira"
+    assert extract_description(msg, parse_amount(msg)).lower() == "compra de carne no mercado"
+
+
+def test_extract_description_with_amount_and_account():
+    msg = "gastei 40 na compra de carne no mercado na carteira"
+    assert "compra de carne" in extract_description(msg, parse_amount(msg)).lower()
+    assert "carteira" not in extract_description(msg, parse_amount(msg)).lower()
 
 
 def test_corrects_missing_accents():

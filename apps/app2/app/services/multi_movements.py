@@ -8,7 +8,6 @@ from re import Match
 
 from app.services.text_correction import correct_movement_description
 from app.services.tools import (
-    AMOUNT_RE,
     EXPENSE_HINTS,
     INCOME_HINTS,
     parse_amount,
@@ -60,7 +59,9 @@ class ParsedMovement:
 
 
 def count_amounts(message: str) -> int:
-    return len(list(AMOUNT_RE.finditer(message)))
+    from app.services.tools import iter_monetary_amount_matches
+
+    return len(list(iter_monetary_amount_matches(message)))
 
 
 def _normalize_amount_raw(raw: str) -> str | None:
@@ -150,7 +151,10 @@ def parse_multi_movements(
     if is_date_only_message(text):
         return None
 
-    amounts_found = list(AMOUNT_RE.finditer(text))
+    from app.services.tools import iter_monetary_amount_matches
+
+    # "9,67 em 10 vezes" → 10 é parcela, não segundo valor monetário
+    amounts_found = list(iter_monetary_amount_matches(text))
     if len(amounts_found) < 2:
         return None
 

@@ -14,7 +14,7 @@
       {% if focus_cards %}Cartões de crédito{% else %}Contas bancárias{% endif %}
     </h1>
     <p class="text-sm text-slate-400">
-      {% if focus_cards %}Gerencie cartões, faturas e liquidação{% else %}Saldos e cadastro de contas{% endif %}
+      {% if focus_cards %}Expanda o cartão para ver faturas e movimentos{% else %}Saldos e cadastro de contas{% endif %}
     </p>
   </div>
   <div class="flex flex-wrap items-center gap-2">
@@ -28,100 +28,74 @@
   </div>
 </div>
 
-<div class="space-y-6">
-  <section class="rounded-xl bg-slate-900 border border-slate-800 p-5">
-    {% if not focus_cards and not credit_cards %}
-    <p class="text-sm text-slate-400 mb-4 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-2">
-      Para controlar faturas, cadastre um cartão em
-      <a href="/accounts/cards" class="text-emerald-400 hover:text-emerald-300">Cartões</a>.
-    </p>
-    {% endif %}
-    {% if accounts %}
-    <div class="space-y-3">
-      {% for a in accounts %}
-      <div class="rounded-lg bg-slate-800/50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <p class="font-medium">{% if focus_cards %}{{ a.name }}{% else %}{{ a.account }}{% endif %}</p>
+{% if focus_cards %}
+{# —— Cartões: hierarquia cartão → faturas → movimentos —— #}
+<section class="space-y-3">
+  {% if accounts %}
+  {% for a in accounts %}
+  <details class="group rounded-xl bg-slate-900 border border-slate-800 open:border-slate-700">
+    <summary class="cursor-pointer list-none p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 [&::-webkit-details-marker]:hidden">
+      <div class="min-w-0 flex items-start gap-3">
+        <span class="mt-1 text-slate-500 group-open:rotate-90 transition-transform select-none" aria-hidden="true">▸</span>
+        <div class="min-w-0">
+          <p class="font-medium text-slate-100">{{ a.name }}</p>
           <p class="text-sm text-slate-400">
-            {% if focus_cards %}Cartão de crédito{% else %}{{ a.account_type_label }}{% endif %}
-            {% if a.institution %} · {{ a.institution }}{% endif %}
+            {% if a.institution %}{{ a.institution }} · {% endif %}
+            Fecha dia {{ a.closing_day }} · Vence dia {{ a.due_day }}
           </p>
-          {% if focus_cards %}
           <p class="text-xs text-slate-500 mt-1">
-            Fechamento dia {{ a.closing_day }} · Vencimento dia {{ a.due_day }}
-            {% if a.credit_limit %} · Limite R$ {{ a.credit_limit }}{% endif %}
-          </p>
-          {% if a.settlement_account_name %}
-          <p class="text-xs text-slate-500 mt-1">Liquidação: {{ a.settlement_account_name }}</p>
-          {% endif %}
-          {% if a.current_invoice_total %}
-          <p class="text-xs text-amber-300 mt-1">
-            Fatura atual: R$ {{ a.current_invoice_total }} · vence {{ a.current_invoice_due_label }}
+            {% if a.credit_limit %}Limite R$ {{ a.credit_limit }}{% endif %}
             {% if a.available_limit %} · Disponível R$ {{ a.available_limit }}{% endif %}
+            {% if a.settlement_account_name %} · Liquidação: {{ a.settlement_account_name }}{% endif %}
           </p>
-          {% endif %}
-          {% else %}
           <p class="text-xs text-slate-500 mt-1">
-            Saldo inicial: R$ {{ a.opening_balance }}
-            {% if a.opening_balance_date_label %} · desde {{ a.opening_balance_date_label }}{% endif %}
+            {{ a.invoices_count }} fatura{% if a.invoices_count != 1 %}s{% endif %}
+            {% if a.unpaid_invoices_count %}
+            · <span class="text-amber-300">{{ a.unpaid_invoices_count }} em aberto</span>
+            {% endif %}
           </p>
-          {% endif %}
-        </div>
-        <div class="flex items-center gap-4">
-          {% if not focus_cards %}
-          <span class="text-lg font-semibold text-emerald-400">R$ {{ a.balance }}</span>
-          {% endif %}
-          <div class="flex items-center gap-2">
-            {% if focus_cards %}
-            <a href="/accounts/cards/{{ a.id }}/edit" class="text-sm text-emerald-400 hover:text-emerald-300">Editar</a>
-            <form method="post" action="/accounts/cards/{{ a.id }}/delete" onsubmit="return confirm('Desativar este cartão?')">
-              <button type="submit" class="text-sm text-slate-400 hover:text-rose-400">Desativar</button>
-            </form>
-            {% else %}
-            <a href="/accounts/{{ a.id }}/edit" class="text-sm text-emerald-400 hover:text-emerald-300">Editar</a>
-            {% if all_accounts|length > 1 %}
-            <form method="post" action="/accounts/{{ a.id }}/delete" onsubmit="return confirm('Desativar esta conta?')">
-              <button type="submit" class="text-sm text-slate-400 hover:text-rose-400">Desativar</button>
-            </form>
-            {% endif %}
-            {% endif %}
-          </div>
         </div>
       </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <p class="text-slate-400">
-      {% if focus_cards %}
-      Nenhum cartão cadastrado.
-      <a href="/accounts/cards/new" class="text-emerald-400 hover:text-emerald-300">Cadastrar cartão</a>
-      {% else %}
-      Nenhuma conta cadastrada.
-      <a href="/accounts/new" class="text-emerald-400 hover:text-emerald-300">Cadastrar conta</a>
-      {% endif %}
-    </p>
-    {% endif %}
-  </section>
+      <div class="flex items-center gap-3 sm:pl-4 shrink-0" onclick="event.preventDefault(); event.stopPropagation();">
+        {% if a.current_invoice_total %}
+        <div class="text-right">
+          <p class="text-xs text-slate-500">Fatura atual</p>
+          <p class="font-semibold text-amber-300">R$ {{ a.current_invoice_total }}</p>
+        </div>
+        {% endif %}
+        <a href="/accounts/cards/{{ a.id }}/edit" class="text-sm text-emerald-400 hover:text-emerald-300">Editar</a>
+        <form method="post" action="/accounts/cards/{{ a.id }}/delete" onsubmit="return confirm('Desativar este cartão?')">
+          <button type="submit" class="text-sm text-slate-400 hover:text-rose-400">Desativar</button>
+        </form>
+      </div>
+    </summary>
 
-  {% if focus_cards or invoices %}
-  <section class="rounded-xl bg-slate-900 border border-slate-800 p-5" id="invoices">
-    <h2 class="text-lg font-semibold mb-4">Faturas de cartão</h2>
-    {% if invoices %}
-    <div class="space-y-3">
-      {% for inv in invoices %}
-      <div class="rounded-lg bg-slate-800/50 p-4">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <p class="font-medium">{{ inv.card_name or inv.account_name }} — {{ inv.invoice_label }}</p>
-            <p class="text-sm text-slate-400">
-              Ciclo {{ inv.cycle_start }} a {{ inv.cycle_end }} · Vence {{ inv.due_date_label }}
-            </p>
-            <p class="text-lg font-semibold text-amber-300 mt-1">R$ {{ inv.total }}</p>
-            <span class="inline-flex rounded-full border border-slate-600 px-2 py-0.5 text-xs text-slate-300 mt-1">{{ inv.status_label }}</span>
+    <div class="px-4 sm:px-5 pb-5 space-y-2 border-t border-slate-800/80 pt-3">
+      {% if a.invoices %}
+      {% for inv in a.invoices %}
+      <details class="rounded-lg bg-slate-800/40 border border-slate-800 open:border-slate-700">
+        <summary class="cursor-pointer list-none p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 [&::-webkit-details-marker]:hidden">
+          <div class="flex items-start gap-2 min-w-0">
+            <span class="mt-0.5 text-slate-500 text-xs select-none" aria-hidden="true">▸</span>
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-slate-200">{{ inv.invoice_label }}</p>
+              <p class="text-xs text-slate-500">
+                Ciclo {{ inv.cycle_start }} a {{ inv.cycle_end }} · Vence {{ inv.due_date_label }}
+                · {{ inv.movements_count }} movimento{% if inv.movements_count != 1 %}s{% endif %}
+              </p>
+            </div>
           </div>
+          <div class="flex items-center gap-2 sm:pl-2 shrink-0">
+            <span class="font-mono text-sm {% if inv.status == 'paid' %}text-slate-400{% else %}text-amber-300{% endif %}">R$ {{ inv.total }}</span>
+            <span class="inline-flex rounded-full border border-slate-600 px-2 py-0.5 text-xs text-slate-300">{{ inv.status_label }}</span>
+          </div>
+        </summary>
+
+        <div class="px-3 pb-3 space-y-3 border-t border-slate-800/60 pt-3 ml-4">
           {% if inv.status != 'paid' and inv.total_cents > 0 %}
-          <form method="post" action="/accounts/invoices/{{ inv.id }}/pay" class="space-y-2 min-w-[200px]">
-            <label class="block text-xs text-slate-400">Conta de débito (pode alterar)</label>
+          <form method="post" action="/accounts/invoices/{{ inv.id }}/pay" class="rounded-lg border border-slate-700 bg-slate-950/50 p-3 space-y-2 max-w-sm">
+            <p class="text-xs font-medium text-slate-300">Pagar esta fatura</p>
+            <label class="block text-xs text-slate-400">Conta de débito</label>
             <select name="from_account_id" required class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
               <option value="">Selecione a conta</option>
               {% for da in debit_accounts %}
@@ -132,14 +106,107 @@
             <button type="submit" class="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm font-medium">Pagar fatura</button>
           </form>
           {% endif %}
+
+          <details class="rounded-md border border-slate-800 bg-slate-900/40">
+            <summary class="cursor-pointer list-none px-3 py-2 text-sm text-slate-300 flex items-center gap-2 [&::-webkit-details-marker]:hidden">
+              <span class="text-slate-500 text-xs select-none" aria-hidden="true">▸</span>
+              Movimentos
+              <span class="text-xs text-slate-500">({{ inv.movements_count }})</span>
+            </summary>
+            <div class="px-3 pb-3">
+              {% if inv.movements %}
+              <ul class="space-y-2 text-sm">
+                {% for tx in inv.movements %}
+                <li class="flex justify-between gap-3 border-b border-slate-800/50 pb-2 last:border-0">
+                  <span class="min-w-0">
+                    <span class="text-slate-200">{{ tx.description }}</span>
+                    {% if tx.category %}<span class="text-slate-500 text-xs block">{{ tx.category }}</span>{% endif %}
+                    <span class="text-slate-500 text-xs block">
+                      {% if tx.status == 'planned' %}Vence {{ tx.due_date_label or tx.due_date }}{% else %}{{ tx.payment_date_label or tx.transaction_date }}{% endif %}
+                      · {{ tx.status_label }}
+                      {% if tx.installment_label %} · {{ tx.installment_label }}{% endif %}
+                    </span>
+                  </span>
+                  <span class="font-mono text-rose-400 shrink-0">R$ {{ tx.amount }}</span>
+                </li>
+                {% endfor %}
+              </ul>
+              {% else %}
+              <p class="text-xs text-slate-500 py-1">Nenhum movimento nesta fatura.</p>
+              {% endif %}
+            </div>
+          </details>
+        </div>
+      </details>
+      {% endfor %}
+      {% else %}
+      <p class="text-sm text-slate-500 px-1">Nenhuma fatura neste cartão ainda.</p>
+      {% endif %}
+    </div>
+  </details>
+  {% endfor %}
+  {% else %}
+  <div class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+    <p class="text-slate-400">
+      Nenhum cartão cadastrado.
+      <a href="/accounts/cards/new" class="text-emerald-400 hover:text-emerald-300">Cadastrar cartão</a>
+    </p>
+  </div>
+  {% endif %}
+</section>
+
+{% else %}
+{# —— Contas bancárias —— #}
+<section class="rounded-xl bg-slate-900 border border-slate-800 p-5">
+  {% if not credit_cards %}
+  <p class="text-sm text-slate-400 mb-4 rounded-lg border border-slate-700 bg-slate-800/40 px-3 py-2">
+    Para controlar faturas, cadastre um cartão em
+    <a href="/accounts/cards" class="text-emerald-400 hover:text-emerald-300">Cartões</a>.
+  </p>
+  {% endif %}
+  {% if accounts %}
+  <div class="space-y-3">
+    {% for a in accounts %}
+    <div class="rounded-lg bg-slate-800/50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div>
+        <p class="font-medium">{{ a.account }}</p>
+        <p class="text-sm text-slate-400">
+          {{ a.account_type_label }}
+          {% if a.institution %} · {{ a.institution }}{% endif %}
+        </p>
+        <p class="text-xs text-slate-500 mt-1">
+          Saldo inicial: R$ {{ a.opening_balance }}
+          {% if a.opening_balance_date_label %} · desde {{ a.opening_balance_date_label }}{% endif %}
+        </p>
+      </div>
+      <div class="flex items-center gap-4">
+        <span class="text-lg font-semibold text-emerald-400">R$ {{ a.balance }}</span>
+        <div class="flex items-center gap-2">
+          <a href="/accounts/{{ a.id }}/edit" class="text-sm text-emerald-400 hover:text-emerald-300">Editar</a>
+          {% if all_accounts|length > 1 %}
+          <form method="post" action="/accounts/{{ a.id }}/delete" onsubmit="return confirm('Desativar esta conta?')">
+            <button type="submit" class="text-sm text-slate-400 hover:text-rose-400">Desativar</button>
+          </form>
+          {% endif %}
         </div>
       </div>
-      {% endfor %}
     </div>
-    {% else %}
-    <p class="text-slate-400 text-sm">Cadastre um cartão para acompanhar as faturas aqui.</p>
-    {% endif %}
-  </section>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-slate-400">
+    Nenhuma conta cadastrada.
+    <a href="/accounts/new" class="text-emerald-400 hover:text-emerald-300">Cadastrar conta</a>
+  </p>
   {% endif %}
-</div>
+</section>
+{% endif %}
+
+<style>
+  details > summary { outline: none; }
+  details[open] > summary span[aria-hidden="true"] {
+    display: inline-block;
+    transform: rotate(90deg);
+  }
+</style>
 {% endblock %}

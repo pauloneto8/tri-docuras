@@ -47,7 +47,21 @@ AMOUNT_RE = re.compile(
     r"(?:r\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2}|\d+(?:[.,]\d{1,2})?)",
     re.IGNORECASE,
 )
-EXPENSE_HINTS = ("gastei", "paguei", "comprei", "gasto", "despesa", "debito")
+EXPENSE_HINTS = (
+    "gastei",
+    "paguei",
+    "comprei",
+    "gasto",
+    "despesa",
+    "debito",
+    "débito",
+    "lance",
+    "lançar",
+    "lancar",
+    "tive",
+    "custo",
+    "custei",
+)
 INCOME_HINTS = ("recebi", "ganhei", "entrada", "salario", "salário", "credito", "crédito")
 LIST_HINTS = ("ultimas", "últimas", "listar", "extrato", "historico", "histórico")
 SUMMARY_HINTS = ("resumo", "balanco", "balanço", "quanto gastei", "quanto recebi")
@@ -136,10 +150,7 @@ def _extract_account_name(text: str) -> str | None:
     return None
 
 
-def parse_amount(text: str) -> str | None:
-    match = AMOUNT_RE.search(text)
-    if not match:
-        return None
+def _amount_raw_from_match(match: re.Match[str]) -> str | None:
     raw = match.group(1)
     if "," in raw and "." in raw:
         raw = raw.replace(".", "").replace(",", ".")
@@ -150,6 +161,24 @@ def parse_amount(text: str) -> str | None:
         return raw
     except (InvalidOperation, ValueError):
         return None
+
+
+def iter_monetary_amount_matches(text: str):
+    """Yield AMOUNT_RE matches that are money, not installment counts (10x / 10 vezes)."""
+    from app.services.installments import is_installment_count_span
+
+    for match in AMOUNT_RE.finditer(text):
+        if is_installment_count_span(text, match.start(1), match.end(1)):
+            continue
+        if _amount_raw_from_match(match) is None:
+            continue
+        yield match
+
+
+def parse_amount(text: str) -> str | None:
+    for match in iter_monetary_amount_matches(text):
+        return _amount_raw_from_match(match)
+    return None
 
 
 def parse_date(text: str) -> date | None:
@@ -258,7 +287,21 @@ def parse_opening_balance_date(text: str) -> str | None:
 
 
 DESCRIPTION_PREP_RE = re.compile(
-    r"\b(?:referente\s+(?:a|ao|à|aos|às)|com|em|de|para)\s+(.+)$",
+    r"\b(?:referente\s+(?:a|ao|à|aos|às)|com|para)\s+(.+)$",
+    re.IGNORECASE,
+)
+
+# "de X" só após verbo/valor de lançamento — nunca corta "compra de carne"
+DESCRIPTION_DE_AFTER_VERB_RE = re.compile(
+    r"\b(?:gastei|paguei|comprei|recebi|ganhei|lancei|lan[cç]ar|lance|"
+    r"tive|custo|custei|despesa|receita|valor)\b"
+    r".*?\bde\s+(.+)$",
+    re.IGNORECASE,
+)
+
+# "na compra de frutas" / "compras na Shopee"
+DESCRIPTION_COMPRA_RE = re.compile(
+    r"\bcompras?\s+(?:de\s+|d[oa]\s+)?(.+?)(?=\s+(?:na|no|da|do)\s+(?:conta|cart)|$)",
     re.IGNORECASE,
 )
 
@@ -268,12 +311,41 @@ UPDATE_DESCRIPTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+_LEADING_DESC_PREP_RE = re.compile(
+    r"^(?:r\$\s*)?(?:de|com|em|para|no|na|nos|nas)\s+",
+    re.IGNORECASE,
+)
+
 
 def extract_description(text: str, amount: str | None) -> str:
+    from app.services.text_correction import (
+        correct_movement_description,
+        sanitize_movement_description,
+    )
+
     desc = text.strip()
+    # Typo comum: "curso de N" → "custo de N" quando há valor
     if amount:
-        desc = re.sub(re.escape(amount), "", desc, flags=re.IGNORECASE)
+        desc = re.sub(
+            r"\bcurso\s+de\s+" + re.escape(amount.replace(".", ",")),
+            f"custo de {amount}",
+            desc,
+            flags=re.IGNORECASE,
+        )
+        desc = re.sub(
+            r"\bcurso\s+de\s+" + re.escape(amount),
+            f"custo de {amount}",
+            desc,
+            flags=re.IGNORECASE,
+        )
+    if amount:
+        # Remove formas com/sem vírgula do valor (45,90 e 45.90)
+        variants = {amount, amount.replace(".", ","), amount.replace(",", ".")}
+        for variant in variants:
+            if variant:
+                desc = re.sub(re.escape(variant), "", desc, flags=re.IGNORECASE)
         desc = re.sub(r"r\$\s*", "", desc, flags=re.IGNORECASE)
+        desc = re.sub(r"\b(?:reais?|r\$)\b", "", desc, flags=re.IGNORECASE)
 
     referente = re.search(
         r"\breferente\s+(?:a|ao|à|aos|às)\s+(.+)$",
@@ -281,26 +353,37 @@ def extract_description(text: str, amount: str | None) -> str:
         re.IGNORECASE,
     )
     if referente:
-        candidate = referente.group(1).strip(" -,.")
+        candidate = sanitize_movement_description(referente.group(1))
         if candidate and len(candidate) >= 2:
-            return candidate[:255]
+            return correct_movement_description(candidate)[:255]
+
+    compra_match = DESCRIPTION_COMPRA_RE.search(desc)
+    if compra_match:
+        candidate = sanitize_movement_description(compra_match.group(0))
+        if candidate and len(candidate) >= 2:
+            return correct_movement_description(candidate)[:255]
 
     prep_match = DESCRIPTION_PREP_RE.search(desc)
     if prep_match:
-        candidate = prep_match.group(1).strip(" -,.")
+        candidate = sanitize_movement_description(prep_match.group(1))
         if candidate and len(candidate) >= 2:
-            # Evita pegar só "594 referente..." quando o "de" antecede o valor já removido
             if not re.match(r"^(?:referente|r\$)\b", candidate, re.IGNORECASE):
-                return candidate[:255]
-            if candidate.lower().startswith("referente"):
-                rest = re.sub(
-                    r"^referente\s+(?:a|ao|à|aos|às)\s+",
-                    "",
-                    candidate,
-                    flags=re.IGNORECASE,
-                ).strip(" -,.")
-                if len(rest) >= 2:
-                    return rest[:255]
+                return correct_movement_description(candidate)[:255]
+
+    de_match = DESCRIPTION_DE_AFTER_VERB_RE.search(desc)
+    if de_match:
+        # Só usa "de X" se o trecho à esquerda não for substantivo tipo "compra de"
+        left = desc[: de_match.start(1)].lower()
+        if not re.search(r"\b(?:compra|pagamento|conta|fatura|parcela)\s+de\s*$", left):
+            candidate = sanitize_movement_description(de_match.group(1))
+            if candidate and len(candidate) >= 2:
+                # Evita "custo de na compra..." — se sobrou "na compra", usa o padrão compra
+                if re.search(r"\bcompras?\b", candidate, re.IGNORECASE):
+                    compra2 = DESCRIPTION_COMPRA_RE.search(candidate)
+                    if compra2:
+                        candidate = sanitize_movement_description(compra2.group(0))
+                if candidate and len(candidate) >= 2:
+                    return correct_movement_description(candidate)[:255]
 
     for token in (
         *EXPENSE_HINTS,
@@ -308,17 +391,22 @@ def extract_description(text: str, amount: str | None) -> str:
         "eu",
         "ontem",
         "hoje",
-        "lance",
-        "lançar",
-        "lancar",
+        "amanhã",
+        "amanha",
         "receita",
         "despesa",
         "uma",
         "um",
     ):
         desc = re.sub(rf"\b{re.escape(token)}\b", "", desc, flags=re.IGNORECASE)
+    desc = sanitize_movement_description(desc)
+    desc = _LEADING_DESC_PREP_RE.sub("", desc).strip(" -,.")
     desc = re.sub(r"\s+", " ", desc).strip(" -,.")
-    return desc or "Lançamento"
+    from app.services.text_correction import is_weak_movement_description
+
+    if not desc or is_weak_movement_description(desc):
+        return "Lançamento"
+    return correct_movement_description(desc)[:255]
 
 
 def try_rule_based_parse(message: str) -> ToolCall | None:
@@ -420,6 +508,25 @@ def try_rule_based_parse(message: str) -> ToolCall | None:
     if wants_list_accounts(message):
         return ToolCall(tool="list_accounts", arguments={})
 
+    from app.services.intents import wants_account_creation
+    from app.services.account_wizard import detect_account_creation
+
+    if wants_account_creation(message):
+        data = detect_account_creation(message) or {}
+        args: dict = {}
+        for key in (
+            "name",
+            "account_type",
+            "institution",
+            "opening_balance",
+            "opening_balance_date",
+        ):
+            if data.get(key) is not None:
+                args[key] = data[key]
+        if not args.get("name"):
+            args["name"] = ""
+        return ToolCall(tool="create_account", arguments=args)
+
     from app.services.intents import wants_list_invoices, wants_pay_invoice, detect_invoice_query, detect_pay_invoice
 
     if wants_pay_invoice(message):
@@ -435,21 +542,30 @@ def try_rule_based_parse(message: str) -> ToolCall | None:
         return ToolCall(tool="pay_invoice", arguments=data)
 
     if wants_list_categories(message):
-        return ToolCall(tool="list_categories", arguments={})
+        from app.services.intents import detect_list_categories
+
+        return ToolCall(
+            tool="list_categories",
+            arguments=detect_list_categories(message) or {},
+        )
 
     if wants_category_creation(message):
         data = detect_category_creation(message) or {}
         args: dict = {}
-        if data.get("name"):
+        if data.get("names"):
+            args["names"] = data["names"]
+        elif data.get("name"):
             args["name"] = data["name"]
         if data.get("type"):
             args["type"] = data["type"]
         if data.get("keywords"):
             args["keywords"] = data["keywords"]
-        if not args.get("name"):
+        if not args.get("name") and not args.get("names"):
             args["name"] = ""
+        # Sem tipo explícito: deixa o wizard perguntar (não assume despesa)
         if not args.get("type"):
             args["type"] = "expense"
+            args["_type_assumed"] = True
         return ToolCall(tool="create_category", arguments=args)
 
     from app.services.intents import wants_card_creation, detect_card_creation
@@ -515,11 +631,21 @@ def try_rule_based_parse(message: str) -> ToolCall | None:
                 args["transaction_date"] = tx_date.isoformat()
         return ToolCall(tool=tool, arguments=args)
 
-    if wants_register_expense(message):
-        return ToolCall(tool="register_expense", arguments={})
-
     if wants_register_income(message):
-        return ToolCall(tool="register_income", arguments={})
+        args = {}
+        if amount:
+            args["amount"] = amount
+            args["description"] = extract_description(message, amount)
+            args["transaction_date"] = (parse_date(lower) or local_today()).isoformat()
+        return ToolCall(tool="register_income", arguments=args)
+
+    if wants_register_expense(message):
+        args: dict = {}
+        if amount:
+            args["amount"] = amount
+            args["description"] = extract_description(message, amount)
+            args["transaction_date"] = (parse_date(lower) or local_today()).isoformat()
+        return ToolCall(tool="register_expense", arguments=args)
 
     if any(h in lower for h in LIST_HINTS):
         tx_type = "expense" if "despesa" in lower or "gasto" in lower else "all"
@@ -534,6 +660,23 @@ def try_rule_based_parse(message: str) -> ToolCall | None:
                 "transaction_date": (parse_date(lower) or local_today()).isoformat(),
             },
         )
+
+    # Valor + cartão/conta/referente sem verbo explícito (ex.: "17,54 do presente no cartão")
+    if amount and re.match(r"^\s*(?:r\$\s*)?\d", lower) and (
+        "cartão" in lower
+        or "cartao" in lower
+        or "referente" in lower
+        or re.search(r"\b(?:na conta|da conta|conta da|conta do)\b", lower)
+    ):
+        if not any(h in lower for h in CORRECTION_HINTS + DELETE_HINTS + ("limite", "atualizar")):
+            return ToolCall(
+                tool="register_expense",
+                arguments={
+                    "amount": amount,
+                    "description": extract_description(message, amount),
+                    "transaction_date": (parse_date(lower) or local_today()).isoformat(),
+                },
+            )
 
     if amount and any(h in lower for h in INCOME_HINTS):
         return ToolCall(
@@ -575,15 +718,21 @@ def execute_tool(db, user_id: int, tool_call: ToolCall) -> dict:
 
     if tool == "register_expense":
         payload = RegisterExpenseInput(**args)
+        result = finance.enrich_register_result(
+            db, user_id, finance.register_expense(db, user_id, payload)
+        )
         return {
             "action": "register_expense",
-            "result": finance.register_expense(db, user_id, payload),
+            "result": result,
         }
     if tool == "register_income":
         payload = RegisterIncomeInput(**args)
+        result = finance.enrich_register_result(
+            db, user_id, finance.register_income(db, user_id, payload)
+        )
         return {
             "action": "register_income",
-            "result": finance.register_income(db, user_id, payload),
+            "result": result,
         }
     if tool == "register_transfer":
         payload = RegisterTransferInput(**args)
@@ -593,9 +742,16 @@ def execute_tool(db, user_id: int, tool_call: ToolCall) -> dict:
         }
     if tool == "realize_planned":
         payload = RealizePlannedInput(**args)
+        result = finance.realize_planned(db, user_id, payload)
+        actual = result.get("actual")
+        if isinstance(actual, dict):
+            actual = finance.enrich_register_result(db, user_id, actual)
+            result = {**result, "actual": actual}
+            if actual.get("context_summary"):
+                result = {**result, "context_summary": actual["context_summary"]}
         return {
             "action": "realize_planned",
-            "result": finance.realize_planned(db, user_id, payload),
+            "result": result,
         }
     if tool == "update_transfer":
         payload = UpdateTransferInput(**args)
@@ -651,9 +807,12 @@ def execute_tool(db, user_id: int, tool_call: ToolCall) -> dict:
             },
         }
     if tool == "list_categories":
+        cat_type = args.get("type")
         return {
             "action": "list_categories",
-            "result": finance.list_user_categories(db, user_id),
+            "result": finance.list_user_categories(
+                db, user_id, category_type=cat_type if cat_type in {"expense", "income"} else None
+            ),
         }
     if tool == "get_summary":
         payload = SummaryInput(**args)
@@ -685,10 +844,59 @@ def execute_tool(db, user_id: int, tool_call: ToolCall) -> dict:
             "result": finance.create_card(db, user_id, payload),
         }
     if tool == "create_category":
-        payload = CreateCategoryInput(**args)
+        names = args.get("names")
+        if names and isinstance(names, list) and len(names) > 1:
+            created: list[dict] = []
+            skipped: list[str] = []
+            cat_type = args.get("type") or "expense"
+            keywords = args.get("keywords")
+            for name in names:
+                try:
+                    created.append(
+                        finance.create_category(
+                            db,
+                            user_id,
+                            CreateCategoryInput(
+                                name=str(name),
+                                type=cat_type,
+                                keywords=keywords,
+                            ),
+                        )
+                    )
+                except ValueError as exc:
+                    if "Já existe" in str(exc):
+                        skipped.append(str(name))
+                    else:
+                        raise
+            return {
+                "action": "create_category",
+                "result": {"created": created, "skipped": skipped, "batch": True},
+            }
+        payload_args = {
+            k: v
+            for k, v in args.items()
+            if k not in {"names", "_type_assumed"}
+        }
+        payload = CreateCategoryInput(**payload_args)
         return {
             "action": "create_category",
             "result": finance.create_category(db, user_id, payload),
+        }
+    if tool == "update_category":
+        from app.schemas import UpdateCategoryInput
+
+        payload = UpdateCategoryInput(**args)
+        return {
+            "action": "update_category",
+            "result": finance.update_category(db, user_id, payload),
+        }
+    if tool == "delete_category":
+        from app.schemas import DeleteCategoryInput
+
+        payload = DeleteCategoryInput(**args)
+        return {
+            "action": "delete_category",
+            "result": finance.delete_category(db, user_id, payload),
         }
     if tool == "list_invoices":
         from app.services.credit_cards import list_invoices
@@ -738,20 +946,27 @@ def format_tool_result(action: str, result) -> str:
                 account_part += f" ({tx.get('invoice_label')})"
         elif tx.get("account"):
             account_part = f" na conta {tx.get('account')}"
-        return (
+        msg = (
             f"{verb} de R$ {tx['amount']} em '{tx['description']}' "
             f"({tx.get('category') or 'sem categoria'}) registrada{account_part} "
             f"em {tx['transaction_date']}."
         )
+        if tx.get("context_summary"):
+            msg = f"{msg}\n\n{tx['context_summary']}"
+        return msg
     if action == "realize_planned":
         planned = result["planned"]
         actual = result["actual"]
         account_part = f" na conta {actual['account']}" if actual.get("account") else ""
-        return (
+        msg = (
             f"Previsto realizado: '{planned['description']}' — "
             f"previsto R$ {planned['amount']} em {planned['transaction_date']}, "
             f"realizado R$ {actual['amount']} em {actual['transaction_date']}{account_part}."
         )
+        summary = result.get("context_summary") or actual.get("context_summary")
+        if summary:
+            msg = f"{msg}\n\n{summary}"
+        return msg
     if action == "update_transaction":
         tx = result
         where = ""
@@ -916,11 +1131,42 @@ def format_tool_result(action: str, result) -> str:
             parts.append(f"Data do saldo inicial: {acc['opening_balance_date_label']}.")
         return " ".join(parts)
     if action == "create_category":
+        if isinstance(result, dict) and result.get("batch"):
+            created = result.get("created") or []
+            skipped = result.get("skipped") or []
+            parts: list[str] = []
+            if created:
+                names = ", ".join(c["name"] for c in created)
+                type_label = created[0].get("type_label", "Despesa")
+                parts.append(
+                    f"{len(created)} categoria(s) cadastrada(s) ({type_label}): {names}."
+                )
+            if skipped:
+                parts.append(
+                    "Já existiam e foram ignoradas: " + ", ".join(skipped) + "."
+                )
+            return " ".join(parts) if parts else "Nenhuma categoria cadastrada."
         cat = result
-        parts = [f"Categoria '{cat['name']}' ({cat['type_label']}) cadastrada com sucesso."]
+        if cat.get("updated"):
+            parts = [
+                f"Categoria '{cat['name']}' atualizada de "
+                f"{cat.get('previous_type_label', 'outro tipo')} para {cat['type_label']}."
+            ]
+        else:
+            parts = [
+                f"Categoria '{cat['name']}' ({cat['type_label']}) cadastrada com sucesso."
+            ]
         if cat.get("keywords"):
             parts.append(f"Palavras-chave: {cat['keywords']}.")
         return " ".join(parts)
+    if action == "update_category":
+        cat = result
+        parts = [f"Categoria '{cat['name']}' ({cat['type_label']}) atualizada."]
+        if cat.get("keywords"):
+            parts.append(f"Palavras-chave: {cat['keywords']}.")
+        return " ".join(parts)
+    if action == "delete_category":
+        return f"Categoria '{result.get('name')}' excluída."
     if action == "update_transfer":
         tx = result
         return (
@@ -1141,13 +1387,41 @@ def format_pending_confirmation(tool_call) -> str:
         from app.services.category_wizard import TYPE_LABELS
 
         type_label = TYPE_LABELS.get(args.get("type"), args.get("type"))
-        lines = [
-            f"Confirmar cadastro da categoria '{args.get('name')}' ({type_label})?"
-        ]
+        names = args.get("names")
+        if names and isinstance(names, list) and len(names) > 1:
+            from app.services.category_wizard import _format_names_list
+
+            lines = [
+                f"Confirmar cadastro de {len(names)} categorias ({type_label}): "
+                f"{_format_names_list([str(n) for n in names])}?"
+            ]
+        else:
+            lines = [
+                f"Confirmar cadastro da categoria '{args.get('name')}' ({type_label})?"
+            ]
         if args.get("keywords"):
             lines.append(f"Palavras-chave: {args.get('keywords')}.")
         lines.append("Clique em Confirmar para cadastrar.")
         return " ".join(lines)
+    if tool_call.tool == "update_category":
+        from app.services.category_wizard import TYPE_LABELS
+
+        target = args.get("category_name") or args.get("name") or "categoria"
+        lines = [f"Confirmar alteração da categoria '{target}'?"]
+        if args.get("type"):
+            lines.append(
+                f"Novo tipo: {TYPE_LABELS.get(args.get('type'), args.get('type'))}."
+            )
+        if args.get("name") and args.get("category_name"):
+            lines.append(f"Novo nome: {args.get('name')}.")
+        lines.append("Clique em Confirmar para salvar.")
+        return " ".join(lines)
+    if tool_call.tool == "delete_category":
+        target = args.get("category_name") or "categoria"
+        return (
+            f"Confirmar exclusão da categoria '{target}'? "
+            "Clique em Confirmar para excluir."
+        )
     if tool_call.tool == "update_transaction":
         parts = ["Confirmar atualização do lançamento:"]
         if args.get("transaction_id"):
@@ -1173,6 +1447,11 @@ def format_pending_confirmation(tool_call) -> str:
             if year:
                 label = f"{month:02d}/{year}"
             parts.append(f"Fatura destino: vencimento {label}.")
+        scope = args.get("installment_scope")
+        if scope == "subsequent":
+            parts.append("Escopo: esta parcela e as seguintes.")
+        elif scope == "this":
+            parts.append("Escopo: somente esta parcela.")
         parts.append("Clique em Confirmar para salvar as alterações.")
         return " ".join(parts)
     if tool_call.tool == "update_account":

@@ -5,7 +5,7 @@ description: >-
   transferências, orçamentos e regras de negócio. Use ao alterar dashboard,
   finance.py, modelos, onboarding, contas, movimentos, resumos por período
   ou saldo inicial com data.
-paths: app/services/finance.py, app/models.py, app/schemas.py, app/services/recurrence.py, app/services/installments.py, app/services/credit_cards.py, app/templates/dashboard.html, app/templates/accounts.html, app/templates/transactions.html, app/templates/budgets.html, app/routers/pages.py, tests/test_summary.py, tests/test_transfers.py, tests/test_update_transfer.py, tests/test_planned_transactions.py, tests/test_recurrence.py, tests/test_installments.py, tests/test_credit_cards.py
+paths: app/services/finance.py, app/models.py, app/schemas.py, app/services/recurrence.py, app/services/installments.py, app/services/credit_cards.py, app/templates/dashboard.html, app/templates/accounts.html, app/templates/transactions.html, app/templates/transaction_form.html, app/templates/transaction_edit.html, app/templates/budgets.html, app/templates/budget_form.html, app/templates/budget_edit.html, app/routers/pages.py, tests/test_summary.py, tests/test_transfers.py, tests/test_update_transfer.py, tests/test_planned_transactions.py, tests/test_recurrence.py, tests/test_installments.py, tests/test_credit_cards.py
 ---
 
 # AssistFin — Domínio financeiro
@@ -38,18 +38,23 @@ Realizar: `realize_planned()` cria lançamento `actual` com `source_planned_id`.
 
 ## UI Movimentos (`/transactions`)
 
+Filtro: `period` + `ref_date` (padrão **month** / hoje) — mesma lógica de período do dashboard (`resolve_period_bounds` / `format_period_label`).
+
 | Seção | Query / regra | Exibição |
 |-------|---------------|----------|
-| **A realizar** | `status=planned`, `not is_realized` | Vencimento; selo Previsto ou `Fixo · mensal/semanal/diária` ou `3/12 · mensal`; ação Realizar / Encerrar série / Cancelar parcelas |
-| **Extrato** | `status=actual` | Pagamento; selo Realizado; “de previsto” se `source_planned_id` |
+| **A realizar** | `status=planned`, `not is_realized`, no período | Vencimento; selo Previsto / `Fixo · …` / `3/12 · mensal`; **Realizar** / **Editar** / **Excluir** / Encerrar série / Cancelar parcelas |
+| **Extrato** | `status=actual`, no período; omite `transfer_in` e compras de cartão | Pagamento; “de previsto” se `source_planned_id`; **Editar** / **Excluir** |
+
+CRUD: `/transactions/new`, `/transactions/{id}/edit`, `POST .../delete` — sem formulário lateral na lista. Contas, cartões e orçamentos seguem o mesmo padrão.
 
 Previstos liquidados **não** aparecem na lista. `ListTransactionsInput.status`: `actual` | `planned` | `all` (default `all` — chat/API inalterados).
 
-Formulário manual: realizado → data da realização; previsto → competência + vencimento; **fixo** → frequência + término opcional; **parcelado** → N parcelas + intervalo + radios total vs parcela (`installment_amount_basis`). O form cria da parcela 1; o wizard pergunta `installment_start_index`. **Realizar**: pagamento obrigatório; valor/descrição opcionais; mesma conta ou outra conta.
+Formulário (`transaction_form.html` / `transaction_edit.html`): realizado → data da realização; previsto → competência + vencimento; **fixo** → frequência + término; **parcelado** → N + intervalo + radios total vs parcela. O form cria da parcela 1; o wizard pergunta `installment_start_index`. **Editar**: tipo Despesa/Receita alterável; se a parcela tiver seguintes, radio `installment_scope` (`this` \| `subsequent`) obrigatório. **Realizar**: pagamento obrigatório; mesma conta ou outra.
 
 ## Lançamentos parcelados
 
 - Tabela `installment_plans`; transações geradas têm `installment_plan_id`. Ver skill `assistfin-installments`.
+- **Editar**: `UpdateTransactionInput.installment_scope` — `this` (só a parcela) ou `subsequent` (atual + índices maiores). Sem escopo e com parcelas seguintes → erro / pergunta no assistente (`installment_scope_flow.py`).
 
 ## Cartões de crédito e faturas
 
@@ -89,6 +94,9 @@ Formulário manual: realizado → data da realização; previsto → competênci
 | Resultado final | Soma dos saldos ao fim do período |
 | Saldos por conta | `_account_balance_at(account, period_end)` |
 | Cartões e faturas | `invoice_dashboard()` — total em aberto, fatura atual, vencimento no período, limite; **não** mistura com saldo bancário |
+| Por categoria | `expenses_by_category` / `income_by_category` — previsto, realizado, variação e sinal favorável (`planned_*`, `actual_*`, `variance_*`) |
+
+Após `register_expense` / `register_income` / `realize_planned`, `enrich_register_result()` anexa `context_summary` (fatura do cartão ou saldo da conta).
 
 **Saldo inicial** (`opening_balance_cents` + `opening_balance_date`): entra no saldo da conta, não é receita do período. Só vale a partir da data declarada.
 
@@ -119,7 +127,8 @@ Formulário manual: realizado → data da realização; previsto → competênci
 - Transferência ≠ despesa/receita nos cards do período
 - Corrigir transferência = `update_transfer`, não `update_transaction`
 - Página `/accounts` = saldo **atual**; dashboard = saldo **histórico** ao fim do período
-- Página `/transactions` = **A realizar** + **Extrato**; não misturar previsto liquidado com realizado na lista
+- Página `/transactions` = filtro de período + **A realizar** + **Extrato**; não misturar previsto liquidado com realizado na lista
+- Extrato omite `transfer_in` (par aparece só pela saída)
 - Lançamentos exigem confirmação no agente
 
 ## Referência

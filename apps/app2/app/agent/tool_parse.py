@@ -23,6 +23,8 @@ KNOWN_TOOLS = frozenset(
         "create_account",
         "create_card",
         "create_category",
+        "update_category",
+        "delete_category",
         "list_invoices",
         "pay_invoice",
         "unsupported_action",
@@ -33,7 +35,8 @@ DEFAULT_UNSUPPORTED_MESSAGE = (
     "Essa ação ainda não está disponível no assistente. "
     "Posso ajudar a: lançar despesas e receitas (incluindo previsões), realizar previsões, "
     "corrigir ou excluir lançamentos, editar contas e cartões, "
-    "listar contas, categorias e transações, ver resumo do mês, cadastrar contas, cartões ou categorias."
+    "listar contas, categorias e transações, ver resumo do mês, "
+    "cadastrar, editar ou excluir categorias."
 )
 
 

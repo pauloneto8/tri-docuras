@@ -17,7 +17,7 @@
 | Checkpointer | `session` + wizard keys (`transfer_wizard`, etc.) |
 | Episodic log | `conversations.py` |
 | Evaluator | confirmação HTMX + chips (fora do balão) |
-| Fallback model | Groq → Ollama → `try_rule_based_parse` |
+| Fallback model | Groq → `try_rule_based_parse` |
 
 ## Template para nova ferramenta
 

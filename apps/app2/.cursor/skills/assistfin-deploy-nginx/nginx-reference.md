@@ -5,9 +5,7 @@
 | Rede | Serviços |
 |------|----------|
 | `proxy` | nginx, app1, app1-web, app2 |
-| `app2_internal` | app2, app2-db, ollama |
-
-Ollama **não** está na rede `proxy` — inacessível da internet.
+| `app2_internal` | app2, app2-db |
 
 ## Comandos úteis
 

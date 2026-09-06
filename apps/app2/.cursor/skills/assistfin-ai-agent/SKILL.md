@@ -2,7 +2,7 @@
 name: assistfin-ai-agent
 description: >-
   Arquitetura do agente de IA do AssistFin: runner, wizards, intents, Groq,
-  Ollama, ferramentas, chips e chat HTMX. Use ao alterar assistente, chat, LLM,
+  ferramentas, chips e chat HTMX. Use ao alterar assistente, chat, LLM,
   prompt, confirmação, transferências, wizards ou quando o agente não entender
   intenção do usuário.
 paths: app/agent/**, app/chat_format.py, app/services/account_wizard.py, app/services/category_wizard.py, app/services/card_wizard.py, app/services/transaction_wizard.py, app/services/transaction_slots.py, app/services/realize_planned_slots.py, app/services/pay_invoice_slots.py, app/services/recurrence.py, app/services/transfer_slots.py, app/services/multi_movements.py, app/services/multi_movement_flow.py, app/services/intents.py, app/services/tools.py, app/services/agent_suggestions.py, app/services/agent_state.py, app/templates/partials/agent_*.html, app/routers/pages.py
@@ -29,12 +29,15 @@ mensagem
   → wizard cartão? (cadastro em andamento)
   → wizard conta / categoria?
   → exclusão pendente?
+  → escopo de parcelas pendente (editar parcela com seguintes)?
   → _resolve_intent:
-       atalhos (realize_planned, pay_invoice, register_expense, register_income)
-       → Groq → Ollama
+       atalhos (realize_planned, pay_invoice, list_categories, create_category,
+                register_expense, register_income)
+       → Groq
        → try_rule_based_parse (fallback)
   → create_account / create_category / create_card → wizard
-  → WRITE_TOOLS → slots → confirmação → execute_tool
+  → WRITE_TOOLS → slots → (update_transaction: perguntar installment_scope se preciso)
+       → confirmação → execute_tool
 ```
 
 ## Camadas de roteamento
@@ -43,13 +46,14 @@ mensagem
 |--------|--------|
 | Wizards | Coleta guiada em andamento (conta, categoria, transação, transferência, cartão, fatura) |
 | Atalhos em `_resolve_intent` | `realize_planned`, `pay_invoice`, `register_expense`, `register_income` |
-| Groq | Intenção ambígua (`call_intent_llm`) — **primeiro** para o restante |
-| Ollama | Fallback local |
-| `try_rule_based_parse` | Fallback se o LLM falhar ("gastei 45", "transferir 100 da X para Y") |
+| Groq | Intenção ambígua (`call_intent_llm`) — extrai todos os campos presentes na mensagem |
+| `try_rule_based_parse` | Fallback se o Groq falhar ("gastei 45", "transferir 100 da X para Y") |
+
+Wizard de lançamento: **só pergunta slots vazios** após inferência (`_apply_inference` / `_wizard_from_tool_call`). Ex.: "gastei no cartão X ontem" não reperguntar cartão vs conta nem status.
 
 ## WRITE_TOOLS (confirmação obrigatória)
 
-`register_expense`, `register_income`, `register_transfer`, `realize_planned`, `update_transfer`, `update_transaction`, `update_account`, `update_card`, `delete_card`, `delete_transaction`, `create_account`, `create_card`, `create_category`, `pay_invoice`
+`register_expense`, `register_income`, `register_transfer`, `realize_planned`, `update_transfer`, `update_transaction`, `update_account`, `update_card`, `delete_card`, `delete_transaction`, `create_account`, `create_card`, `create_category`, `update_category`, `delete_category`, `pay_invoice`
 
 ## Chips de resposta
 
@@ -68,8 +72,9 @@ mensagem
 | Transferência | `transfer_slots.py` | valor, origem, destino |
 | Conta | `account_wizard.py` | apelido, tipo, instituição, saldo, data do saldo inicial |
 | Cartão | `card_wizard.py` | apelido, instituição, fechamento, vencimento, limite, liquidação |
-| Categoria | `category_wizard.py` | nome, tipo |
+| Categoria | `category_wizard.py` | nome(s), tipo; lote com vírgulas; “Vale e Auxílio” = um nome |
 | Pagar fatura | `pay_invoice_slots.py` | fatura, conta de débito, data |
+| Escopo de parcela | `installment_scope_flow.py` | ao editar parcela com seguintes: só esta / esta e as seguintes |
 
 ### Slots de data (transação)
 
@@ -125,6 +130,10 @@ Escape: intenção diferente → `clear_wizard` + `None` (delega ao runner).
 - Diferenciar: `list_accounts` vs `list_transactions` vs `register_transfer`
 - Diferenciar: `update_account` (conta bancária) vs `update_card` (cartão) vs `update_transaction` (despesa/receita) vs `update_transfer` (par de transferência)
 - Diferenciar: `delete_card` (cartão) vs `delete_transaction` (lançamento)
+
+## Resumo após lançamento
+
+`finance.enrich_register_result()` anexa `context_summary` ao resultado de `register_expense` / `register_income` / `realize_planned` (e multi-movimento). `format_tool_result` concatena ao texto: fatura do cartão (`invoice_context_summary`) ou saldo da conta (`account_context_summary`).
 
 ## Chat UI (HTMX)
 

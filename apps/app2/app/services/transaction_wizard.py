@@ -13,6 +13,7 @@ from app.services.tools import (
 )
 from app.services.transaction_slots import (
     DATE_SLOTS,
+    OFFER_CREATE_SLOTS,
     PAYMENT_SOURCE_SLOTS,
     SLOT_QUESTIONS,
     WIZARD_KEY,
@@ -36,11 +37,14 @@ from app.services.wizard_slots import is_complex_message, is_short_slot_message
 
 PROMPT_FLAG = "prompt_transaction_on_login"
 PAUSED_WIZARD_KEY = "paused_transaction_wizard"
+PAUSED_REASON_KEY = "paused_transaction_reason"
 
 CANCEL_WORDS = {"cancelar", "desistir", "abortar", "sair", "não", "nao"}
 EXPENSE_WORDS = {"despesa", "despesas", "gasto", "gastos", "debito", "débito", "1"}
 INCOME_WORDS = {"receita", "receitas", "entrada", "entradas", "ganho", "ganhos", "credito", "crédito", "2"}
 NEW_CATEGORY_WORDS = {"nova categoria", "nova", "criar categoria", "cadastrar categoria"}
+YES_WORDS = {"sim", "s", "ok", "quero", "pode", "vamos", "cadastrar", "confirmo", "isso"}
+NO_WORDS = {"não", "nao", "n", "agora não", "agora nao", "depois", "cancelar"}
 
 QUESTIONS = SLOT_QUESTIONS
 
@@ -59,11 +63,22 @@ def get_paused_wizard(session: dict) -> dict | None:
 
 def clear_paused_wizard(session: dict) -> None:
     session.pop(PAUSED_WIZARD_KEY, None)
+    session.pop(PAUSED_REASON_KEY, None)
 
 
 def pause_transaction_for_category(session: dict, wizard: dict) -> None:
     """Guarda o lançamento em andamento enquanto cadastra categoria nova."""
     session[PAUSED_WIZARD_KEY] = dict(wizard)
+    session[PAUSED_REASON_KEY] = "category"
+    session.pop(WIZARD_KEY, None)
+
+
+def pause_transaction_for_missing(
+    session: dict, wizard: dict, *, reason: str
+) -> None:
+    """Pausa o lançamento para cadastrar cartão ou conta faltante."""
+    session[PAUSED_WIZARD_KEY] = dict(wizard)
+    session[PAUSED_REASON_KEY] = reason
     session.pop(WIZARD_KEY, None)
 
 
@@ -83,6 +98,55 @@ def resume_paused_transaction_after_category(
         f"{confirmation.message}"
     )
     return confirmation
+
+
+def resume_paused_transaction_after_create(
+    session: dict,
+    *,
+    db: Session | None = None,
+    user_id: int | None = None,
+    card_name: str | None = None,
+    account_name: str | None = None,
+) -> AgentResponse | None:
+    """Retoma o lançamento após cadastrar cartão ou conta no meio do fluxo."""
+    paused = get_paused_wizard(session)
+    if not paused:
+        return None
+    reason = session.get(PAUSED_REASON_KEY)
+    clear_paused_wizard(session)
+    if card_name:
+        paused["card_name"] = card_name
+        paused["payment_source"] = "card"
+        paused["payment_on_card"] = True
+        paused.pop("account_name", None)
+        label = f"Cartão '{card_name}' cadastrado"
+    elif account_name:
+        paused["account_name"] = account_name
+        paused["payment_source"] = "account"
+        paused["payment_on_card"] = False
+        paused.pop("card_name", None)
+        label = f"Conta '{account_name}' cadastrada"
+    else:
+        session[WIZARD_KEY] = paused
+        return None
+
+    session[WIZARD_KEY] = paused
+    if db is not None and user_id is not None:
+        _apply_inference(db, user_id, paused)
+        refresh_wizard_payment_context(db, user_id, paused)
+        session[WIZARD_KEY] = paused
+
+    remaining = _next_field(paused)
+    prefix = f"{label}. Seguindo com o lançamento.\n\n"
+    if remaining is None:
+        confirmation = _confirmation_response(paused)
+        confirmation.message = prefix + confirmation.message
+        return confirmation
+    return AgentResponse(
+        message=prefix + _question_for_slot(db, user_id, paused, remaining),
+        suggestions=for_transaction_wizard_field(remaining, db, user_id, paused),
+        source="wizard",
+    )
 
 
 def restore_paused_transaction_on_category_cancel(
@@ -105,6 +169,128 @@ def restore_paused_transaction_on_category_cancel(
         ),
         source="wizard",
     )
+
+
+def restore_paused_transaction_on_create_cancel(
+    session: dict,
+    *,
+    kind: str,
+) -> AgentResponse | None:
+    """Volta ao lançamento se o usuário cancelar cadastro de cartão/conta."""
+    paused = get_paused_wizard(session)
+    if not paused:
+        return None
+    reason = session.get(PAUSED_REASON_KEY)
+    if reason and reason != kind:
+        return None
+    clear_paused_wizard(session)
+    session[WIZARD_KEY] = paused
+    if kind == "card":
+        slot = "offer_create_card"
+        msg = (
+            "Cadastro de cartão cancelado.\n\n"
+            + SLOT_QUESTIONS["offer_create_card"]
+        )
+    else:
+        slot = "offer_create_account"
+        msg = (
+            "Cadastro de conta cancelado.\n\n"
+            + SLOT_QUESTIONS["offer_create_account"]
+        )
+    return AgentResponse(
+        message=msg,
+        suggestions=for_transaction_wizard_field(slot, None, None, paused),
+        source="wizard",
+    )
+
+
+def _parse_yes_no(message: str) -> bool | None:
+    lower = message.strip().lower()
+    if lower in YES_WORDS or lower.startswith("sim"):
+        return True
+    if lower in NO_WORDS or lower.startswith("não") or lower.startswith("nao"):
+        return False
+    return None
+
+
+def _card_name_hint_from_wizard(wizard: dict) -> str | None:
+    from app.services.account_wizard import extract_institution
+    from app.services.intents import _extract_card_reference
+
+    message = wizard.get("source_message") or ""
+    name = _extract_card_reference(message)
+    if name:
+        lower = name.lower()
+        if not lower.startswith("com ") and lower not in {"crédito", "credito"}:
+            return name[:100]
+    institution = extract_institution(message)
+    if institution:
+        return institution[:100]
+    return None
+
+
+def _handle_offer_create(
+    session: dict,
+    wizard: dict,
+    message: str,
+    slot: str,
+    *,
+    db: Session | None,
+    user_id: int | None,
+) -> AgentResponse:
+    answer = _parse_yes_no(message)
+    if answer is True:
+        if slot == "offer_create_card":
+            return _begin_card_from_transaction(session, wizard, db=db, user_id=user_id)
+        return _begin_account_from_transaction(session, wizard, db=db, user_id=user_id)
+    if answer is False:
+        clear_wizard(session)
+        kind = "cartão" if slot == "offer_create_card" else "conta"
+        return AgentResponse(
+            message=(
+                f"Ok. Quando tiver um {kind} cadastrado, envie o lançamento de novo."
+            ),
+            source="wizard",
+            clear_wizard=True,
+        )
+    return AgentResponse(
+        message=SLOT_QUESTIONS[slot],
+        suggestions=for_transaction_wizard_field(slot, db, user_id, wizard),
+        source="wizard",
+    )
+
+
+def _begin_card_from_transaction(
+    session: dict,
+    wizard: dict,
+    *,
+    db: Session | None = None,
+    user_id: int | None = None,
+) -> AgentResponse:
+    from app.services.card_wizard import begin_card_wizard
+
+    pause_transaction_for_missing(session, wizard, reason="card")
+    initial: dict = {}
+    hint = _card_name_hint_from_wizard(wizard)
+    if hint:
+        initial["name"] = hint
+        initial["institution"] = hint
+    return begin_card_wizard(
+        session, wizard.get("source_message") or "", initial=initial, db=db, user_id=user_id
+    )
+
+
+def _begin_account_from_transaction(
+    session: dict,
+    wizard: dict,
+    *,
+    db: Session | None = None,
+    user_id: int | None = None,
+) -> AgentResponse:
+    from app.services.account_wizard import begin_account_wizard
+
+    pause_transaction_for_missing(session, wizard, reason="account")
+    return begin_account_wizard(session, wizard.get("source_message") or "")
 
 
 def _looks_like_new_category_name(message: str) -> bool:
@@ -430,6 +616,30 @@ def try_process_transaction_wizard(
     if not wizard:
         return None
 
+    from app.services.transaction_slots import apply_tx_type_correction
+
+    type_changed = apply_tx_type_correction(wizard, message)
+    if type_changed:
+        session[WIZARD_KEY] = wizard
+        if db is not None and user_id is not None:
+            _apply_inference(db, user_id, wizard)
+            session[WIZARD_KEY] = wizard
+        remaining = _next_field(wizard)
+        if remaining is None:
+            return _confirmation_response(wizard)
+        type_label = "receita" if wizard.get("tx_type") == "income" else "despesa"
+        if remaining in {"account_name", "category_name"} and db is not None and user_id is not None:
+            question = _question_for_slot(db, user_id, wizard, remaining)
+        else:
+            question = QUESTIONS.get(remaining, _question_for_slot(db, user_id, wizard, remaining) if db and user_id else "")
+        return AgentResponse(
+            message=f"Anotado: é uma *{type_label}*.\n\n{question}",
+            suggestions=for_transaction_wizard_field(
+                remaining, db, user_id, wizard
+            ),
+            source="wizard",
+        )
+
     next_field = _next_field(wizard)
     if next_field is None:
         lower = message.strip().lower()
@@ -437,6 +647,11 @@ def try_process_transaction_wizard(
             return _confirmation_response(wizard)
         clear_wizard(session)
         return None
+
+    if next_field in OFFER_CREATE_SLOTS:
+        return _handle_offer_create(
+            session, wizard, message, next_field, db=db, user_id=user_id
+        )
 
     lower_msg = message.strip().lower()
     if lower_msg in CANCEL_WORDS:

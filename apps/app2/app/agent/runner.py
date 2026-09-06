@@ -1,4 +1,5 @@
 from pydantic import ValidationError
+import re
 
 from app.agent.context import build_intent_context
 from app.agent.tool_parse import DEFAULT_UNSUPPORTED_MESSAGE
@@ -77,22 +78,65 @@ WRITE_TOOLS = {
     "create_account",
     "create_card",
     "create_category",
+    "update_category",
+    "delete_category",
     "pay_invoice",
 }
 MAX_RETRIES = 2
 
 
 def _seed_register_arguments(message: str) -> dict:
-    from app.services.tools import extract_description, parse_amount, parse_date
+    from app.services.tools import extract_description, parse_amount, parse_user_date
+    from app.services.transaction_slots import (
+        infer_status_from_message,
+        wants_account_payment,
+        wants_card_payment,
+        _infer_payment_mode_from_message,
+    )
 
     args: dict = {}
     amount = parse_amount(message.lower())
     if amount:
         args["amount"] = amount
-        args["description"] = extract_description(message, amount)
-        tx_date = parse_date(message.lower())
-        if tx_date:
-            args["transaction_date"] = tx_date.isoformat()
+    description = extract_description(message, amount)
+    if description:
+        args["description"] = description
+    tx_date = parse_user_date(message)
+    if tx_date:
+        args["transaction_date"] = tx_date
+    status = infer_status_from_message(message)
+    if status:
+        args["status"] = status
+    mode = _infer_payment_mode_from_message(message)
+    if mode == "installment":
+        from app.services.installments import parse_installment_count, parse_installment_interval
+
+        count = parse_installment_count(message)
+        if count:
+            args["installment_count"] = count
+        interval = parse_installment_interval(message)
+        if interval:
+            args["installment_interval"] = interval
+        elif re.search(
+            r"\b\d+\s*x\b|\bem\s+\d+\s+vezes\b|\b\d+\s+vezes\b",
+            message.lower(),
+        ):
+            # "em 10 vezes" / "12x" sem intervalo → mensal (padrão cartão BR)
+            args["installment_interval"] = "monthly"
+        # Não assume parcela 1 — o wizard pergunta (casos reais: 3/5, 12/12)
+    elif mode == "fixed":
+        lower = message.lower()
+        if "dia" in lower and "semana" not in lower and "mês" not in lower and "mes" not in lower:
+            args["frequency"] = "daily"
+        elif "semana" in lower:
+            args["frequency"] = "weekly"
+        else:
+            args["frequency"] = "monthly"
+    # card_name resolvido no wizard com DB; só sinaliza via ausência de account
+    if wants_card_payment(message):
+        pass  # payment_source inferido em _wizard_from_tool_call / _apply_inference
+    elif wants_account_payment(message):
+        pass
     return args
 
 
@@ -101,17 +145,52 @@ async def _resolve_intent(
     *,
     context: str | None = None,
 ) -> tuple[ToolCall | None, str]:
-    from app.services.intents import wants_register_expense, wants_register_income, wants_realize_planned, wants_pay_invoice
+    from app.services.intents import (
+        detect_category_creation,
+        detect_list_categories,
+        wants_category_creation,
+        wants_list_categories,
+        wants_register_expense,
+        wants_register_income,
+        wants_realize_planned,
+        wants_pay_invoice,
+    )
 
     if wants_realize_planned(message):
         return ToolCall(tool="realize_planned", arguments={}), "rule"
     if wants_pay_invoice(message):
         from app.services.intents import detect_pay_invoice
         return ToolCall(tool="pay_invoice", arguments=detect_pay_invoice(message) or {}), "rule"
-    if wants_register_expense(message):
-        return ToolCall(tool="register_expense", arguments=_seed_register_arguments(message)), "rule"
+    if wants_list_categories(message):
+        return (
+            ToolCall(
+                tool="list_categories",
+                arguments=detect_list_categories(message) or {},
+            ),
+            "rule",
+        )
+    if wants_category_creation(message):
+        data = detect_category_creation(message) or {}
+        args: dict = {}
+        if data.get("names"):
+            args["names"] = data["names"]
+        elif data.get("name"):
+            args["name"] = data["name"]
+        if data.get("type"):
+            args["type"] = data["type"]
+        if data.get("keywords"):
+            args["keywords"] = data["keywords"]
+        if not args.get("name") and not args.get("names"):
+            args["name"] = ""
+        if not args.get("type"):
+            args["type"] = "expense"
+            args["_type_assumed"] = True
+        return ToolCall(tool="create_category", arguments=args), "rule"
+    # Receita antes de despesa: "tive uma entrada" não pode virar register_expense
     if wants_register_income(message):
         return ToolCall(tool="register_income", arguments=_seed_register_arguments(message)), "rule"
+    if wants_register_expense(message):
+        return ToolCall(tool="register_expense", arguments=_seed_register_arguments(message)), "rule"
 
     source = "groq"
     for attempt in range(MAX_RETRIES + 1):
@@ -237,6 +316,14 @@ async def process_message(
     if pending_delete_result:
         return pending_delete_result
 
+    from app.services.installment_scope_flow import try_process_installment_scope
+
+    scope_result = try_process_installment_scope(
+        session, message, db=db, user_id=user_id
+    )
+    if scope_result:
+        return scope_result
+
     intent_context = build_intent_context(db, user_id, session)
     tool_call, source = await _resolve_intent(message, context=intent_context)
 
@@ -325,6 +412,18 @@ async def process_message(
                 )
             tool_call = slot_result.tool_call
         tool_call = correct_tool_call_descriptions(tool_call)
+        if tool_call.tool == "update_transaction":
+            from app.services.installment_scope_flow import maybe_ask_installment_scope
+            from app.services.installments import parse_installment_scope_answer
+
+            hinted = parse_installment_scope_answer(message)
+            if hinted and not tool_call.arguments.get("installment_scope"):
+                tool_call.arguments["installment_scope"] = hinted
+            scope_ask = maybe_ask_installment_scope(
+                db, user_id, session, tool_call, source=source
+            )
+            if scope_ask:
+                return scope_ask
         if tool_call.tool == "delete_transaction":
             resolved, question = prepare_delete_transaction(
                 db, user_id, tool_call, session
@@ -343,15 +442,52 @@ async def process_message(
 
     try:
         outcome = execute_tool(db, user_id, tool_call)
-        if tool_call.tool == "create_account":
-            clear_wizard(session)
         if tool_call.tool == "create_card":
             clear_card_wizard(session)
+            created_name = None
+            if isinstance(outcome.get("result"), dict):
+                created_name = outcome["result"].get("name")
+            if created_name:
+                from app.services.transaction_wizard import (
+                    resume_paused_transaction_after_create,
+                )
+
+                resumed = resume_paused_transaction_after_create(
+                    session,
+                    db=db,
+                    user_id=user_id,
+                    card_name=created_name,
+                )
+                if resumed:
+                    return resumed
+        if tool_call.tool == "create_account":
+            clear_wizard(session)
+            created_name = None
+            if isinstance(outcome.get("result"), dict):
+                created_name = outcome["result"].get("name")
+            if created_name:
+                from app.services.transaction_wizard import (
+                    resume_paused_transaction_after_create,
+                )
+
+                if get_paused_wizard(session):
+                    resumed = resume_paused_transaction_after_create(
+                        session,
+                        db=db,
+                        user_id=user_id,
+                        account_name=created_name,
+                    )
+                    if resumed:
+                        return resumed
         if tool_call.tool == "create_category":
             clear_category_wizard(session)
             created_name = None
             if isinstance(outcome.get("result"), dict):
                 created_name = outcome["result"].get("name")
+                if not created_name and outcome["result"].get("batch"):
+                    created = outcome["result"].get("created") or []
+                    if created:
+                        created_name = created[0].get("name")
             if created_name:
                 resumed = resume_paused_transaction_after_category(
                     session, category_name=created_name

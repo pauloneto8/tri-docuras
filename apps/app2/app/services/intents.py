@@ -4,15 +4,23 @@ from app.services.text_correction import correct_category_name
 
 ACCOUNT_HINTS = (
     "cadastrar conta",
+    "cadastro da conta",
+    "cadastro de conta",
+    "cadastro conta",
     "nova conta",
     "adicionar conta",
     "criar conta",
     "registrar conta",
+    "realize o cadastro",
+    "realizar o cadastro",
+    "realizar cadastro",
 )
 
 ACCOUNT_CREATION_RE = re.compile(
-    r"\b(?:cadastrar|cadastre|cadastra|criar|crie|cria|adicionar|adicione|adiciona|"
-    r"registrar|registre|registra|nova)\b(?:\s+\w+){0,3}\s+conta\b",
+    r"\b(?:cadastrar|cadastre|cadastra|cadastro|criar|crie|cria|adicionar|adicione|adiciona|"
+    r"registrar|registre|registra|nova|"
+    r"realize|realizar|fa[cç]a)\b"
+    r"(?:\s+\w+){0,5}\s+conta\b",
     re.IGNORECASE,
 )
 
@@ -50,8 +58,7 @@ SETTLEMENT_RE = re.compile(
 )
 
 LIST_ACCOUNT_RE = re.compile(
-    r"\b(?:liste|listar|listem|mostre|mostrar|ver|quais)\b.*\bcontas?\b|"
-    r"\bcontas?\s+banc[aá]ri",
+    r"\b(?:liste|listar|listem|mostre|mostrar|ver|quais)\b.*\bcontas?\b",
     re.IGNORECASE,
 )
 
@@ -66,9 +73,13 @@ LIST_ACCOUNT_PHRASES = (
 
 CATEGORY_HINTS = (
     "cadastrar categoria",
+    "cadastrar categorias",
+    "cadastre a categoria",
+    "cadastre as categorias",
     "nova categoria",
     "adicionar categoria",
     "criar categoria",
+    "criar categorias",
     "registrar categoria",
 )
 
@@ -104,9 +115,8 @@ CATEGORY_INCOME_WORDS = ("receita", "receitas", "entrada", "entradas", "credito"
 
 def wants_list_accounts(message: str) -> bool:
     lower = message.lower().strip()
-    if ACCOUNT_CREATION_RE.search(lower):
-        return False
-    if any(hint in lower for hint in ACCOUNT_HINTS):
+    # Criação tem prioridade: "cadastro da conta bancária..." não é listagem
+    if wants_account_creation(message):
         return False
     if LIST_ACCOUNT_RE.search(lower):
         return True
@@ -114,7 +124,7 @@ def wants_list_accounts(message: str) -> bool:
 
 
 def wants_account_creation(message: str) -> bool:
-    if wants_list_accounts(message) or wants_card_creation(message):
+    if wants_card_creation(message):
         return False
     lower = message.lower().strip()
     if any(hint in lower for hint in ACCOUNT_HINTS):
@@ -359,6 +369,100 @@ def wants_list_categories(message: str) -> bool:
     return any(phrase in lower for phrase in LIST_CATEGORY_PHRASES)
 
 
+def detect_list_categories(message: str) -> dict:
+    data: dict = {}
+    category_type = _parse_category_type(message)
+    if category_type:
+        data["type"] = category_type
+    return data
+
+
+def wants_category_update(message: str) -> bool:
+    if not CORRECTION_VERB_RE.search(message):
+        return False
+    lower = message.lower()
+    return bool(re.search(r"\bcategor(?:ia|ias)\b", lower))
+
+
+def detect_category_update(message: str) -> dict | None:
+    if not wants_category_update(message):
+        return None
+    data: dict = {}
+    # "atualiza a categoria X para o tipo Receita"
+    named = re.search(
+        r"\bcategor(?:ia|ias)\s+([A-Za-zÀ-ÿ0-9][\wÀ-ÿ0-9 &/\-]{1,80}?)"
+        r"(?:\s+(?:para|pra|pro|como|com|de|do|da)\b|\s*$)",
+        message,
+        re.IGNORECASE,
+    )
+    if named:
+        raw_name = named.group(1).strip(" -,.")
+        raw_name = re.sub(
+            r"\b(?:para|pra|pro|como|tipo|despesa|receita)\b.*$",
+            "",
+            raw_name,
+            flags=re.IGNORECASE,
+        ).strip(" -,.")
+        if len(raw_name) >= 2:
+            data["category_name"] = correct_category_name(raw_name)[:100]
+
+    category_type = _parse_category_type(message)
+    if category_type:
+        data["type"] = category_type
+
+    rename = re.search(
+        r"\b(?:para|pra|como)\s+(?:o\s+nome\s+)?([A-Za-zÀ-ÿ][\wÀ-ÿ &\-]{1,60})",
+        message,
+        re.IGNORECASE,
+    )
+    if rename and "tipo" not in message.lower():
+        candidate = rename.group(1).strip(" -,.")
+        if candidate.lower() not in {
+            "despesa",
+            "despesas",
+            "receita",
+            "receitas",
+            "tipo",
+        }:
+            data["name"] = correct_category_name(candidate)[:100]
+
+    keywords_match = re.search(
+        r"\b(?:palavras?-chave|keywords?)\s*:?\s*(.+)$",
+        message,
+        re.IGNORECASE,
+    )
+    if keywords_match:
+        data["keywords"] = keywords_match.group(1).strip()[:500]
+
+    return data or None
+
+
+def wants_category_delete(message: str) -> bool:
+    lower = message.lower()
+    if not any(
+        w in lower
+        for w in ("exclu", "apag", "delet", "remover", "remova", "remove")
+    ):
+        return False
+    return bool(re.search(r"\bcategor(?:ia|ias)\b", lower))
+
+
+def detect_category_delete(message: str) -> dict | None:
+    if not wants_category_delete(message):
+        return None
+    data: dict = {}
+    named = re.search(
+        r"\bcategor(?:ia|ias)\s+([A-Za-zÀ-ÿ0-9][\wÀ-ÿ0-9 &/\-]{1,80})",
+        message,
+        re.IGNORECASE,
+    )
+    if named:
+        raw_name = named.group(1).strip(" -,.")
+        if len(raw_name) >= 2:
+            data["category_name"] = correct_category_name(raw_name)[:100]
+    return data or {}
+
+
 def wants_category_creation(message: str) -> bool:
     if wants_list_categories(message):
         return False
@@ -383,25 +487,63 @@ def _parse_category_type(text: str) -> str | None:
     return None
 
 
-def _extract_category_name(text: str) -> str | None:
-    match = CATEGORY_CREATION_RE.search(text)
-    if not match:
-        return None
-    cleaned = text[match.end() :].strip()
+def parse_category_names(raw: str, *, allow_e_split: bool = False) -> list[str]:
+    """Divide lista de categorias.
+
+    Com vírgulas: 'Presente, Restaurante e Lazer' → 3 nomes.
+    Sem vírgula: 'Vale e Auxílio' permanece um nome, salvo allow_e_split
+    (comando no plural: 'cadastre as categorias Presente e Lazer').
+    """
+    cleaned = (raw or "").strip().lstrip(":").strip()
+    if not cleaned:
+        return []
     cleaned = CATEGORY_NAME_NOISE_RE.sub(" ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" -,.")
-    if len(cleaned) >= 2:
-        return correct_category_name(cleaned)[:100]
-    return None
+    if not cleaned:
+        return []
+    if "," in cleaned:
+        parts = re.split(r"\s*,\s*|\s+e\s+", cleaned, flags=re.IGNORECASE)
+    elif allow_e_split:
+        parts = re.split(r"\s+e\s+", cleaned, flags=re.IGNORECASE)
+    else:
+        parts = [cleaned]
+    names: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        part = part.strip(" -,.")
+        if len(part) < 2:
+            continue
+        name = correct_category_name(part)[:100]
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(name)
+    return names
+
+
+def _extract_category_name(text: str) -> str | None:
+    names = _extract_category_names(text)
+    return names[0] if names else None
+
+
+def _extract_category_names(text: str) -> list[str]:
+    match = CATEGORY_CREATION_RE.search(text)
+    if not match:
+        return []
+    plural = bool(re.search(r"categorias\b", match.group(0), re.IGNORECASE))
+    return parse_category_names(text[match.end() :], allow_e_split=plural)
 
 
 def detect_category_creation(message: str) -> dict | None:
     if not CATEGORY_CREATION_RE.search(message):
         return None
     data: dict = {}
-    name = _extract_category_name(message)
-    if name:
-        data["name"] = name
+    names = _extract_category_names(message)
+    if len(names) > 1:
+        data["names"] = names
+    elif len(names) == 1:
+        data["name"] = names[0]
     category_type = _parse_category_type(message)
     if category_type:
         data["type"] = category_type
@@ -525,6 +667,122 @@ def detect_planned_movement(message: str) -> dict:
     return data
 
 
+def _has_income_amount_signal(lower: str) -> bool:
+    """Valor + sinal claro de receita (recebi, entrada, salário…)."""
+    from app.services.tools import parse_amount
+
+    if not parse_amount(lower):
+        return False
+    if CORRECTION_VERB_RE.search(lower):
+        return False
+    if wants_category_creation(lower) or wants_account_creation(lower):
+        return False
+    if wants_card_update(lower) or wants_card_delete(lower) or wants_card_creation(lower):
+        return False
+
+    income_markers = (
+        "recebi",
+        "ganhei",
+        "receita",
+        "receitas",
+        "salario",
+        "salário",
+        "rendimento",
+        "freelance",
+    )
+    if any(h in lower for h in income_markers):
+        # "despesa de receita" / ambíguo raro: se há gasto explícito, não é receita
+        if any(
+            h in lower
+            for h in ("gastei", "paguei", "comprei", "despesa", "gasto")
+        ) and not re.search(r"\bentradas?\b", lower):
+            return False
+        return True
+    # "tive uma entrada", "entrada de 550", "uma entrada referente"
+    if re.search(r"\bentradas?\b", lower):
+        return True
+    if re.search(r"\b(?:tive|tenho|houve)\s+(?:uma?\s+)?(?:entrada|receita)\b", lower):
+        return True
+    return False
+
+
+def _has_expense_amount_signal(lower: str) -> bool:
+    """Valor + sinal claro de despesa (verbo, referente, valor no início + cartão/conta)."""
+    from app.services.tools import parse_amount
+
+    if not parse_amount(lower):
+        return False
+    # CRUD / correção de conta-cartão-lançamento não é novo gasto
+    if CORRECTION_VERB_RE.search(lower):
+        return False
+    if wants_card_update(lower) or wants_card_delete(lower) or wants_card_creation(lower):
+        return False
+    if wants_account_creation(lower):
+        return False
+    if _has_income_amount_signal(lower):
+        return False
+    if any(
+        w in lower
+        for w in (
+            "excluir",
+            "exclua",
+            "deletar",
+            "apagar",
+            "remover",
+            "atualizar",
+            "atualize",
+            "limite",
+        )
+    ):
+        # "limite 27800" no cadastro/edição de cartão
+        if "cartão" in lower or "cartao" in lower:
+            return False
+
+    expense_verbs = (
+        "gastei",
+        "paguei",
+        "comprei",
+        "gasto",
+        "despesa",
+        "debito",
+        "débito",
+        "lance",
+        "lançar",
+        "lancar",
+        "custo",
+        "custei",
+        "curso de",
+    )
+    if any(h in lower for h in expense_verbs):
+        return True
+    # "tive" sozinho é ambíguo ("tive uma entrada" vs "tive o custo");
+    # só conta como despesa se houver contexto de gasto.
+    if re.search(r"\btive\b", lower) and any(
+        h in lower
+        for h in (
+            "despesa",
+            "gasto",
+            "custo",
+            "compra",
+            "paguei",
+            "gastei",
+            "cartão",
+            "cartao",
+        )
+    ):
+        return True
+    if "referente" in lower and not re.search(r"\bentradas?\b", lower):
+        return True
+    # Valor no início + cartão/conta (ex.: "17,54 do presente no cartão")
+    if re.match(r"^\s*(?:r\$\s*)?\d", lower) and (
+        "cartão" in lower
+        or "cartao" in lower
+        or re.search(r"\b(?:na conta|da conta|conta da|conta do)\b", lower)
+    ):
+        return True
+    return False
+
+
 def wants_register_expense(message: str) -> bool:
     lower = message.lower().strip()
     if wants_pay_invoice(message):
@@ -537,6 +795,19 @@ def wants_register_expense(message: str) -> bool:
         return False
     if wants_transfer(message) or wants_category_creation(message):
         return False
+    if wants_account_creation(message) or wants_card_creation(message):
+        return False
+    if wants_card_update(message) or wants_card_delete(message):
+        return False
+    if CORRECTION_VERB_RE.search(lower):
+        return False
+    # Receita tem prioridade quando o sinal é inequívoco
+    if _has_income_amount_signal(lower):
+        return False
+    if lower in INCOME_ONLY_WORDS:
+        return False
+    if re.search(r"\b(?:isso\s+)?(?:é|e)\s+(?:uma?\s+)?receita\b", lower):
+        return False
     if lower in EXPENSE_ONLY_WORDS:
         return True
     if REGISTER_EXPENSE_RE.search(lower):
@@ -544,6 +815,8 @@ def wants_register_expense(message: str) -> bool:
     if len(lower.split()) <= 6 and "despesa" in lower and "receita" not in lower:
         if re.search(r"\b(?:quero|lancar|lançar|lance|registrar|registre)\b", lower):
             return True
+    if _has_expense_amount_signal(lower):
+        return True
     return False
 
 
@@ -557,13 +830,24 @@ def wants_register_income(message: str) -> bool:
         return False
     if wants_transfer(message) or wants_category_creation(message):
         return False
+    if wants_account_creation(message) or wants_card_creation(message):
+        return False
+    if CORRECTION_VERB_RE.search(lower):
+        return False
     if lower in INCOME_ONLY_WORDS:
         return True
     if REGISTER_INCOME_RE.search(lower):
         return True
     if len(lower.split()) <= 6 and "receita" in lower and "despesa" not in lower:
-        if re.search(r"\b(?:quero|lancar|lançar|lance|registrar|registre)\b", lower):
+        if re.search(
+            r"\b(?:quero|lancar|lançar|lance|registrar|registre|isso|é|e)\b",
+            lower,
+        ):
             return True
+    if re.search(r"\b(?:isso\s+)?(?:é|e)\s+(?:uma?\s+)?receita\b", lower):
+        return True
+    if _has_income_amount_signal(lower):
+        return True
     return False
 
 

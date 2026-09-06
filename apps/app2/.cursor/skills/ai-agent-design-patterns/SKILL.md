@@ -24,11 +24,10 @@ Baseado em práticas de Anthropic, LangGraph, MLflow e FastAPI para apps LLM (20
 2. Estado de wizard (continuação)
 3. Atalhos determinísticos para despesa/receita/realizar previsto/pagar fatura
 4. LLM remoto (Groq) para o restante das intenções
-5. LLM local (Ollama) como fallback
-6. Heurísticas (`try_rule_based_parse`) se o LLM falhar
+5. Heurísticas (`try_rule_based_parse`) se o Groq falhar
 ```
 
-Wizards e atalhos de despesa/receita não passam pelo LLM. Pedidos ambíguos (listar vs cadastrar, corrigir transferência, editar cartão) vão primeiro ao Groq.
+Wizards e atalhos de despesa/receita não passam pelo LLM. Pedidos ambíguos (listar vs cadastrar, corrigir transferência, editar cartão) vão ao Groq.
 
 ## 3. Memória em quatro níveis
 
@@ -63,7 +62,7 @@ Persistir estado do wizard **fora** do prompt; injetar só contexto curto ao LLM
 
 ## 7. Observabilidade
 
-- Gravar `source` (`rule`, `wizard`, `groq`, `ollama`) no fluxo.
+- Gravar `source` (`rule`, `wizard`, `groq`) no fluxo.
 - Logar user + assistant em `conversation_messages`.
 - Reproduzir bugs lendo conversas antes de adicionar regex.
 
@@ -81,7 +80,7 @@ Ao adicionar capacidade nova:
 1. Definir se é leitura ou escrita.
 2. Adicionar `ToolCall` + teste de regra mínima.
 3. Atualizar `intents.py` se colidir com wizard.
-4. Atualizar prompt Groq/Ollama.
+4. Atualizar prompt Groq.
 5. Teste de conversa real (casos do DB).
 
 Mais detalhes: [patterns-reference.md](patterns-reference.md)

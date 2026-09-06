@@ -38,11 +38,11 @@ Definidos em `app/main.py` e espelhados no Nginx:
 
 ## Rede e infraestrutura
 
-- **Ollama** apenas na rede Docker `app2_internal` (sem porta pública)
 - **PostgreSQL** apenas em `app2_internal`
 - **TrustedHostMiddleware** — rejeita Host inválido
 - App roda como `appuser` no container (não root)
 - OpenAPI/docs **desabilitados** (`docs_url=None`)
+- LLM externo: **Groq** via HTTPS (chave em `APP2_GROQ_API_KEY`)
 
 ## Dados sensíveis
 
@@ -68,7 +68,7 @@ Definidos em `app/main.py` e espelhados no Nginx:
 
 - [ ] `APP2_SECRET_KEY` forte e única
 - [ ] `APP2_ALLOW_REGISTRATION` conforme política desejada
-- [ ] Ollama não exposto na internet
+- [ ] `APP2_GROQ_API_KEY` configurada
 - [ ] HTTPS quando em produção pública (Let's Encrypt via `issue-certs.sh`)
 - [ ] Testes passando após deploy
 - [ ] Nginx `client_max_body_size` limitado (1m)

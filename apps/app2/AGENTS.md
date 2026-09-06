@@ -4,7 +4,7 @@ Instruções para assistentes de IA que trabalham neste repositório.
 
 ## Contexto
 
-AssistFin é finanças pessoais multiusuário com chat híbrido (regras + Groq + Ollama). Dinheiro em **centavos** no banco; UI em pt-BR.
+AssistFin é finanças pessoais multiusuário com chat híbrido (regras + Groq). Dinheiro em **centavos** no banco; UI em pt-BR.
 
 ## Antes de codar
 
@@ -32,7 +32,7 @@ AssistFin é finanças pessoais multiusuário com chat híbrido (regras + Groq +
 | Transferência saída | `transfer_out` | — | − |
 | Transferência entrada | `transfer_in` | — | + |
 
-Dashboard: `get_summary()` com `period` + `ref_date`. Saldos por conta usam `account_balances(as_of=period_end)`.
+Dashboard: `get_summary()` com `period` + `ref_date`. Inclui `expenses_by_category` / `income_by_category` e `card_invoices`. Saldos por conta usam `account_balances(as_of=period_end)`.
 
 ### Datas de movimento
 
@@ -50,6 +50,8 @@ Wizard de transação (`transaction_slots.py`):
 | **Previsto** | tipo → status → competência + vencimento (se **não** parcelado) → modo → … |
 | **Realizado** | tipo → status → modo (se ainda indefinido) → pagamento (se **não** parcelado) → … |
 | **Parcelado** | … → N parcelas → intervalo → **parcela atual** (`installment_start_index`) → **competência** + **vencimento** da parcela → pagamento (se realizado) → valor → total vs parcela → descrição → conta → categoria |
+
+**Só pergunta o que faltar:** se a mensagem já trouxe cartão/conta, status (`gastei`/`previsto`), datas, modo etc., a inferência preenche e **não** reperguntar. Compra no cartão → `payment_source=card` + status `planned`. Mensagem ambígua com cartões cadastrados ainda pergunta cartão vs conta.
 
 Regras de datas no parcelamento: `apply_inferred_dates` não copia `ontem`/`hoje` da mensagem; `payment_date` não altera competência/vencimento já informados; `create_installment_plan` usa `due_date` como âncora do cronograma.
 
@@ -72,6 +74,7 @@ Corrigir transferência: ferramenta `update_transfer` (origem, destino, valor, d
 - Parcela inicial: `installment_start_index` — só cria da parcela informada até N (índices e descrições `k/N` preservados)
 - Datas: competência e vencimento da parcela atual no wizard; cronograma a partir do vencimento; caixa (`payment_date`) independente em realizado
 - `INSTALLMENT_SLOTS`: `installment_count`, `installment_interval`, `installment_start_index`, `installment_amount_basis`
+- **Editar parcela** (`update_transaction` / `/transactions/{id}/edit`): se há parcelas com índice maior, perguntar escopo — `installment_scope=this` (só esta) ou `subsequent` (esta e as seguintes). Propagam valor, descrição, conta, categoria e tipo; datas só na parcela editada. Última parcela do plano não pergunta.
 
 ### Cartões de crédito e faturas
 
@@ -83,15 +86,22 @@ Corrigir transferência: ferramenta `update_transfer` (origem, destino, valor, d
 - Pagar fatura = despesa na conta de débito (liquidação); não duplica despesa da compra
 - Assistente: `create_card`, `update_card`, `delete_card`, `list_invoices`, `pay_invoice`
 - Wizard de cadastro: `card_wizard.py`
+- UI `/accounts/cards`: hierarquia expansível cartão → faturas → movimentos (`cards_with_nested_invoices`)
+- Chat após lançamento: `enrich_register_result` anexa `context_summary` (fatura do cartão ou saldo da conta)
 
 ### UI Movimentos (`/transactions`)
 
 | Seção | Conteúdo |
 |-------|----------|
-| **A realizar** | `status = planned` pendente (`not is_realized`); vencimento; selo `Fixo · …` se recorrente; selo `3/12 · mensal` se parcelado; **Realizar** / **Encerrar série** / **Cancelar parcelas** |
-| **Extrato** | Somente `status = actual`; data de pagamento; “de previsto” quando `source_planned_id` |
+| Filtro | `period` + `ref_date` (padrão **month** / hoje); diária/semanal/mensal |
+| **A realizar** | `status = planned` pendente no período; **Realizar** / **Editar** / **Excluir** / **Encerrar série** / **Cancelar parcelas** |
+| **Extrato** | `status = actual` no período (sem `card`, sem `transfer_in`); **Editar** / **Excluir** |
+| CRUD | Lista + `/transactions/new` + `/transactions/{id}/edit` + `POST .../delete` |
+| Edição | Tipo Despesa/Receita editável (não-transferência); se parcelado com parcelas seguintes, radio de escopo obrigatório |
 
-Previstos liquidados **não** listados (evita duplicata). Pares previsto/realizado no dashboard (`plan_vs_actual`). Consultas separadas: `ListTransactionsInput(status="planned")` e `status="actual"`.
+Contas, cartões e orçamentos seguem o mesmo padrão CRUD (páginas `/new` e `/{id}/edit`).
+
+Previstos liquidados **não** listados (evita duplicata). Pares previsto/realizado no dashboard (`plan_vs_actual`). Consultas: `ListTransactionsInput(status="planned"|"actual")` com `start_date`/`end_date`.
 
 ### Wizard vs multi-lançamentos
 
@@ -114,8 +124,11 @@ Previstos liquidados **não** listados (evita duplicata). Pares previsto/realiza
 |------|----------|
 | Cálculos | `app/services/finance.py`, `app/services/recurrence.py`, `app/services/installments.py`, `app/services/credit_cards.py` |
 | Agente | `app/agent/runner.py`, `app/services/tools.py`, `app/agent/prompt.py` |
+| Escopo de parcela | `app/services/installment_scope_flow.py`, `app/services/installments.py` |
 | Wizards | `transaction_wizard.py`, `transaction_slots.py`, `realize_planned_slots.py`, `account_wizard.py`, `category_wizard.py`, `card_wizard.py`, `transfer_slots.py`, `pay_invoice_slots.py` |
-| UI movimentos | `templates/transactions.html`, `routers/pages.py` (`_transactions_page_context`) |
+| UI movimentos | `templates/transactions.html`, `transaction_form.html`, `transaction_edit.html`, `routers/pages.py` |
+| UI contas/cartões | `templates/accounts.html`, `account_*.html`, `card_*.html` |
+| UI orçamentos | `templates/budgets.html`, `budget_form.html`, `budget_edit.html` |
 | UI chat | `templates/partials/agent_*.html`, `app/chat_format.py` |
 | Auth | `app/auth.py`, `app/routers/auth.py`, `app/main.py` |
 

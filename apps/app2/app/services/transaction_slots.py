@@ -82,6 +82,15 @@ SLOT_QUESTIONS = {
         "Em qual **cartão de crédito** registrar?\n\n"
         "Responda com o nome do cartão cadastrado."
     ),
+    "offer_create_card": (
+        "Você pediu **cartão de crédito**, mas ainda não tem nenhum cadastrado.\n\n"
+        "Quer que eu **cadastre um cartão** agora?"
+    ),
+    "offer_create_account": (
+        "Para este lançamento é preciso de uma **conta bancária**, "
+        "mas você ainda não tem nenhuma cadastrada.\n\n"
+        "Quer que eu **cadastre uma conta** agora?"
+    ),
 }
 
 DATE_SLOTS = frozenset({"competence_date", "due_date", "payment_date"})
@@ -94,6 +103,7 @@ INSTALLMENT_SLOTS = frozenset({
 })
 MODE_SLOTS = frozenset({"payment_mode"})
 PAYMENT_SOURCE_SLOTS = frozenset({"payment_source"})
+OFFER_CREATE_SLOTS = frozenset({"offer_create_card", "offer_create_account"})
 _DAY_ONLY_RE = re.compile(r"^(?:dia\s+)?(\d{1,2})$", re.IGNORECASE)
 _SAME_DATE_RE = re.compile(
     r"^(?:tamb[ée]m|mesm[oa]|igual|a mesma|na mesma|mesma data|idem)\b",
@@ -138,9 +148,107 @@ def _tx_type_from_tool(tool: str) -> str:
     return "income" if tool == "register_income" else "expense"
 
 
+def parse_tx_type_correction(message: str) -> str | None:
+    """Detecta correção explícita de tipo no meio do fluxo (ex.: 'isso é uma receita')."""
+    lower = (message or "").strip().lower()
+    if not lower:
+        return None
+    if re.search(
+        r"\b(?:isso\s+)?(?:é|e|eh)\s+(?:uma?\s+)?(?:receita|entrada)\b|"
+        r"\b(?:na\s+verdade\s+)?(?:é|e)\s+receita\b|"
+        r"\bquero\s+(?:uma?\s+)?receita\b|"
+        r"^\s*receita\s*$|"
+        r"^\s*entrada\s*$",
+        lower,
+    ):
+        return "income"
+    if re.search(
+        r"\b(?:isso\s+)?(?:é|e|eh)\s+(?:uma?\s+)?(?:despesa|gasto)\b|"
+        r"\b(?:na\s+verdade\s+)?(?:é|e)\s+despesa\b|"
+        r"^\s*despesa\s*$",
+        lower,
+    ):
+        return "expense"
+    return None
+
+
+def apply_tx_type_correction(wizard: dict, message: str) -> bool:
+    """Ajusta tx_type e limpa categoria se o tipo mudou. Retorna True se alterou."""
+    corrected = parse_tx_type_correction(message)
+    if not corrected or corrected == wizard.get("tx_type"):
+        return False
+    wizard["tx_type"] = corrected
+    wizard["category_name"] = None
+    wizard["suggested_category"] = None
+    if corrected == "income":
+        wizard["payment_source"] = "account"
+        wizard["payment_on_card"] = False
+        wizard["card_name"] = None
+    return True
+
+
 def wants_card_payment(message: str) -> bool:
+    """True when the user clearly means credit card / fatura (not bank account)."""
     lower = message.lower()
-    return "cartão" in lower or "cartao" in lower
+    if "cartão" in lower or "cartao" in lower:
+        return True
+    # Pagar fatura ≠ lançar compra na fatura
+    if re.search(
+        r"\b(?:paguei|pagar|pagamento|baix(?:ar|ei|a)|liquid(?:ar|ei|a)|quit(?:ar|ei))\b"
+        r".*\bfatura\b"
+        r"|\bfatura\b.*\b(?:paguei|pagar|pagamento|baix(?:ar|ei|a)|liquid(?:ar|ei|a)|quit(?:ar|ei))\b",
+        lower,
+    ):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:na|da|para\s+a)\s+fatura\b|\bfatura\s+d[oea]\b",
+            lower,
+        )
+    )
+
+
+def wants_account_payment(message: str) -> bool:
+    """True when the user clearly means a bank account (not a credit card)."""
+    lower = message.lower()
+    if wants_card_payment(lower):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:na conta|da conta|conta banc|d[eé]bito|debito|pix|dinheiro)\b",
+            lower,
+        )
+    )
+
+
+def infer_status_from_message(message: str) -> str | None:
+    """Infer planned/actual from narrative when explicit; None if ambiguous."""
+    lower = message.strip().lower()
+    if not lower:
+        return None
+    if any(
+        w in lower
+        for w in (
+            "previsto",
+            "prevista",
+            "previsão",
+            "previsao",
+            "agendar",
+            "agendado",
+            "agendada",
+        )
+    ):
+        return "planned"
+    if re.search(r"\bvou\s+(?:gastar|pagar|comprar|receber|lan[cç]ar)\b", lower):
+        return "planned"
+    if any(
+        h in lower
+        for h in ("gastei", "paguei", "comprei", "recebi", "ganhei")
+    ):
+        return "actual"
+    if any(w in lower for w in ("realizado", "realizada", "já aconteceu", "ja aconteceu")):
+        return "actual"
+    return None
 
 
 def list_active_card_names(db: Session, user_id: int) -> list[str]:
@@ -154,6 +262,15 @@ def list_active_card_names(db: Session, user_id: int) -> list[str]:
 
 def _normalize_card_reference(name: str) -> str:
     return re.sub(r"^(do|da|de)\s+", "", name.strip(), flags=re.IGNORECASE).strip(" .,-")
+
+
+def _card_name_match_keys(name: str) -> list[str]:
+    """Keys used to match a card in free text (full name + base without test suffix)."""
+    keys = [name.lower().strip()]
+    base = re.sub(r"_[0-9a-f]{6,}$", "", name, flags=re.IGNORECASE).strip()
+    if base and base.lower() not in keys:
+        keys.append(base.lower())
+    return keys
 
 
 def infer_card_name(
@@ -178,6 +295,13 @@ def infer_card_name(
     ref = _extract_card_reference(message)
     if ref:
         ref = _normalize_card_reference(ref)
+        # Remove trailing date chatter: "mercado pago no dia de ontem"
+        ref = re.sub(
+            r"\s+(?:no\s+dia|em|ontem|hoje|amanh[ãa]).*$",
+            "",
+            ref,
+            flags=re.IGNORECASE,
+        ).strip(" .,-")
         ref_short = re.split(
             r"\s+(?:a|de|da|do|para)\s+",
             ref,
@@ -186,17 +310,17 @@ def infer_card_name(
         )[0].strip(" .,-")
         if ref_short:
             for name in names:
-                if name.lower() == ref_short.lower():
-                    return name
-            for name in names:
-                if ref_short.lower() in name.lower() or name.lower() in ref_short.lower():
-                    return name
+                for key in _card_name_match_keys(name):
+                    if key == ref_short.lower() or key in ref_short.lower() or ref_short.lower() in key:
+                        return name
 
     lower = message.lower()
     matches: list[str] = []
     for name in names:
-        if name.lower() in lower:
-            matches.append(name)
+        for key in _card_name_match_keys(name):
+            if key in lower:
+                matches.append(name)
+                break
     if len(matches) == 1:
         return matches[0]
     return None
@@ -253,9 +377,11 @@ def _purchase_anchor_date(wizard: dict) -> date | None:
 
 
 def _apply_card_due_dates(db: Session, user_id: int, wizard: dict) -> None:
-    if wizard.get("payment_source") != "card":
+    if not _is_card_payment_wizard(wizard):
         return
     card_name = wizard.get("card_name")
+    if not card_name:
+        return
     purchase = _purchase_anchor_date(wizard)
     if not purchase:
         return
@@ -412,6 +538,9 @@ def resolve_transaction_date(
     relative = parse_date(source_message)
     if relative:
         return relative.isoformat()
+    absolute = parse_user_date(source_message)
+    if absolute:
+        return absolute
     if explicit is not None and str(explicit).strip():
         return str(explicit).strip()
     return None
@@ -458,8 +587,8 @@ def parse_slot_date(
 def apply_inferred_dates(wizard: dict) -> None:
     """Fill dates from an already known value; never invent today.
 
-    Previsto: keep explicit competence/due (LLM or usuário). Do not copy
-    inferred relative dates — those slots are asked.
+    Previsto: keep explicit competence/due; on card, competence from purchase
+    date (transaction_date) when missing.
     Realizado: payment_date (or inferred transaction_date) is copied to
     competence and due — exceto em parcelamento, onde as datas são sempre
     perguntadas explicitamente.
@@ -474,6 +603,12 @@ def apply_inferred_dates(wizard: dict) -> None:
     inferred = wizard.get("transaction_date")
     if status == "planned":
         wizard["payment_date"] = None
+        if (
+            _is_card_payment_wizard(wizard)
+            and not wizard.get("competence_date")
+            and inferred
+        ):
+            wizard["competence_date"] = inferred
         return
 
     payment = wizard.get("payment_date") or inferred
@@ -493,39 +628,95 @@ def _clear_installment_schedule_dates(wizard: dict) -> None:
 
 
 def _wizard_from_tool_call(tool_call: ToolCall, source_message: str) -> dict:
+    from app.services.text_correction import is_weak_movement_description
+
     tx_type = _tx_type_from_tool(tool_call.tool)
     args = tool_call.arguments
     description = args.get("description")
     if isinstance(description, str) and description.strip():
         description = correct_movement_description(description)
+        if is_weak_movement_description(description):
+            description = None
+    else:
+        description = None
+
+    status = args.get("status")
+    if status not in {"actual", "planned"}:
+        status = infer_status_from_message(source_message)
+
+    payment_mode = _infer_payment_mode(args)
+    if payment_mode is None:
+        payment_mode = _infer_payment_mode_from_message(source_message)
+
+    installment_count = args.get("installment_count")
+    start_index = args.get("installment_start_index")
+    installment_interval = args.get("installment_interval")
+    if payment_mode == "installment":
+        if not installment_count:
+            installment_count = parse_installment_count(source_message)
+        if not installment_interval:
+            installment_interval = parse_installment_interval(source_message)
+        if not installment_interval and re.search(
+            r"\b\d+\s*x\b|\bem\s+\d+\s+vezes\b|\b\d+\s+vezes\b",
+            source_message.lower(),
+        ):
+            installment_interval = "monthly"
+        # Só assume parcela 1 se a mensagem disser explicitamente
+        if installment_count and not start_index:
+            if re.search(
+                r"\b(?:primeira|1\s*/\s*\d+|parcela\s*1)\b",
+                source_message.lower(),
+            ):
+                start_index = 1
+            else:
+                start_index = parse_installment_start_index(
+                    source_message, int(installment_count)
+                )
+
+    payment_source = None
+    if args.get("card_name") or wants_card_payment(source_message):
+        payment_source = "card"
+    elif args.get("account_name") or wants_account_payment(source_message):
+        payment_source = "account"
+
+    competence = args.get("competence_date")
+    due = args.get("due_date")
+    payment = args.get("payment_date")
+    tx_date = resolve_transaction_date(
+        source_message,
+        args.get("transaction_date"),
+    )
+    if status == "actual" and not payment and tx_date:
+        payment = tx_date
+        competence = competence or tx_date
+        due = due or tx_date
+    if status == "planned" and not competence and tx_date and payment_source == "card":
+        competence = tx_date
+
     return {
         "tx_type": tx_type,
         "amount": args.get("amount"),
         "description": description,
-        "account_name": args.get("account_name"),
+        "account_name": args.get("account_name") if payment_source != "card" else None,
         "card_name": args.get("card_name"),
-        "payment_source": None,
-        "payment_on_card": False,
+        "payment_source": payment_source,
+        "payment_on_card": payment_source == "card",
         "has_credit_cards": False,
         "category_name": args.get("category_name"),
-        "transaction_date": resolve_transaction_date(
-            source_message,
-            args.get("transaction_date"),
-        ),
-        # Sempre perguntar; não herdar datas nem status do LLM/regras.
-        "competence_date": None,
-        "due_date": None,
-        "payment_date": None,
-        "status": None,
-        "payment_mode": _infer_payment_mode(args),
+        "transaction_date": tx_date,
+        "competence_date": competence,
+        "due_date": due,
+        "payment_date": payment if status != "planned" else None,
+        "status": status,
+        "payment_mode": payment_mode,
         "is_recurring": None,
         "frequency": args.get("frequency"),
         "recurrence_end_date": args.get("recurrence_end_date"),
         "recurrence_end_asked": bool(args.get("recurrence_end_date")),
-        "installment_count": args.get("installment_count"),
-        "installment_interval": args.get("installment_interval"),
-        "installment_start_index": None,
-        "installment_amount_basis": None,
+        "installment_count": installment_count,
+        "installment_interval": installment_interval,
+        "installment_start_index": start_index,
+        "installment_amount_basis": args.get("installment_amount_basis"),
         "source_message": source_message,
         "suggested_category": None,
     }
@@ -571,10 +762,60 @@ def _infer_payment_mode(args: dict) -> str | None:
     return None
 
 
+def _infer_payment_mode_from_message(message: str) -> str | None:
+    """Só preenche modo quando a mensagem deixa claro; senão o wizard pergunta."""
+    lower = message.lower()
+    if (
+        re.search(r"\b\d+\s*x\b", lower)
+        or "parcel" in lower
+        or re.search(r"\bem\s+\d+\s+vezes\b", lower)
+        or re.search(r"\b\d+\s+vezes\b", lower)
+    ):
+        return "installment"
+    if any(
+        w in lower
+        for w in (
+            "todo mês",
+            "todo mes",
+            "toda semana",
+            "todo dia",
+            "fixo",
+            "recorrente",
+            "que se repete",
+        )
+    ):
+        return "fixed"
+    if any(
+        w in lower
+        for w in (
+            "único",
+            "unico",
+            "única",
+            "unica",
+            "avulso",
+            "avulsa",
+            "à vista",
+            "a vista",
+        )
+    ):
+        return "single"
+    return None
+
+
 def refresh_wizard_payment_context(db: Session, user_id: int, wizard: dict) -> None:
     wizard["has_credit_cards"] = bool(list_active_card_names(db, user_id))
+    wizard["has_accounts"] = bool(list_active_account_names(db, user_id))
+    # Nunca sobrescrever "no cartão" só porque o usuário ainda não cadastrou cartão
+    if _is_card_payment_wizard(wizard) or wants_card_payment(
+        wizard.get("source_message") or ""
+    ):
+        wizard["payment_source"] = "card"
+        wizard["payment_on_card"] = True
+        return
     if wizard.get("tx_type") == "expense" and not wizard["has_credit_cards"]:
-        wizard["payment_source"] = "account"
+        if not wizard.get("payment_source"):
+            wizard["payment_source"] = "account"
+            wizard["payment_on_card"] = False
         wizard["payment_on_card"] = False
 
 
@@ -612,9 +853,14 @@ def parse_payment_source_answer(message: str) -> str | None:
         "1",
     }:
         return "account"
-    if "cart" in lower or "crédit" in lower or "credit" in lower:
+    # Frases longas: "já falei que foi no cartão", "no cartão do mercado pago"
+    if wants_card_payment(lower) or "crédit" in lower or "credit" in lower:
         return "card"
-    if any(word in lower for word in ("conta", "débito", "debito", "pix", "dinheiro")):
+    if "cart" in lower:
+        return "card"
+    if wants_account_payment(lower) or any(
+        word in lower for word in ("conta", "débito", "debito", "pix", "dinheiro")
+    ):
         return "account"
     return None
 
@@ -628,6 +874,8 @@ def _next_slot(wizard: dict) -> str | None:
     if not wizard.get("status"):
         return "status"
     if wizard.get("payment_source") == "card" and not wizard.get("card_name"):
+        if wizard.get("has_credit_cards") is False:
+            return "offer_create_card"
         return "card_name"
     if wizard.get("status") == "planned":
         if wizard.get("payment_mode") != "installment":
@@ -670,7 +918,11 @@ def _next_slot(wizard: dict) -> str | None:
         return "description"
     if not wizard.get("card_name") and not wizard.get("account_name"):
         if wizard.get("payment_source") == "card":
+            if wizard.get("has_credit_cards") is False:
+                return "offer_create_card"
             return "card_name"
+        if wizard.get("has_accounts") is False:
+            return "offer_create_account"
         if wizard.get("payment_source") == "account":
             return "account_name"
         return "account_name"
@@ -680,11 +932,17 @@ def _next_slot(wizard: dict) -> str | None:
 
 
 def _apply_inference(db: Session, user_id: int, wizard: dict) -> None:
+    from app.services.text_correction import is_weak_movement_description
     from app.services.tools import extract_description, parse_amount
 
     message = wizard.get("source_message") or ""
+    apply_tx_type_correction(wizard, message)
     description = wizard.get("description") or ""
     tx_type = wizard.get("tx_type") or "expense"
+
+    if description and is_weak_movement_description(description):
+        wizard["description"] = None
+        description = ""
 
     if not wizard.get("amount"):
         inferred_amount = parse_amount(message.lower())
@@ -692,12 +950,47 @@ def _apply_inference(db: Session, user_id: int, wizard: dict) -> None:
             wizard["amount"] = inferred_amount
             if not description:
                 description = extract_description(message, inferred_amount)
-                wizard["description"] = description
+                if is_weak_movement_description(description):
+                    description = ""
+                else:
+                    wizard["description"] = description
     if not wizard.get("description") and wizard.get("amount"):
         inferred_desc = extract_description(message, wizard["amount"])
-        if inferred_desc and inferred_desc != "Lançamento":
+        if (
+            inferred_desc
+            and inferred_desc != "Lançamento"
+            and not is_weak_movement_description(inferred_desc)
+        ):
             wizard["description"] = inferred_desc
             description = inferred_desc
+    elif not wizard.get("description"):
+        # Parcelado sem valor ainda: "blusa em 10 vezes, referente a X"
+        inferred_desc = extract_description(message, None)
+        if (
+            inferred_desc
+            and inferred_desc != "Lançamento"
+            and not is_weak_movement_description(inferred_desc)
+        ):
+            wizard["description"] = inferred_desc
+            description = inferred_desc
+
+    if wizard.get("payment_mode") == "installment" or _infer_payment_mode_from_message(
+        message
+    ) == "installment":
+        wizard["payment_mode"] = "installment"
+        if not wizard.get("installment_count"):
+            count = parse_installment_count(message)
+            if count:
+                wizard["installment_count"] = count
+        if not wizard.get("installment_interval"):
+            interval = parse_installment_interval(message)
+            if interval:
+                wizard["installment_interval"] = interval
+            elif re.search(
+                r"\b\d+\s*x\b|\bem\s+\d+\s+vezes\b|\b\d+\s+vezes\b",
+                message.lower(),
+            ):
+                wizard["installment_interval"] = "monthly"
 
     if not wizard.get("transaction_date"):
         wizard["transaction_date"] = resolve_transaction_date(message)
@@ -706,31 +999,12 @@ def _apply_inference(db: Session, user_id: int, wizard: dict) -> None:
         if relative:
             wizard["transaction_date"] = relative.isoformat()
 
-    payment_source = wizard.get("payment_source")
-    if payment_source == "card":
-        wizard["payment_on_card"] = True
-        if not wizard.get("card_name"):
-            inferred = infer_card_name(db, user_id, message, wizard.get("card_name"))
-            if inferred:
-                wizard["card_name"] = inferred
-        wizard.pop("account_name", None)
-        _ensure_card_settlement_account(db, user_id, wizard)
-        _apply_card_planned_defaults(wizard)
-    elif payment_source == "account":
-        wizard["payment_on_card"] = False
-        wizard.pop("card_name", None)
-        if not wizard.get("account_name"):
-            inferred = infer_account_name(
-                db, user_id, message, wizard.get("account_name")
-            )
-            if inferred:
-                wizard["account_name"] = inferred
-    elif not wizard.get("account_name"):
-        inferred = infer_account_name(
-            db, user_id, message, wizard.get("account_name")
-        )
-        if inferred:
-            wizard["account_name"] = inferred
+    _infer_and_apply_payment_source(db, user_id, wizard)
+
+    if not wizard.get("status"):
+        wizard["status"] = infer_status_from_message(message)
+
+    _apply_card_planned_defaults(wizard)
 
     if not wizard.get("category_name") and description:
         inferred = infer_category_name(
@@ -750,6 +1024,60 @@ def _apply_inference(db: Session, user_id: int, wizard: dict) -> None:
 
     apply_inferred_dates(wizard)
     _apply_card_due_dates(db, user_id, wizard)
+
+
+def _infer_and_apply_payment_source(
+    db: Session, user_id: int, wizard: dict
+) -> None:
+    """Set payment_source / card / account from message before asking."""
+    message = wizard.get("source_message") or ""
+    wizard["has_credit_cards"] = bool(list_active_card_names(db, user_id))
+
+    if (
+        wizard.get("payment_source") == "card"
+        or wizard.get("card_name")
+        or wants_card_payment(message)
+    ):
+        wizard["payment_source"] = "card"
+        wizard["payment_on_card"] = True
+        if not wizard.get("card_name"):
+            inferred = infer_card_name(db, user_id, message, wizard.get("card_name"))
+            if inferred:
+                wizard["card_name"] = inferred
+            else:
+                names = list_active_card_names(db, user_id)
+                if len(names) == 1:
+                    wizard["card_name"] = names[0]
+        # Homônimo conta+cartão: não usar a conta bancária com o mesmo nome
+        wizard.pop("account_name", None)
+        _ensure_card_settlement_account(db, user_id, wizard)
+        _apply_card_planned_defaults(wizard)
+        return
+
+    if wizard.get("payment_source") == "account" or (
+        not wizard.get("payment_source") and wants_account_payment(message)
+    ):
+        wizard["payment_source"] = "account"
+        wizard["payment_on_card"] = False
+        wizard.pop("card_name", None)
+        if not wizard.get("account_name"):
+            inferred = infer_account_name(
+                db, user_id, message, wizard.get("account_name")
+            )
+            if inferred:
+                wizard["account_name"] = inferred
+        return
+
+    # Sem menção a cartão: tentar conta (único match ou nome na mensagem)
+    if not wizard.get("payment_source") and not wizard.get("account_name"):
+        inferred = infer_account_name(db, user_id, message, wizard.get("account_name"))
+        if inferred:
+            wizard["account_name"] = inferred
+            # Só fixa payment_source=account se não houver cartões OU se a
+            # mensagem apontou a conta — senão ainda pode ser ambíguo.
+            if not wizard.get("has_credit_cards") or wants_account_payment(message):
+                wizard["payment_source"] = "account"
+                wizard["payment_on_card"] = False
 
 
 def parse_installment_amount_basis(message: str) -> str | None:
@@ -814,6 +1142,15 @@ def _question_for_slot(
         return _question_installment_competence_date(wizard)
     if slot == "due_date" and wizard.get("payment_mode") == "installment":
         return _question_installment_due_date(wizard)
+    if slot == "card_name":
+        names = list_active_card_names(db, user_id)
+        if not names:
+            return SLOT_QUESTIONS["offer_create_card"]
+        joined = ", ".join(names)
+        return (
+            "Em qual **cartão de crédito** registrar?\n\n"
+            f"Você tem: {joined}."
+        )
     if slot in SLOT_QUESTIONS:
         return SLOT_QUESTIONS[slot]
     tx_type = wizard.get("tx_type") or "expense"
@@ -821,10 +1158,6 @@ def _question_for_slot(
         names = list_active_account_names(db, user_id)
         joined = ", ".join(names) if names else "nenhuma"
         return f"Em qual conta registrar? Você tem: {joined}."
-    if slot == "card_name":
-        names = list_active_card_names(db, user_id)
-        joined = ", ".join(names) if names else "nenhum"
-        return f"Em qual cartão registrar? Você tem: {joined}."
     if slot == "category_name":
         names = list_category_names(db, user_id, tx_type)
         joined = ", ".join(names) if names else "nenhuma"
@@ -998,6 +1331,11 @@ def fill_slot(wizard: dict, slot: str, message: str, db: Session, user_id: int) 
         return None
     if slot == "card_name":
         choices = list_active_card_names(db, user_id)
+        if not choices:
+            return (
+                "Ainda não há cartão cadastrado. "
+                "Envie *cadastrar cartão ...* ou *cancelar*."
+            )
         parsed = parse_account_answer(message, choices)
         if not parsed:
             return f"Cartão inválido. Escolha uma das opções: {', '.join(choices)}."

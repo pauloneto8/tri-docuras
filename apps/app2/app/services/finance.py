@@ -113,15 +113,18 @@ def resolve_account(db: Session, user_id: int, account_name: str | None) -> Acco
 
 
 def resolve_card_for_transaction(db: Session, user_id: int, card_name: str) -> CreditCard:
+    if not card_name or not str(card_name).strip():
+        raise ValueError("Cartão não informado.")
+    normalized = str(card_name).strip()
     card = db.scalar(
         select(CreditCard).where(
             CreditCard.user_id == user_id,
             CreditCard.is_active.is_(True),
-            func.lower(CreditCard.name) == card_name.lower(),
+            func.lower(CreditCard.name) == normalized.lower(),
         )
     )
     if not card:
-        raise ValueError(f"Cartão '{card_name}' não encontrado.")
+        raise ValueError(f"Cartão '{normalized}' não encontrado.")
     return card
 
 
@@ -198,6 +201,34 @@ def find_category_by_name(db: Session, user_id: int, name: str, tx_type: str) ->
             Category.type == tx_type,
         )
     )
+
+
+def find_category_by_name_any_type(
+    db: Session, user_id: int, name: str
+) -> Category | None:
+    return db.scalar(
+        select(Category).where(
+            Category.user_id == user_id,
+            func.lower(Category.name) == name.lower(),
+        )
+    )
+
+
+def find_category(
+    db: Session,
+    user_id: int,
+    *,
+    category_id: int | None = None,
+    category_name: str | None = None,
+) -> Category | None:
+    if category_id is not None:
+        category = db.get(Category, category_id)
+        if category and category.user_id == user_id:
+            return category
+        return None
+    if category_name and category_name.strip():
+        return find_category_by_name_any_type(db, user_id, category_name.strip())
+    return None
 
 
 def categorize_by_keywords(
@@ -1068,19 +1099,29 @@ def _update_installment_descriptions(
     user_id: int,
     tx: Transaction,
     new_base: str,
+    *,
+    targets: list[Transaction] | None = None,
 ) -> None:
-    """Atualiza a descrição-base de todas as parcelas do mesmo plano."""
-    siblings = list(
-        db.scalars(
-            select(Transaction).where(
-                Transaction.user_id == user_id,
-                Transaction.installment_plan_id == tx.installment_plan_id,
-            )
-        ).all()
-    )
+    """Atualiza a descrição-base das parcelas informadas (ou todas do plano)."""
+    from app.services.installments import installment_base_description
+
+    siblings = targets
+    if siblings is None:
+        siblings = list(
+            db.scalars(
+                select(Transaction).where(
+                    Transaction.user_id == user_id,
+                    Transaction.installment_plan_id == tx.installment_plan_id,
+                )
+            ).all()
+        )
     plan = tx.installment_plan
     count = plan.installment_count if plan else None
-    base = new_base.strip()[:240]
+    base = installment_base_description(
+        new_base,
+        index=tx.installment_index,
+        count=count,
+    ).strip()[:240]
     for sibling in siblings:
         if count and sibling.installment_index:
             sibling.description = f"{base} {sibling.installment_index}/{count}"[:255]
@@ -1089,6 +1130,11 @@ def _update_installment_descriptions(
 
 
 def update_transaction(db: Session, user_id: int, payload: UpdateTransactionInput) -> dict:
+    from app.services.installments import (
+        count_subsequent_installments,
+        list_installment_update_targets,
+    )
+
     if not any(
         [
             payload.transaction_id,
@@ -1096,6 +1142,7 @@ def update_transaction(db: Session, user_id: int, payload: UpdateTransactionInpu
             payload.description,
             payload.account_name,
             payload.category_name,
+            payload.type,
             payload.transaction_date,
             payload.competence_date,
             payload.due_date,
@@ -1126,24 +1173,53 @@ def update_transaction(db: Session, user_id: int, payload: UpdateTransactionInpu
     if not tx:
         raise ValueError("Lançamento não encontrado.")
 
+    subsequent = count_subsequent_installments(db, user_id, tx)
+    scope = payload.installment_scope
+    if subsequent > 0 and scope not in {"this", "subsequent"}:
+        raise ValueError(
+            "Este lançamento tem parcelas seguintes. "
+            "Informe se deseja atualizar só esta parcela ou esta e as seguintes."
+        )
+    if scope is None:
+        scope = "this"
+    targets = list_installment_update_targets(db, user_id, tx, scope)
+
+    if payload.type is not None and payload.type != tx.type:
+        if tx.type in {"transfer_out", "transfer_in"}:
+            raise ValueError("Não é possível alterar o tipo de uma transferência.")
+        if payload.type not in {"expense", "income"}:
+            raise ValueError("Tipo inválido. Use despesa ou receita.")
+        for target in targets:
+            target.type = payload.type
+            if target.category_id:
+                old_cat = db.get(Category, target.category_id)
+                if old_cat and old_cat.type != payload.type:
+                    target.category_id = None
+
     if payload.amount and payload.amount.strip():
-        tx.amount_cents = decimal_to_cents(payload.amount)
+        amount_cents = decimal_to_cents(payload.amount)
+        for target in targets:
+            target.amount_cents = amount_cents
     if payload.description and payload.description.strip():
         new_desc = payload.description.strip()[:255]
         if tx.installment_plan_id and tx.installment_index:
-            _update_installment_descriptions(db, user_id, tx, new_desc)
+            _update_installment_descriptions(
+                db, user_id, tx, new_desc, targets=targets
+            )
         else:
             tx.description = new_desc
     if payload.account_name and payload.account_name.strip():
         account = resolve_account_for_transaction(db, user_id, payload.account_name.strip())
-        tx.account_id = account.id
+        for target in targets:
+            target.account_id = account.id
     if payload.category_name and payload.category_name.strip():
         if tx.type in {"transfer_out", "transfer_in"}:
             raise ValueError("Transferências não possuem categoria.")
         category = find_category_by_name(db, user_id, payload.category_name.strip(), tx.type)
         if not category:
             raise ValueError(f"Categoria '{payload.category_name}' não encontrada.")
-        tx.category_id = category.id
+        for target in targets:
+            target.category_id = category.id
 
     dates_changed = bool(
         payload.transaction_date
@@ -1152,6 +1228,7 @@ def update_transaction(db: Session, user_id: int, payload: UpdateTransactionInpu
         or payload.payment_date
     )
     if dates_changed:
+        # Datas valem só para a parcela editada (cronograma das demais permanece)
         comp, due, payment, cash_date = resolve_transaction_dates(
             tx.status,
             competence_date=payload.competence_date or tx.competence_date,
@@ -1474,8 +1551,9 @@ def _category_totals(
     start: date,
     end: date,
     status: str = "actual",
+    include_card: bool = False,
 ) -> list[dict]:
-    """Totais realizados por categoria no período (mesmas regras de `_sum_transactions`)."""
+    """Totais por categoria no período (mesmas regras de `_sum_transactions`)."""
     stmt = (
         select(
             Category.id,
@@ -1486,18 +1564,20 @@ def _category_totals(
         .outerjoin(Account, Transaction.account_id == Account.id)
         .outerjoin(Category, Transaction.category_id == Category.id)
         .where(Transaction.type == tx_type, Transaction.status == status)
-        .where(Transaction.card_id.is_(None))
         .where(Transaction.transaction_date >= start)
         .where(Transaction.transaction_date <= end)
         .where(
             or_(
                 Account.opening_balance_date.is_(None),
+                Transaction.account_id.is_(None),
                 Transaction.transaction_date >= Account.opening_balance_date,
             )
         )
         .group_by(Category.id, Category.name)
         .order_by(func.sum(Transaction.amount_cents).desc())
     )
+    if not include_card:
+        stmt = stmt.where(Transaction.card_id.is_(None))
     if user_id is not None:
         stmt = stmt.where(Transaction.user_id == user_id)
 
@@ -1517,6 +1597,107 @@ def _category_totals(
                 "percent": round((cents / total) * 100, 1) if total else 0,
             }
         )
+    return results
+
+
+def _category_plan_vs_actual(
+    db: Session,
+    user_id: int | None,
+    tx_type: str,
+    *,
+    start: date,
+    end: date,
+) -> list[dict]:
+    """Previsto × realizado por categoria, com variação (realizado − previsto)."""
+    planned_rows = _category_totals(
+        db,
+        user_id,
+        tx_type,
+        start=start,
+        end=end,
+        status="planned",
+        include_card=True,
+    )
+    actual_rows = _category_totals(
+        db,
+        user_id,
+        tx_type,
+        start=start,
+        end=end,
+        status="actual",
+        include_card=True,
+    )
+
+    def _key(row: dict) -> tuple:
+        if row.get("category_id") is not None:
+            return ("id", row["category_id"])
+        return ("name", row["category"])
+
+    merged: dict[tuple, dict] = {}
+    for row in planned_rows:
+        merged[_key(row)] = {
+            "category_id": row["category_id"],
+            "category": row["category"],
+            "planned_cents": row["amount_cents"],
+            "actual_cents": 0,
+        }
+    for row in actual_rows:
+        key = _key(row)
+        if key in merged:
+            merged[key]["actual_cents"] = row["amount_cents"]
+        else:
+            merged[key] = {
+                "category_id": row["category_id"],
+                "category": row["category"],
+                "planned_cents": 0,
+                "actual_cents": row["amount_cents"],
+            }
+
+    results: list[dict] = []
+    total_actual = sum(item["actual_cents"] for item in merged.values())
+    total_planned = sum(item["planned_cents"] for item in merged.values())
+    for item in merged.values():
+        planned_cents = item["planned_cents"]
+        actual_cents = item["actual_cents"]
+        variance_cents = actual_cents - planned_cents
+        # Despesa: gastar menos que o previsto é favorável; receita: receber mais é favorável
+        if tx_type == "expense":
+            favorable = variance_cents <= 0
+        else:
+            favorable = variance_cents >= 0
+        results.append(
+            {
+                "category_id": item["category_id"],
+                "category": item["category"],
+                "planned_cents": planned_cents,
+                "actual_cents": actual_cents,
+                "variance_cents": variance_cents,
+                "planned_amount": format_brl(planned_cents),
+                "actual_amount": format_brl(actual_cents),
+                "amount_cents": actual_cents,  # compat: “amount” = realizado
+                "amount": format_brl(actual_cents),
+                "variance": format_brl(abs(variance_cents)),
+                "variance_signed": (
+                    f"+{format_brl(variance_cents)}"
+                    if variance_cents > 0
+                    else format_brl(variance_cents)
+                ),
+                "favorable": favorable,
+                "percent": (
+                    round((actual_cents / total_actual) * 100, 1) if total_actual else 0
+                ),
+                "planned_percent": (
+                    round((planned_cents / total_planned) * 100, 1)
+                    if total_planned
+                    else 0
+                ),
+            }
+        )
+
+    results.sort(
+        key=lambda r: max(r["planned_cents"], r["actual_cents"]),
+        reverse=True,
+    )
     return results
 
 
@@ -1659,10 +1840,10 @@ def get_summary(db: Session, user_id: int | None, payload: SummaryInput) -> dict
     )
 
     plan_vs_actual = _plan_vs_actual_pairs(db, user_id, period_start, period_end)
-    expenses_by_category = _category_totals(
+    expenses_by_category = _category_plan_vs_actual(
         db, user_id, "expense", start=period_start, end=period_end
     )
-    income_by_category = _category_totals(
+    income_by_category = _category_plan_vs_actual(
         db, user_id, "income", start=period_start, end=period_end
     )
 
@@ -2185,14 +2366,26 @@ def create_category(db: Session, user_id: int, payload) -> dict:
     if not isinstance(payload, CreateCategoryInput):
         payload = CreateCategoryInput(**payload)
 
-    existing = db.scalar(
-        select(Category).where(
-            Category.user_id == user_id,
-            func.lower(Category.name) == payload.name.lower(),
-        )
-    )
+    existing = find_category_by_name_any_type(db, user_id, payload.name)
     if existing:
-        raise ValueError(f"Já existe a categoria '{payload.name}'.")
+        if existing.type == payload.type:
+            raise ValueError(
+                f"Já existe a categoria '{existing.name}' ({format_category(existing)['type_label']})."
+            )
+        # Mesmo nome, tipo diferente: ajusta o tipo (nome é único por usuário)
+        previous_type = existing.type
+        existing.type = payload.type
+        if payload.keywords is not None:
+            existing.keywords = payload.keywords
+        db.commit()
+        db.refresh(existing)
+        result = format_category(existing)
+        result["updated"] = True
+        result["previous_type"] = previous_type
+        result["previous_type_label"] = (
+            "Despesa" if previous_type == "expense" else "Receita"
+        )
+        return result
 
     category = Category(
         user_id=user_id,
@@ -2206,12 +2399,96 @@ def create_category(db: Session, user_id: int, payload) -> dict:
     return format_category(category)
 
 
-def list_user_categories(db: Session, user_id: int) -> list[dict]:
-    categories = db.scalars(
-        select(Category)
-        .where(Category.user_id == user_id)
-        .order_by(Category.type.asc(), Category.name.asc())
-    ).all()
+def update_category(db: Session, user_id: int, payload) -> dict:
+    from app.schemas import UpdateCategoryInput
+
+    if not isinstance(payload, UpdateCategoryInput):
+        payload = UpdateCategoryInput(**payload)
+
+    category = find_category(
+        db,
+        user_id,
+        category_id=payload.category_id,
+        category_name=payload.category_name,
+    )
+    if not category:
+        raise ValueError("Categoria não encontrada.")
+
+    if payload.name is not None and payload.name.strip():
+        clash = find_category_by_name_any_type(db, user_id, payload.name.strip())
+        if clash and clash.id != category.id:
+            raise ValueError(f"Já existe a categoria '{clash.name}'.")
+        category.name = payload.name.strip()
+
+    if payload.type is not None:
+        category.type = payload.type
+
+    if payload.keywords is not None:
+        category.keywords = payload.keywords.strip() if payload.keywords.strip() else None
+
+    db.commit()
+    db.refresh(category)
+    return format_category(category)
+
+
+def delete_category(db: Session, user_id: int, payload) -> dict:
+    from app.schemas import DeleteCategoryInput
+
+    if not isinstance(payload, DeleteCategoryInput):
+        payload = DeleteCategoryInput(**payload)
+
+    category = find_category(
+        db,
+        user_id,
+        category_id=payload.category_id,
+        category_name=payload.category_name,
+    )
+    if not category:
+        raise ValueError("Categoria não encontrada.")
+
+    tx_count = db.scalar(
+        select(func.count())
+        .select_from(Transaction)
+        .where(
+            Transaction.user_id == user_id,
+            Transaction.category_id == category.id,
+        )
+    )
+    if int(tx_count or 0) > 0:
+        raise ValueError(
+            f"Não é possível excluir '{category.name}': há "
+            f"{int(tx_count)} lançamento(s) vinculados. "
+            "Altere a categoria desses lançamentos antes."
+        )
+
+    budget_count = db.scalar(
+        select(func.count())
+        .select_from(Budget)
+        .where(
+            Budget.user_id == user_id,
+            Budget.category_id == category.id,
+        )
+    )
+    if int(budget_count or 0) > 0:
+        raise ValueError(
+            f"Não é possível excluir '{category.name}': há "
+            f"{int(budget_count)} orçamento(s) vinculados."
+        )
+
+    snapshot = format_category(category)
+    db.delete(category)
+    db.commit()
+    return snapshot
+
+
+def list_user_categories(
+    db: Session, user_id: int, *, category_type: str | None = None
+) -> list[dict]:
+    stmt = select(Category).where(Category.user_id == user_id)
+    if category_type in {"expense", "income"}:
+        stmt = stmt.where(Category.type == category_type)
+    stmt = stmt.order_by(Category.type.asc(), Category.name.asc())
+    categories = db.scalars(stmt).all()
     return [format_category(c) for c in categories]
 
 
@@ -2284,6 +2561,75 @@ def format_account(account: Account, *, db: Session | None = None) -> dict:
         ),
     }
     return data
+
+
+def account_context_summary(db: Session, user_id: int, account_id: int) -> str | None:
+    account = find_account(db, user_id, account_id=account_id)
+    if not account:
+        return None
+    balance = _account_balance_at(db, account, local_today())
+    lines = [
+        f"Resumo da conta {account.name}:",
+        f"- Tipo: {ACCOUNT_TYPE_LABELS.get(account.account_type, account.account_type)}",
+        f"- Saldo atual: R$ {format_brl(balance)}",
+    ]
+    if account.institution:
+        lines.insert(2, f"- Instituição: {account.institution}")
+    return "\n".join(lines)
+
+
+def invoice_context_summary(
+    db: Session, user_id: int, *, invoice_id: int, card_id: int | None = None
+) -> str | None:
+    from app.services.credit_cards import (
+        format_credit_card,
+        format_invoice,
+        invoice_totals,
+        list_invoice_movements,
+    )
+
+    invoice = db.get(CardInvoice, invoice_id)
+    if not invoice or invoice.user_id != user_id:
+        return None
+    card = db.get(CreditCard, card_id or invoice.card_id)
+    if not card or card.user_id != user_id:
+        return None
+    total = invoice_totals(db, invoice)
+    inv = format_invoice(invoice, total)
+    card_data = format_credit_card(card, db=db)
+    movements = list_invoice_movements(db, user_id, invoice.id)
+    lines = [
+        f"Resumo da fatura ({inv['invoice_label']} — {card.name}):",
+        f"- Status: {inv['status_label']}",
+        f"- Total: R$ {inv['total']}",
+        f"- Vencimento: {inv['due_date_label']}",
+        f"- Ciclo: {inv['cycle_start']} a {inv['cycle_end']}",
+        f"- Movimentos na fatura: {len(movements)}",
+    ]
+    if card_data.get("available_limit"):
+        lines.append(f"- Limite disponível: R$ {card_data['available_limit']}")
+    elif card_data.get("credit_limit"):
+        lines.append(f"- Limite: R$ {card_data['credit_limit']}")
+    return "\n".join(lines)
+
+
+def enrich_register_result(db: Session, user_id: int, tx: dict) -> dict:
+    """Anexa resumo de fatura (cartão) ou conta bancária após novo lançamento."""
+    if not isinstance(tx, dict):
+        return tx
+    summary = None
+    if tx.get("invoice_id"):
+        summary = invoice_context_summary(
+            db,
+            user_id,
+            invoice_id=int(tx["invoice_id"]),
+            card_id=tx.get("card_id"),
+        )
+    elif tx.get("account_id") and not tx.get("card_id"):
+        summary = account_context_summary(db, user_id, int(tx["account_id"]))
+    if summary:
+        tx = {**tx, "context_summary": summary}
+    return tx
 
 
 def format_transaction(
@@ -2363,6 +2709,8 @@ def format_transaction(
         "installment_label": (
             _installment_label_for_tx(tx) if tx.installment_plan_id else None
         ),
+        "subsequent_installment_count": 0,
+        "has_subsequent_installments": False,
         "invoice_id": tx.invoice_id,
         "invoice_label": (
             _invoice_label_for_tx(tx) if tx.invoice_id else None
@@ -2371,6 +2719,16 @@ def format_transaction(
         "realized_actual_id": realized_actual_id,
         "created_at": tx.created_at.isoformat() if isinstance(tx.created_at, datetime) else None,
     }
+    if tx.installment_plan_id and tx.installment_index:
+        from sqlalchemy.orm import object_session
+
+        from app.services.installments import count_subsequent_installments
+
+        sess = object_session(tx)
+        if sess is not None:
+            subsequent = count_subsequent_installments(sess, tx.user_id, tx)
+            data["subsequent_installment_count"] = subsequent
+            data["has_subsequent_installments"] = subsequent > 0
     if include_user and tx.user:
         data["user_name"] = tx.user.name
         data["user_email"] = tx.user.email

@@ -22,10 +22,10 @@ app/
   schemas.py       # Pydantic, ToolCall, format_brl
   routers/         # pages (HTML), api (JSON), auth
   services/        # finance, recurrence, installments, credit_cards, wizards, tools, intents
-  agent/           # runner, llm, groq, ollama, prompt
+  agent/           # runner, llm, groq, prompt
   security/        # csrf, rate_limit
   templates/       # Jinja2 + HTMX + agent partials
-tests/             # pytest (246 testes no container)
+tests/             # pytest (306 testes no container)
 alembic/           # migrações 001–016
 docs/              # ARCHITECTURE, OPERATIONS, SECURITY, CHANGELOG
 ```
@@ -48,7 +48,7 @@ docker compose exec -T app2 python -m pytest -q
 ```
 
 - App: `/opt/hosting/apps/app2`
-- DB: `hosting-app2-db`, Ollama: `hosting-ollama` (rede interna)
+- DB: `hosting-app2-db` (rede interna)
 - Usuário do container: `appuser`
 
 ## Migrações
@@ -65,7 +65,7 @@ Ver [docs/SECURITY.md](../../docs/SECURITY.md). Resumo:
 
 - `APP2_SECRET_KEY` obrigatória
 - CSRF, rate-limit login, TrustedHost, CSP
-- Ollama só em `app2_internal`
+- `APP2_GROQ_API_KEY` para o LLM
 - OpenAPI desabilitado
 
 ## Reset de dados de teste

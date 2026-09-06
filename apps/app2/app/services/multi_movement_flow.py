@@ -241,11 +241,15 @@ def execute_batch_movements(db: Session, user_id: int, batch_action: dict) -> st
             args["transaction_date"] = date.fromisoformat(args["transaction_date"])
         if tool == "register_expense":
             payload = RegisterExpenseInput(**args)
-            result = finance.register_expense(db, user_id, payload)
+            result = finance.enrich_register_result(
+                db, user_id, finance.register_expense(db, user_id, payload)
+            )
             results.append(format_tool_result("register_expense", result))
         elif tool == "register_income":
             payload = RegisterIncomeInput(**args)
-            result = finance.register_income(db, user_id, payload)
+            result = finance.enrich_register_result(
+                db, user_id, finance.register_income(db, user_id, payload)
+            )
             results.append(format_tool_result("register_income", result))
     if not results:
         raise ValueError("Nenhum lançamento para registrar.")
@@ -259,7 +263,13 @@ def try_begin_from_message(
     session: dict,
     message: str,
 ) -> AgentResponse | None:
-    from app.services.transaction_slots import DATE_SLOTS, INSTALLMENT_SLOTS, MODE_SLOTS, RECURRENCE_SLOTS
+    from app.services.transaction_slots import (
+        DATE_SLOTS,
+        INSTALLMENT_SLOTS,
+        MODE_SLOTS,
+        RECURRENCE_SLOTS,
+        _infer_payment_mode_from_message,
+    )
     from app.services.transaction_wizard import get_wizard as get_tx_wizard
     from app.services.transaction_wizard import _next_field
 
@@ -268,6 +278,9 @@ def try_begin_from_message(
         field = _next_field(wizard)
         if field in {"account_name", "category_name"} | DATE_SLOTS | MODE_SLOTS | RECURRENCE_SLOTS | INSTALLMENT_SLOTS:
             return None
+    # "9,67 em 10 vezes" é um único parcelamento, não multi-lançamento
+    if _infer_payment_mode_from_message(message) == "installment":
+        return None
     tx_type_hint = wizard.get("tx_type") if wizard else None
     movements = parse_multi_movements(message, tx_type_hint=tx_type_hint)
     if not movements:

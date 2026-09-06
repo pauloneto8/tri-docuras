@@ -161,12 +161,14 @@ class UpdateTransactionInput(BaseModel):
     description: str | None = None
     account_name: str | None = None
     category_name: str | None = None
+    type: Literal["expense", "income"] | None = None
     competence_date: date | None = None
     due_date: date | None = None
     payment_date: date | None = None
     transaction_date: date | None = None
     invoice_due_month: int | None = Field(default=None, ge=1, le=12)
     invoice_due_year: int | None = Field(default=None, ge=2000, le=2100)
+    installment_scope: Literal["this", "subsequent"] | None = None
 
     @field_validator("description")
     @classmethod
@@ -322,6 +324,39 @@ class CreateCategoryInput(BaseModel):
         return str(v).strip()[:500]
 
 
+class ListCategoriesInput(BaseModel):
+    type: Literal["expense", "income"] | None = None
+
+
+class UpdateCategoryInput(BaseModel):
+    category_id: int | None = None
+    category_name: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    type: Literal["expense", "income"] | None = None
+    keywords: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, v: str | None) -> str | None:
+        if v is None or not str(v).strip():
+            return None
+        return correct_category_name(v)[:100]
+
+    @field_validator("keywords")
+    @classmethod
+    def normalize_keywords(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not str(v).strip():
+            return ""
+        return str(v).strip()[:500]
+
+
+class DeleteCategoryInput(BaseModel):
+    category_id: int | None = None
+    category_name: str | None = None
+
+
 class UpdateAccountInput(BaseModel):
     account_id: int | None = None
     account_name: str | None = None
@@ -392,6 +427,8 @@ class ToolCall(BaseModel):
         "create_account",
         "create_card",
         "create_category",
+        "update_category",
+        "delete_category",
         "list_invoices",
         "pay_invoice",
         "unsupported_action",

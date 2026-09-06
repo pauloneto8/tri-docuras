@@ -25,13 +25,15 @@ paths: app/services/installments.py, app/services/finance.py, app/models.py, app
 - `installment_plan_id` + `installment_index` (1..N); unique `(plan_id, index)`.
 - Mutuamente exclusivo com `frequency` (fixo). Transferências **não** parcelam.
 - Realizar uma parcela **não** altera as demais.
+- **Editar parcela** (`update_transaction` / formulário Movimentos): se houver parcelas com índice maior, o sistema pergunta o escopo — `this` (só esta) ou `subsequent` (esta e as seguintes). Valor, descrição, conta, categoria e tipo podem propagar; datas ficam só na parcela editada.
 
 ## Arquivos
 
 | Arquivo | Papel |
 |---------|--------|
-| `app/services/installments.py` | `split_cents`, `repeat_cents`, `due_date_for_index`, `create_installment_plan`, `cancel_installment_plan` |
-| `app/services/finance.py` | `_register_installment_movement`, `register_expense/income` |
+| `app/services/installments.py` | `split_cents`, `repeat_cents`, `due_date_for_index`, `create_installment_plan`, `cancel_installment_plan`, `list_installment_update_targets`, `parse_installment_scope_answer` |
+| `app/services/installment_scope_flow.py` | Pergunta de escopo no assistente ao editar parcela com seguintes |
+| `app/services/finance.py` | `_register_installment_movement`, `register_expense/income`, `update_transaction` + `installment_scope` |
 | `app/services/transaction_slots.py` | Wizard: slots, `_next_slot`, perguntas da parcela |
 | Migração `014` | `installment_plans`, colunas em `transactions` |
 
@@ -49,11 +51,12 @@ paths: app/services/installments.py, app/services/finance.py, app/models.py, app
 
 LLM **não** envia: `status`, `installment_amount_basis`, `installment_start_index`.
 
-Formulário Movimentos: N + intervalo + radios total/parcela. **Não** pede parcela inicial (sempre 1).
+Formulário CRUD (`/transactions/new`): N + intervalo + radios total/parcela. **Não** pede parcela inicial (sempre 1).
 
 ## Testes
 
 `tests/test_installments.py` — split, repeat, parcela inicial parcial, datas (competência/vencimento vs pagamento), wizard, cancelar plano.
+`tests/test_update_transaction.py` — escopo `this` vs `subsequent` na edição de parcelas.
 
 ## Referência
 

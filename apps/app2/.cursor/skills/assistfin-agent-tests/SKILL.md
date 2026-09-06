@@ -1,7 +1,7 @@
 ---
 name: assistfin-agent-tests
 description: >-
-  Testes do agente de IA do AssistFin: pytest, mocks de Groq/Ollama, wizards,
+  Testes do agente de IA do AssistFin: pytest, mocks de Groq, wizards,
   intents, transferências e conversas. Use ao criar ou corrigir testes do chat,
   runner, LLM ou antes de deploy de mudanças no agente.
 paths: tests/test_*wizard*.py, tests/test_intents.py, tests/test_intent_llm.py, tests/test_runner_wizard_escape.py, tests/test_llm_first_runner.py, tests/test_llm_fallback.py, tests/test_tools.py, tests/test_conversations.py, tests/test_list_accounts.py, tests/test_list_categories.py, tests/test_transfers.py, tests/test_update_transfer.py, tests/test_multi_movements.py, tests/test_agent_suggestions.py, tests/test_agent_cancel.py, tests/test_chat_format.py, tests/test_installments.py, app/agent/**, app/services/intents.py
@@ -72,7 +72,9 @@ docker compose exec -T app2 python -m pytest \
 | `test_credit_cards.py` | domínio cartões e faturas |
 | `test_update_card.py` | `update_card`, `deactivate_card`, rule-based |
 | `test_runner_update_card.py` | confirmação update/delete cartão no runner |
-| `test_category_wizard.py` | wizard categoria, normalização nome |
+| `test_category_wizard.py` | wizard categoria, lote, “Vale e Auxílio”, normalização nome, update de tipo |
+| `test_update_transaction.py` | editar conta/descrição/tipo; escopo this/subsequent em parcelas |
+| `test_list_categories.py` | listar categorias |
 | `test_runner_wizard_escape.py` | `process_message` + escape de wizards |
 | `test_list_accounts.py` / `test_list_categories.py` | ferramentas de listagem |
 | `test_agent_suggestions.py` | chips |
@@ -92,6 +94,8 @@ with patch("app.agent.runner.call_intent_llm", new_callable=AsyncMock, return_va
 
 - [ ] Listar contas ≠ cadastrar conta
 - [ ] Listar categorias ≠ cadastrar categoria
+- [ ] “Vale e Auxílio” (singular) = uma categoria; lista com vírgulas = várias
+- [ ] Editar parcela com seguintes pergunta escopo before confirmação
 - [ ] Transferência não entra em receitas/despesas do período
 - [ ] Transferência altera saldos das contas
 - [ ] Cancelar limpa wizard no servidor

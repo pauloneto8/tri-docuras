@@ -313,19 +313,25 @@ def _build_accounts_context(
     error: str | None = None,
     **extra,
 ):
-    from app.services.credit_cards import list_credit_cards, list_invoices, sync_credit_cards
+    from app.services.credit_cards import (
+        cards_with_nested_invoices,
+        list_credit_cards,
+        list_invoices,
+        sync_credit_cards,
+    )
 
     finance.seed_defaults(db, user.id)
     sync_credit_cards(db, user.id)
     bank_accounts = finance.account_balances(db, scope)
     credit_cards = list_credit_cards(db, user.id)
     invoices = list_invoices(db, user.id, limit=20)
+    cards_tree = cards_with_nested_invoices(db, user.id) if focus_cards else []
     flash_success, flash_error = _consume_flash(request, success=success, error=error)
     return {
         "request": request,
         "user": user,
         "is_root": user.is_root,
-        "accounts": credit_cards if focus_cards else bank_accounts,
+        "accounts": cards_tree if focus_cards else bank_accounts,
         "all_accounts": bank_accounts,
         "credit_cards": credit_cards,
         "bank_accounts": bank_accounts,
@@ -914,9 +920,11 @@ async def update_transaction_form(
     category_id: int | None = Form(None),
     from_account_id: int | None = Form(None),
     to_account_id: int | None = Form(None),
+    type: str | None = Form(None),
     competence_date: str | None = Form(None),
     due_date: str | None = Form(None),
     payment_date: str | None = Form(None),
+    installment_scope: str | None = Form(None),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
@@ -954,9 +962,23 @@ async def update_transaction_form(
             account = db.get(Account, account_id) if account_id else None
             if account_id and (not account or account.user_id != user.id):
                 raise ValueError("Conta inválida.")
+            original_type = tx.type
+            new_type = type if type in {"expense", "income"} else original_type
             category = db.get(Category, category_id) if category_id else None
             if category_id and (not category or category.user_id != user.id):
                 raise ValueError("Categoria inválida.")
+            if category and category.type != new_type:
+                raise ValueError(
+                    "A categoria escolhida não corresponde ao tipo do lançamento."
+                )
+            from app.services.installments import count_subsequent_installments
+
+            subsequent = count_subsequent_installments(db, user.id, tx)
+            scope = installment_scope if installment_scope in {"this", "subsequent"} else None
+            if subsequent > 0 and scope is None:
+                raise ValueError(
+                    "Escolha se deseja atualizar só esta parcela ou esta e as seguintes."
+                )
             comp = date.fromisoformat(competence_date) if competence_date else None
             due = date.fromisoformat(due_date) if due_date else None
             pay = date.fromisoformat(payment_date) if payment_date else None
@@ -969,12 +991,19 @@ async def update_transaction_form(
                     description=description or None,
                     account_name=account.name if account else None,
                     category_name=category.name if category else None,
+                    type=new_type if new_type != original_type else None,
                     competence_date=comp,
                     due_date=due,
                     payment_date=pay,
+                    installment_scope=scope,
                 ),
             )
-            success = "Lançamento atualizado com sucesso."
+            if scope == "subsequent" and subsequent > 0:
+                success = (
+                    f"Lançamento e {subsequent} parcela(s) seguinte(s) atualizados."
+                )
+            else:
+                success = "Lançamento atualizado com sucesso."
     except (ValueError, ValidationError) as exc:
         formatted = finance.format_transaction(tx)
         if tx.type in {"transfer_out", "transfer_in"}:
@@ -1577,12 +1606,96 @@ async def agent_chat(
                 },
             )
         response = format_tool_result(outcome["action"], outcome["result"])
-        if tool_call.tool == "create_account":
-            clear_wizard(request.session)
         if tool_call.tool == "create_card":
             from app.services.card_wizard import clear_wizard as clear_card_wizard
 
             clear_card_wizard(request.session)
+            created_name = None
+            if isinstance(outcome.get("result"), dict):
+                created_name = outcome["result"].get("name")
+            if created_name:
+                from app.services.transaction_wizard import (
+                    resume_paused_transaction_after_create,
+                )
+
+                resumed = resume_paused_transaction_after_create(
+                    request.session,
+                    db=db,
+                    user_id=user.id,
+                    card_name=created_name,
+                )
+                if resumed:
+                    _log_chat_exchange(
+                        db,
+                        user.id,
+                        request.session,
+                        "Confirmar",
+                        resumed.message,
+                        tool_used=resumed.tool_used or "create_card",
+                        source="confirmation",
+                        metadata={
+                            "pending_action": resumed.pending_action,
+                            "resumed_after_card": True,
+                        },
+                    )
+                    return templates.TemplateResponse(
+                        "partials/agent_response.html",
+                        {
+                            "request": request,
+                            "user": user,
+                            "user_message": "Confirmar",
+                            "agent_message": resumed.message,
+                            "needs_confirmation": resumed.needs_confirmation,
+                            "pending_action": resumed.pending_action,
+                            "suggestions": resumed.suggestions,
+                            "keep_chat_open": True,
+                        },
+                    )
+        if tool_call.tool == "create_account":
+            clear_wizard(request.session)
+            created_name = None
+            if isinstance(outcome.get("result"), dict):
+                created_name = outcome["result"].get("name")
+            if created_name:
+                from app.services.transaction_wizard import (
+                    get_paused_wizard,
+                    resume_paused_transaction_after_create,
+                )
+
+                if get_paused_wizard(request.session):
+                    resumed = resume_paused_transaction_after_create(
+                        request.session,
+                        db=db,
+                        user_id=user.id,
+                        account_name=created_name,
+                    )
+                    if resumed:
+                        _log_chat_exchange(
+                            db,
+                            user.id,
+                            request.session,
+                            "Confirmar",
+                            resumed.message,
+                            tool_used=resumed.tool_used or "create_account",
+                            source="confirmation",
+                            metadata={
+                                "pending_action": resumed.pending_action,
+                                "resumed_after_account": True,
+                            },
+                        )
+                        return templates.TemplateResponse(
+                            "partials/agent_response.html",
+                            {
+                                "request": request,
+                                "user": user,
+                                "user_message": "Confirmar",
+                                "agent_message": resumed.message,
+                                "needs_confirmation": resumed.needs_confirmation,
+                                "pending_action": resumed.pending_action,
+                                "suggestions": resumed.suggestions,
+                                "keep_chat_open": True,
+                            },
+                        )
         if tool_call.tool == "create_category":
             clear_category_wizard(request.session)
             from app.services.transaction_wizard import (

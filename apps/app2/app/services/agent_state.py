@@ -11,13 +11,18 @@ def _session_accepts_nao_answer(session: dict) -> bool:
         _next_field as realize_next_field,
         get_wizard as get_realize_wizard,
     )
-    from app.services.transaction_slots import INSTALLMENT_SLOTS, MODE_SLOTS, RECURRENCE_SLOTS
+    from app.services.transaction_slots import (
+        INSTALLMENT_SLOTS,
+        MODE_SLOTS,
+        OFFER_CREATE_SLOTS,
+        RECURRENCE_SLOTS,
+    )
     from app.services.transaction_wizard import _next_field, get_wizard
 
     wizard = get_wizard(session)
     if wizard:
         field = _next_field(wizard)
-        if field in RECURRENCE_SLOTS | MODE_SLOTS | INSTALLMENT_SLOTS:
+        if field in RECURRENCE_SLOTS | MODE_SLOTS | INSTALLMENT_SLOTS | OFFER_CREATE_SLOTS:
             return True
 
     realize = get_realize_wizard(session)
@@ -58,3 +63,6 @@ def clear_agent_flow_state(session: dict) -> None:
     from app.services.transaction_wizard import clear_paused_wizard
 
     clear_paused_wizard(session)
+    from app.services.installment_scope_flow import clear_pending_installment_scope
+
+    clear_pending_installment_scope(session)

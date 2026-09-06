@@ -33,7 +33,7 @@ docker compose exec -T app2 alembic revision -m "descricao" --autogenerate
 ## Testes
 
 ```bash
-# Suite completa (246 testes)
+# Suite completa (306 testes)
 docker compose exec -T app2 python -m pytest -q
 
 # Área específica
@@ -47,6 +47,7 @@ docker compose exec -T app2 python -m pytest tests/test_credit_cards.py -q
 docker compose exec -T app2 python -m pytest tests/test_realize_planned_wizard.py -q
 docker compose exec -T app2 python -m pytest tests/test_multi_movements.py -q
 docker compose exec -T app2 python -m pytest tests/test_chat_format.py -q
+docker compose exec -T app2 python -m pytest tests/test_tools.py -q
 ```
 
 ## Zerar dados de teste (manter usuários)
@@ -74,6 +75,27 @@ UPDATE users SET onboarding_completed = false;
 Usuários e senhas são preservados. Após o reset, faça **logout e login** se a sessão ou o onboarding parecerem inconsistentes.
 
 O que é removido: movimentos, cartões, faturas, planos de parcelas, regras de recorrência, contas, categorias, orçamentos, conversas do agente. O que permanece: usuários, aprovações e credenciais.
+
+### Zerar tudo (incluindo usuários)
+
+Trunca todas as tabelas de dados e reinicia IDs; mantém `alembic_version`:
+
+```bash
+cd /opt/hosting
+docker compose exec -T app2 python - <<'PY'
+from sqlalchemy import create_engine, text, inspect
+from app.config import settings
+
+engine = create_engine(settings.database_url)
+tables = [t for t in inspect(engine).get_table_names() if t != "alembic_version"]
+with engine.begin() as conn:
+    quoted = ", ".join(f'"{t}"' for t in tables)
+    conn.execute(text(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE"))
+print("ok", tables)
+PY
+```
+
+Depois disso é necessário **registrar / aprovar** usuários de novo (banco vazio).
 
 ### Zerar dados de um único usuário
 
@@ -115,12 +137,9 @@ ORDER BY created_at DESC
 LIMIT 30;
 ```
 
-## Ollama
+## Groq
 
-```bash
-docker compose exec ollama ollama pull qwen3:1.7b
-docker compose exec ollama ollama list
-```
+O assistente usa **apenas** Groq (`APP2_GROQ_API_KEY` / `APP2_GROQ_MODEL`). Sem chave ou com rate limit (429), a intenção cai no fallback de regras (`try_rule_based_parse`).
 
 ## Health check
 
@@ -135,7 +154,7 @@ curl -s http://localhost/api/health
 |----------|------|
 | Mudança não aparece | `docker compose build --no-cache app2 && docker compose up -d app2` |
 | Erro de migração | `alembic current` + logs do container |
-| Chat timeout | Nginx `/agent/` timeout 120s; verificar Groq/Ollama |
+| Chat timeout | Nginx `/agent/` timeout 120s; verificar Groq (chave/rate limit) |
 | Sessão/onboarding inconsistente | Logout + login após reset de DB |
 | Lista de Movimentos confusa após realizar previsto | Deploy recente separa “A realizar” e “Extrato”; previsto liquidado some da lista (normal) |
 | Wizard criou várias despesas ao digitar data (`10/08/2026`) | Corrigido em 2026-08-31 — rebuild `app2`; ver `CHANGELOG.md` |

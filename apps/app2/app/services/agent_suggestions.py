@@ -34,6 +34,8 @@ def for_transaction_wizard_field(
         return _with_cancel(["Despesa", "Receita"])
     if field == "status":
         return _with_cancel(["Realizado", "Previsto"])
+    if field in {"offer_create_card", "offer_create_account"}:
+        return _with_cancel(["Sim", "Não"])
     if field == "payment_date":
         return _with_cancel(["Hoje", "Ontem"])
     if field == "competence_date":

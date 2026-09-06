@@ -52,7 +52,10 @@
     {% else %}
     <div>
       <label class="block text-sm text-slate-400 mb-1">Tipo</label>
-      <input type="text" value="{{ tx.type_label }}" class="w-full rounded bg-slate-800/60 border border-slate-700 px-3 py-2 text-slate-400" disabled>
+      <select name="type" id="edit-tx-type" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+        <option value="expense" {% if tx.type == 'expense' %}selected{% endif %}>Despesa</option>
+        <option value="income" {% if tx.type == 'income' %}selected{% endif %}>Receita</option>
+      </select>
     </div>
     {% if not tx.card_id %}
     <div>
@@ -68,12 +71,10 @@
     {% endif %}
     <div>
       <label class="block text-sm text-slate-400 mb-1">Categoria</label>
-      <select name="category_id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
-        <option value="">Sem alteração</option>
+      <select name="category_id" id="edit-category-id" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2">
+        <option value="">Sem categoria</option>
         {% for cat in categories %}
-        {% if cat.type == tx.type %}
-        <option value="{{ cat.id }}" {% if tx.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
-        {% endif %}
+        <option value="{{ cat.id }}" data-type="{{ cat.type }}" {% if tx.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
         {% endfor %}
       </select>
     </div>
@@ -104,6 +105,25 @@
     </div>
     {% endif %}
 
+    {% if tx.has_subsequent_installments %}
+    <fieldset class="rounded-lg border border-sky-800/60 bg-sky-950/20 p-3 space-y-2">
+      <legend class="px-1 text-sm text-sky-300">Parcelas seguintes</legend>
+      <p class="text-sm text-slate-300">
+        Esta é a parcela {{ tx.installment_label }}. Há {{ tx.subsequent_installment_count }} parcela(s) depois dela.
+        O que deseja atualizar?
+      </p>
+      <label class="flex items-start gap-2 text-sm text-slate-200 cursor-pointer">
+        <input type="radio" name="installment_scope" value="this" class="mt-1" required>
+        <span>Só esta parcela</span>
+      </label>
+      <label class="flex items-start gap-2 text-sm text-slate-200 cursor-pointer">
+        <input type="radio" name="installment_scope" value="subsequent" class="mt-1" required>
+        <span>Esta e as {{ tx.subsequent_installment_count }} parcelas seguintes</span>
+      </label>
+      <p class="text-xs text-slate-500">Valor, descrição, conta, categoria e tipo podem ser propagados. Datas valem só para esta parcela.</p>
+    </fieldset>
+    {% endif %}
+
     <div class="flex flex-col sm:flex-row gap-2 pt-2">
       <button type="submit" class="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium">Salvar</button>
       <a href="/transactions" class="flex-1 rounded-lg border border-slate-700 px-4 py-2 text-center text-slate-300 hover:bg-slate-800">Cancelar</a>
@@ -114,4 +134,32 @@
     <button type="submit" class="w-full rounded-lg border border-rose-700 text-rose-300 hover:bg-rose-950/40 px-4 py-2 text-sm">Excluir lançamento</button>
   </form>
 </section>
+{% if tx.type in ['expense', 'income'] %}
+<script>
+(function () {
+  const typeSelect = document.getElementById("edit-tx-type");
+  const catSelect = document.getElementById("edit-category-id");
+  if (!typeSelect || !catSelect) return;
+
+  function filterCategories() {
+    const wanted = typeSelect.value;
+    let keepSelected = false;
+    for (const opt of catSelect.options) {
+      if (!opt.value) {
+        opt.hidden = false;
+        continue;
+      }
+      const match = opt.dataset.type === wanted;
+      opt.hidden = !match;
+      if (match && opt.selected) keepSelected = true;
+      if (!match && opt.selected) opt.selected = false;
+    }
+    if (!keepSelected) catSelect.value = "";
+  }
+
+  typeSelect.addEventListener("change", filterCategories);
+  filterCategories();
+})();
+</script>
+{% endif %}
 {% endblock %}

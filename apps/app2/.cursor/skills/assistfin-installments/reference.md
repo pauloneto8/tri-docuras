@@ -14,6 +14,9 @@ from app.services.installments import (
     repeat_cents,
     create_installment_plan,
     cancel_installment_plan,
+    list_installment_update_targets,
+    parse_installment_scope_answer,
+    count_subsequent_installments,
 )
 
 amounts = split_cents(10001, 3)  # [3333, 3333, 3335]
@@ -47,10 +50,11 @@ plan, txs = create_installment_plan(
 
 ## UI Movimentos
 
-- Checkbox **Parcelado** (exclusivo com fixo)
+- CRUD em `/transactions/new` e `/{id}/edit` — checkbox **Parcelado** (exclusivo com fixo)
 - Selo `3/12 · mensal` via `installment_label`
 - Radios **total da compra** / **valor de cada parcela** (`installment_amount_basis`)
 - Parcela inicial (`installment_start_index`) só no wizard do assistente; o formulário cria da parcela 1
+- **Editar** parcela com seguintes: radio `installment_scope` (só esta / esta e as seguintes)
 - `POST /transactions/installments/{plan_id}/stop`
 
 ## Wizard — perguntas da parcela

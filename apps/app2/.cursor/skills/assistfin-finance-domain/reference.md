@@ -5,19 +5,22 @@
 | Função | Uso |
 |--------|-----|
 | `resolve_transaction_dates(status, …)` | Normaliza competência, vencimento, pagamento e `transaction_date` |
-| `get_summary(db, user_id, SummaryInput)` | Receitas/despesas/resultado do período + saldos + previstos/projeção + `card_invoices` |
+| `get_summary(db, user_id, SummaryInput)` | Receitas/despesas/resultado + saldos + previstos/projeção + `card_invoices` + `expenses_by_category` / `income_by_category` |
 | `account_balances(db, user_id, as_of=date)` | Saldos por conta em uma data (só `actual`) |
+| `enrich_register_result` | Anexa `context_summary` (fatura do cartão ou saldo da conta) após lançamento |
+| `get_budget` / `update_budget` / `delete_budget` | CRUD de orçamento |
 | `register_expense` / `register_income` | Lançamentos (planned ou actual); `frequency` → `recurring_rules`; `installment_count` → `installment_plans` |
 | `realize_planned` | Converter previsão em realizado; atualiza conta do previsto se diferente; reabastece horizonte se `recurrence_id` |
 | `register_transfer` | Par transfer_out + transfer_in |
 | `update_transfer` | Corrigir par existente (origem, destino, valor, datas) |
-| `update_transaction` / `delete_transaction` | Editar/excluir (par em transferências na exclusão) |
+| `update_transaction` / `delete_transaction` | Editar/excluir (par em transferências na exclusão); edição aceita `type` e `installment_scope` |
 | `update_account` | Editar conta bancária (saldo inicial, data, apelido…) |
 | `create_card` / `update_card` / `deactivate_card` | CRUD de cartão de crédito |
-| `create_account` / `create_category` | Cadastros |
+| `create_account` / `create_category` | Cadastros; `create_category` com mesmo nome e outro tipo **atualiza** o tipo |
+| `update_category` / `delete_category` | Alterar ou excluir categoria |
 | `complete_onboarding` | Primeira conta |
 | `list_transactions` | Movimentos (`limit`, `type`, `status?`) |
-| `list_user_categories` | Categorias do usuário |
+| `list_user_categories` | Categorias do usuário (`category_type?`) |
 | `get_budget_status` | Orçamentos vs gasto |
 | `_account_balance_at` | Saldo de uma conta em uma data |
 
@@ -30,7 +33,7 @@
 | `update_transfer`, `update_transaction`, `delete_transaction`, `update_account` | Sim |
 | `create_card`, `update_card`, `delete_card` | Sim (`create_card` via wizard) |
 | `pay_invoice` | Sim |
-| `create_account`, `create_category` | Sim (wizard) |
+| `create_account`, `create_category`, `update_category`, `delete_category` | Sim (create via wizard) |
 | `list_*`, `get_summary`, `get_budget_status`, `categorize` | Não |
 
 ## Migrações relevantes

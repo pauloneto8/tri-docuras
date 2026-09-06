@@ -622,3 +622,109 @@ def test_card_installment_before_closing_goes_to_september_invoice():
     finally:
         _cleanup(db, user.id)
         db.close()
+
+
+def test_cards_with_nested_invoices_includes_movements():
+    from app.config import settings
+    from app.services.credit_cards import cards_with_nested_invoices
+
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"nest_{suffix}@test.com",
+        password="pass",
+        name="Nest User",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        debit = _create_debit(db, user.id, f"Debit_{suffix}")
+        card = _create_card(db, user.id, f"Card_{suffix}", debit["name"], closing=10, due=17)
+        finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="42,00",
+                description="Compra nest",
+                card_name=card["name"],
+                category_name="Outros",
+                competence_date=date(2026, 9, 5),
+                due_date=date(2026, 9, 17),
+            ),
+        )
+        tree = cards_with_nested_invoices(db, user.id)
+        match = next(c for c in tree if c["id"] == card["id"])
+        assert match["invoices_count"] >= 1
+        inv = next(i for i in match["invoices"] if i["total_cents"] > 0)
+        assert inv["movements_count"] >= 1
+        assert any(m["description"] == "Compra nest" for m in inv["movements"])
+    finally:
+        _cleanup(db, user.id)
+        db.close()
+
+
+def test_register_expense_chat_includes_invoice_or_account_summary():
+    from app.config import settings
+    from app.schemas import ToolCall
+    from app.services.tools import execute_tool, format_tool_result
+
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"sumchat_{suffix}@test.com",
+        password="pass",
+        name="Sum Chat",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        debit = _create_debit(db, user.id, f"Debit_{suffix}", balance="2000")
+        card = _create_card(db, user.id, f"Card_{suffix}", debit["name"])
+        cat = db.scalar(
+            select(Category).where(Category.user_id == user.id, Category.type == "expense")
+        )
+
+        card_outcome = execute_tool(
+            db,
+            user.id,
+            ToolCall(
+                tool="register_expense",
+                arguments={
+                    "amount": "55",
+                    "description": "Uber card",
+                    "card_name": card["name"],
+                    "category_name": cat.name,
+                    "competence_date": "2026-09-05",
+                },
+            ),
+        )
+        card_msg = format_tool_result(card_outcome["action"], card_outcome["result"])
+        assert "Resumo da fatura" in card_msg
+        assert card["name"] in card_msg
+        assert "Total:" in card_msg
+
+        bank_outcome = execute_tool(
+            db,
+            user.id,
+            ToolCall(
+                tool="register_expense",
+                arguments={
+                    "amount": "20",
+                    "description": "Padaria",
+                    "account_name": debit["name"],
+                    "category_name": cat.name,
+                    "payment_date": "2026-09-05",
+                },
+            ),
+        )
+        bank_msg = format_tool_result(bank_outcome["action"], bank_outcome["result"])
+        assert "Resumo da conta" in bank_msg
+        assert debit["name"] in bank_msg
+        assert "Saldo atual" in bank_msg
+    finally:
+        _cleanup(db, user.id)
+        db.close()

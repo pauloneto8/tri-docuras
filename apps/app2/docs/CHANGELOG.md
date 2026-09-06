@@ -4,8 +4,24 @@ Registro das principais evoluções do projeto (App 2).
 
 ## Unreleased
 
-- Dashboard: seção **Cartões e faturas** (total a pagar, vencimento no período, status, limite disponível). Dados em `get_summary()["card_invoices"]` via `invoice_dashboard()`.
-- Testes: `test_summary_includes_card_invoices`; suite **246**.
+- **LLM** — Ollama removido; intenção via LLM usa **somente Groq**; fallback de regras se a API falhar/rate-limit
+- Serviço `ollama` removido do `docker-compose.yml`
+- **Wizard de lançamento** — extrai da mensagem cartão/conta, status, datas e modo; só pergunta o que faltar; modo único/fixo/parcelado não defaulta `single` só por ter valor
+- **Editar movimento** — formulário permite alterar tipo Despesa↔Receita; categorias filtradas pelo tipo escolhido
+- **Editar parcela** — se houver parcelas seguintes, pergunta escopo `this` (só esta) ou `subsequent` (esta e as seguintes); valor/descrição/conta/categoria/tipo propagam; datas só na parcela editada (UI + assistente via `installment_scope`)
+- **Categorias no assistente** — `list_categories`, `update_category`, `delete_category` ligados; cadastro em lote (`names`); nome com “e” sem vírgula (ex.: *Vale e Auxílio*) permanece um nome; se o nome já existe com outro tipo, `create_category` atualiza o tipo; sem tipo explícito o wizard pergunta (não assume despesa)
+- **Dashboard** — previsto × realizado por categoria (`planned_*` / `actual_*` / `variance_*` em `expenses_by_category` / `income_by_category`)
+- Suite: **306** testes.
+
+## 2026-09-04 — CRUD nas telas, filtros, cartões aninhados e resumo no chat
+
+- **CRUD na UI** — Movimentos, Contas, Cartões e Orçamentos em páginas separadas (lista + `/new` + `/{id}/edit` + delete/desativar); formulários laterais removidos das listagens
+- **Movimentos** — filtro de período (diária/semanal/mensal; padrão = mês atual); extrato omite `transfer_in` (par só pela saída)
+- **Dashboard** — indicadores **Por categoria** (despesas e receitas do período com % e barra); `expenses_by_category` / `income_by_category` em `get_summary()`
+- **Cartões** — UI hierárquica expansível: cartão → faturas → movimentos (`cards_with_nested_invoices`); lista solta de faturas removida
+- **Chat** — após `register_expense` / `register_income` (e ao realizar previsto), anexa resumo da **fatura** (cartão) ou da **conta** (bancária) via `enrich_register_result` / `context_summary`
+- Helpers: `format_period_label`, `account_context_summary`, `invoice_context_summary`, `list_invoice_movements`
+- Testes: `test_summary_category_breakdown`, `test_cards_with_nested_invoices_*`, `test_register_expense_chat_includes_*`, format em `test_tools.py`
 
 ## 2026-09-02 — Visual completo do chat
 

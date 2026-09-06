@@ -48,9 +48,9 @@ DeleteCardInput(card_id?, card_name?)
 ## UI
 
 - `/` — dashboard com seção **Cartões e faturas** (`summary.card_invoices`)
-- `/accounts/cards` — lista de cartões com fatura atual e limite disponível
-- Formulário **Novo cartão** com conta de liquidação obrigatória
-- **Pagar fatura** por cartão/fatura
+- `/accounts/cards` — hierarquia expansível: cartão → faturas → movimentos (`cards_with_nested_invoices` / `list_invoice_movements`)
+- CRUD: `/accounts/cards/new`, `/accounts/cards/{id}/edit` (conta de liquidação obrigatória)
+- **Pagar fatura** dentro da fatura expandida
 
 ## Reset de dados
 

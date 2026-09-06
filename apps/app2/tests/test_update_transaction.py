@@ -1,5 +1,6 @@
 import uuid
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -103,12 +104,14 @@ def test_update_transaction_description_by_amount():
         )
         db.commit()
 
+        first = min(txs, key=lambda t: t.installment_index or 0)
         result = update_transaction(
             db,
             user.id,
             UpdateTransactionInput(
-                amount="594",
+                transaction_id=first.id,
                 description="Auxílio transporte",
+                installment_scope="subsequent",
             ),
         )
         assert "auxílio" in result["description"].lower() or "transporte" in result[
@@ -143,7 +146,200 @@ def test_update_transaction_description_by_amount():
         db.close()
 
 
+def test_update_transaction_changes_type_expense_to_income():
+    from app.config import settings
+    from sqlalchemy import select
+
+    engine = create_engine(settings.database_url)
+    SessionLocal = sessionmaker(bind=engine)
+    db = SessionLocal()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"upd_type_{suffix}@test.com",
+        password="secret1",
+        name="Upd Type",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        conta = _create_account(db, user.id, f"Conta_{suffix}")
+        register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="25.00",
+                description=f"tipo_test_{suffix}",
+                account_name=conta["name"],
+                category_name="Transporte",
+            ),
+        )
+        income_cat = db.scalar(
+            select(Category).where(
+                Category.user_id == user.id,
+                Category.type == "income",
+            )
+        )
+        assert income_cat is not None
+
+        result = update_transaction(
+            db,
+            user.id,
+            UpdateTransactionInput(
+                description=f"tipo_test_{suffix}",
+                type="income",
+                category_name=income_cat.name,
+            ),
+        )
+        assert result["type"] == "income"
+        assert result["category"] == income_cat.name
+
+        # Sem categoria nova: limpa a do tipo antigo
+        register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="11.00",
+                description=f"tipo_clear_{suffix}",
+                account_name=conta["name"],
+                category_name="Transporte",
+            ),
+        )
+        cleared = update_transaction(
+            db,
+            user.id,
+            UpdateTransactionInput(
+                description=f"tipo_clear_{suffix}",
+                type="income",
+            ),
+        )
+        assert cleared["type"] == "income"
+        assert cleared.get("category") in {None, "", "—"} or not cleared.get("category")
+    finally:
+        db.query(Transaction).filter(Transaction.user_id == user.id).delete(
+            synchronize_session=False
+        )
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+def test_update_installment_scope_this_vs_subsequent():
+    from datetime import date
+
+    from app.config import settings
+    from app.services.installments import create_installment_plan
+    from sqlalchemy import select
+
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"upd_scope_{suffix}@test.com",
+        password="secret1",
+        name="Scope",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        conta = _create_account(db, user.id, f"Conta_{suffix}")
+        cat = db.scalar(
+            select(Category).where(Category.user_id == user.id, Category.type == "expense")
+        )
+        plan, txs = create_installment_plan(
+            db,
+            user.id,
+            account_id=conta["id"],
+            category_id=cat.id,
+            tx_type="expense",
+            total_cents=30000,
+            installment_count=3,
+            interval="monthly",
+            start_date=date(2026, 9, 1),
+            description="Curso",
+            first_status="planned",
+            amount_basis="installment",
+            start_index=1,
+        )
+        db.commit()
+        by_idx = {t.installment_index: t for t in txs}
+
+        with pytest.raises(ValueError, match="parcelas seguintes"):
+            update_transaction(
+                db,
+                user.id,
+                UpdateTransactionInput(
+                    transaction_id=by_idx[1].id,
+                    amount="90.00",
+                ),
+            )
+
+        update_transaction(
+            db,
+            user.id,
+            UpdateTransactionInput(
+                transaction_id=by_idx[2].id,
+                amount="80.00",
+                installment_scope="this",
+            ),
+        )
+        db.refresh(by_idx[1])
+        db.refresh(by_idx[2])
+        db.refresh(by_idx[3])
+        assert by_idx[1].amount_cents == 30000
+        assert by_idx[2].amount_cents == 8000
+        assert by_idx[3].amount_cents == 30000
+
+        update_transaction(
+            db,
+            user.id,
+            UpdateTransactionInput(
+                transaction_id=by_idx[2].id,
+                amount="70.00",
+                description="Curso VIP",
+                installment_scope="subsequent",
+            ),
+        )
+        db.refresh(by_idx[1])
+        db.refresh(by_idx[2])
+        db.refresh(by_idx[3])
+        assert by_idx[1].amount_cents == 30000
+        assert by_idx[2].amount_cents == 7000
+        assert by_idx[3].amount_cents == 7000
+        assert "VIP" in by_idx[2].description
+        assert "VIP" in by_idx[3].description
+        assert "2/3" in by_idx[2].description
+        assert "3/3" in by_idx[3].description
+        assert "VIP" not in by_idx[1].description
+    finally:
+        from app.models import InstallmentPlan
+
+        db.query(Transaction).filter(Transaction.user_id == user.id).delete(
+            synchronize_session=False
+        )
+        db.query(InstallmentPlan).filter(InstallmentPlan.user_id == user.id).delete(
+            synchronize_session=False
+        )
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+def test_parse_installment_scope_answer():
+    from app.services.installments import parse_installment_scope_answer
+
+    assert parse_installment_scope_answer("Só esta parcela") == "this"
+    assert parse_installment_scope_answer("Esta e as seguintes") == "subsequent"
+    assert parse_installment_scope_answer("todas as parcelas seguintes") == "subsequent"
+
+
 def test_rule_parse_update_description_para():
+
     from app.services.tools import try_rule_based_parse
 
     tool = try_rule_based_parse(

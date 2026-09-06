@@ -5,7 +5,7 @@ description: >-
   contas bancárias, limite, fechamento, vencimento, ciclo de fatura, liquidação
   e pagamento. Use ao implementar cartão, fatura, fechamento, vencimento, limite
   disponível, CRUD de cartão ou pagar fatura.
-paths: app/services/credit_cards.py, app/services/finance.py, app/services/card_wizard.py, app/models.py, app/services/pay_invoice_slots.py, app/templates/accounts.html, app/routers/pages.py, tests/test_credit_cards.py, tests/test_card_wizard.py, tests/test_update_card.py
+paths: app/services/credit_cards.py, app/services/finance.py, app/services/card_wizard.py, app/models.py, app/services/pay_invoice_slots.py, app/templates/accounts.html, app/templates/card_form.html, app/templates/card_edit.html, app/routers/pages.py, tests/test_credit_cards.py, tests/test_card_wizard.py, tests/test_update_card.py
 ---
 
 # AssistFin — Cartões e faturas
@@ -23,7 +23,8 @@ paths: app/services/credit_cards.py, app/services/finance.py, app/services/card_
 
 | Arquivo | Papel |
 |---------|--------|
-| `app/services/credit_cards.py` | Ciclo, `ensure_invoices`, `pay_invoice`, limite, `format_credit_card` |
+| `app/services/credit_cards.py` | Ciclo, `ensure_invoices`, `pay_invoice`, limite, `cards_with_nested_invoices`, `list_invoice_movements` |
+| Templates | `accounts.html` (hierarquia), `card_form.html`, `card_edit.html` |
 | `app/services/finance.py` | `create_card`, `update_card`, `deactivate_card`, `find_card` |
 | `app/services/card_wizard.py` | Wizard do assistente para cadastro (`create_card`) |
 | Migração `015` | `card_invoices`, `transactions.invoice_id` |
@@ -43,10 +44,11 @@ paths: app/services/credit_cards.py, app/services/finance.py, app/services/card_
 ## UI
 
 - `/` — dashboard com faturas (total a pagar, vencimento, limite)
-- `/accounts` — contas bancárias
-- `/accounts/cards` — mesma página `accounts.html` com `focus_cards=true` (cadastro e faturas)
-- `POST /accounts/cards` — criar cartão
-- `POST /accounts/invoices/{id}/pay` — pagar fatura
+- `/accounts` — contas bancárias (CRUD: `/accounts/new`, `/{id}/edit`)
+- `/accounts/cards` — hierarquia expansível: cartão → faturas → movimentos (`cards_with_nested_invoices`); CRUD em `/accounts/cards/new` e `/{id}/edit`
+- `POST /accounts/cards` — criar cartão; `POST /accounts/cards/{id}` — editar; desativar via delete
+- `POST /accounts/invoices/{id}/pay` — pagar fatura (dentro da fatura expandida)
+- Chat: após compra no cartão, `invoice_context_summary` via `enrich_register_result`
 
 ## Testes
 

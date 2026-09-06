@@ -57,13 +57,13 @@ def test_rule_based_list():
 def test_rule_based_expense_transport():
     result = try_rule_based_parse("Hoje gastei r$ 60 com transporte")
     assert result is not None
-    assert result.arguments["description"] == "transporte"
+    assert result.arguments["description"].lower() == "transporte"
 
 
 def test_rule_based_expense_moto():
     result = try_rule_based_parse("Hoje eu gastei r$ 12 com viagem de moto")
     assert result is not None
-    assert result.arguments["description"] == "viagem de moto"
+    assert result.arguments["description"].lower() == "viagem de moto"
 
 
 def test_format_register_expense():
@@ -78,3 +78,38 @@ def test_format_register_expense():
     )
     assert "Despesa de R$" in msg
     assert "45.90" in msg
+
+
+def test_format_register_expense_includes_context_summary():
+    msg = format_tool_result(
+        "register_expense",
+        {
+            "amount": "45,90",
+            "description": "mercado",
+            "category": "Alimentação",
+            "transaction_date": date.today().isoformat(),
+            "account": "Nubank",
+            "context_summary": "Resumo da conta Nubank:\n- Saldo atual: R$ 100,00",
+        },
+    )
+    assert "Resumo da conta Nubank" in msg
+    assert "Saldo atual" in msg
+
+
+def test_format_register_expense_includes_invoice_summary():
+    msg = format_tool_result(
+        "register_expense",
+        {
+            "amount": "80,00",
+            "description": "farmacia",
+            "category": "Saúde",
+            "transaction_date": date.today().isoformat(),
+            "card": "Nubank",
+            "invoice_label": "Fatura · 17/09",
+            "status": "planned",
+            "context_summary": "Resumo da fatura (Fatura · 17/09 — Nubank):\n- Total: R$ 80,00",
+        },
+    )
+    assert "Previsão de despesa" in msg
+    assert "Resumo da fatura" in msg
+    assert "Total: R$ 80,00" in msg

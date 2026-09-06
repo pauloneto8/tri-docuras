@@ -315,6 +315,13 @@ def process_wizard_message(
 
     if is_cancel(message):
         clear_wizard(session)
+        from app.services.transaction_wizard import (
+            restore_paused_transaction_on_create_cancel,
+        )
+
+        restored = restore_paused_transaction_on_create_cancel(session, kind="card")
+        if restored:
+            return restored
         return AgentResponse(message="Cadastro de cartão cancelado.", clear_wizard=True, source="wizard")
 
     if wants_list_accounts(message):

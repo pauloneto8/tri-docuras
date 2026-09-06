@@ -22,7 +22,6 @@
                                     │
                               ┌─────▼─────┐
                               │ Groq API  │
-                              │ Ollama    │
                               └───────────┘
 ```
 
@@ -34,7 +33,9 @@
 - HTMX para chat do assistente e confirmações sem reload completo
 - Chat: avatares, balões assimétricos, chips/confirmação fora do balão; filtro `chat_md` (`app/chat_format.py`) para `*negrito*` e listas
 - Sidebar: Dashboard, Contas, Cartões, Movimentos, Orçamentos, Admin (root)
-- **Movimentos** (`/transactions`): duas seções — **A realizar** (previstos pendentes) e **Extrato** (realizados); formulário manual alinhado ao wizard (datas conforme status)
+- **CRUD** nas entidades: lista + páginas `/new` e `/{id}/edit` (movimentos, contas, cartões, orçamentos)
+- **Movimentos** (`/transactions`): filtro de período (padrão mês); **A realizar** / **Extrato**; sem formulário lateral
+- **Cartões** (`/accounts/cards`): cartão expansível → faturas → movimentos
 
 ### API / rotas
 
@@ -65,12 +66,13 @@ mensagem do usuário
   → exclusão pendente?
   → _resolve_intent:
        atalhos de regra (realize_planned, pay_invoice, register_expense, register_income)
-       → Groq → Ollama
+       → Groq
        → try_rule_based_parse (fallback)
   → WRITE_TOOLS → confirmação → execute_tool
 ```
 
 - LLM escolhe ferramenta (JSON); Python executa e calcula
+- Após `register_expense` / `register_income` / `realize_planned`, `format_tool_result` anexa resumo de fatura ou conta (`context_summary`)
 - Estado em `session` Starlette (wizards, flags)
 - Histórico em `conversation_messages`
 
@@ -131,23 +133,25 @@ transaction_date → espelho de caixa (= due ou payment)
 | Onde | O que mostra |
 |------|----------------|
 | **A realizar** | `status = planned` e ainda sem realização (`is_realized = false`) |
-| **Extrato** | Somente `status = actual` (inclui realizados de previsto, com rótulo “de previsto”) |
-| **Dashboard** | Previstos do período, pendentes, projeção e tabela **previsto vs realizado** (pares via `source_planned_id`) |
+| **Extrato** | Somente `status = actual` no período (omite `transfer_in` e compras de cartão) |
+| **Filtro** | `period` + `ref_date` (padrão month); mesma lógica do dashboard |
+| **Dashboard** | Previstos do período, pendentes, projeção, **previsto vs realizado**, **por categoria**, faturas |
 
 Previstos já liquidados **não** aparecem na lista de Movimentos (evita duplicata com o lançamento realizado). O par previsto/realizado continua disponível no dashboard.
 
 Consultas da página usam duas chamadas: `ListTransactionsInput(status="planned")` e `ListTransactionsInput(status="actual")`, para que um extrato longo não oculte previsões pendentes.
 
-### Formulário manual em Movimentos
+### Formulário CRUD de movimentos (`/transactions/new`, `/{id}/edit`)
 
 - **Realizado** (padrão): um campo “Data da realização”; competência e vencimento são replicados no backend.
 - **Previsto** (checkbox): competência + vencimento; sem data de pagamento.
-- **Realizar** (ação na linha): data de pagamento obrigatória; valor e descrição opcionais (herdam do previsto); escolha mesma conta ou outra conta.
+- **Realizar** (ação na linha da lista): data de pagamento obrigatória; valor e descrição opcionais; mesma conta ou outra.
 - **Lançamento fixo** (checkbox): frequência diária/semanal/mensal e data de término opcional; cria regra em `recurring_rules` e previstos até o horizonte.
 - **Parcelado** (checkbox, exclusivo com fixo): N parcelas, intervalo, radios **total da compra** / **valor de cada parcela**. O formulário cria da parcela 1; o wizard pergunta `installment_start_index`.
-- **Encerrar série** (previstos com `recurrence_id`): desativa a regra e remove previstos pendentes da série.
-- **Cancelar parcelas** (previstos com `installment_plan_id`): desativa o plano e remove previstos pendentes.
+- **Editar** (`/{id}/edit`): tipo Despesa/Receita alterável; se parcelado com parcelas seguintes, radio de escopo obrigatório.
+- **Encerrar série** / **Cancelar parcelas**: na lista **A realizar**.
 - **Transferência**: sempre realizada; uma data de realização.
+- Lista `/transactions`: filtro de período (padrão mês); extrato omite `transfer_in`.
 
 ### Wizard de transação (slots)
 
@@ -190,6 +194,7 @@ transactions (planned)  --realize_planned-->  transactions (actual)
 - Confirmação (`format_pending_confirmation`): competência, vencimento e realização exibidos separadamente quando há parcelas.
 - Mutuamente exclusivo com `frequency` (fixo). Transferências **não** parcelam no MVP.
 - Unique `(installment_plan_id, installment_index)`.
+- **Editar parcela**: `installment_scope` (`this` \| `subsequent`); UI e `installment_scope_flow.py` perguntam quando há parcelas com índice maior.
 
 ### Multi-lançamentos vs slots de data
 
@@ -232,6 +237,22 @@ pay_invoice  --despesa na conta de débito-->  card_invoices.status = paid
 ### Corrigir transferência
 
 `update_transfer` altera o par `transfer_out`/`transfer_in` (origem, destino, valor, datas). Identifica pelo `transaction_id` ou pelo valor. **Não** usar `update_transaction` (só despesa/receita) nem criar outra transferência.
+
+### Editar despesa/receita e parcelas
+
+`update_transaction` aceita `type` (expense↔income) e, em parcelamentos com parcelas seguintes, `installment_scope`:
+
+| Escopo | Efeito |
+|--------|--------|
+| `this` | Só a parcela editada |
+| `subsequent` | Parcela atual e todas com `installment_index` maior |
+
+Valor, descrição, conta, categoria e tipo podem propagar; datas ficam só na parcela editada. Na UI (`transaction_edit.html`) e no assistente (`installment_scope_flow.py`) a escolha é obrigatória quando há parcelas seguintes.
+
+### Categorias no assistente
+
+- `list_categories`, `create_category` (wizard; lote via `names`; “Vale e Auxílio” = um nome), `update_category`, `delete_category`
+- Nome único por usuário: criar com outro tipo **atualiza** o tipo existente
 
 ### Visual do chat
 

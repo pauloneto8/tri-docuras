@@ -2,7 +2,7 @@ import re
 
 from app.schemas import AgentResponse, CreateAccountInput, ToolCall
 from app.services.agent_suggestions import for_account_wizard_field
-from app.services.intents import wants_account_creation
+from app.services.intents import ACCOUNT_HINTS, wants_account_creation
 from app.services.tools import parse_amount, parse_opening_balance_date
 from app.services.wizard_slots import is_complex_message, is_short_slot_message
 
@@ -26,7 +26,10 @@ ACCOUNT_TYPE_KEYWORDS = {
 NAME_NOISE_RE = re.compile(
     r"\b(corrente|poupança|poupanca|carteira|cartão|cartao|credito|crédito|"
     r"com|saldo|inicial|de|do|da|um|uma|outra|outro|novo|nova|reais?|"
-    r"bancária|bancaria|bancário|bancario|financeira|financeiro)\b",
+    r"bancária|bancaria|bancário|bancario|financeira|financeiro|"
+    r"cadastro|cadastrar|cadastre|cadastra|criar|crie|cria|"
+    r"adicionar|adicione|adiciona|registrar|registre|registra|"
+    r"realize|realizar|fa[cç]a|quero|preciso|por\s+favor)\b",
     re.IGNORECASE,
 )
 
@@ -225,9 +228,8 @@ def extract_institution(message: str) -> str | None:
     return None
 
 
-def detect_account_creation(message: str) -> dict | None:
-    if not wants_account_creation(message):
-        return None
+def extract_account_fields(message: str) -> dict:
+    """Extrai campos de conta de qualquer mensagem (não exige verbo de cadastro)."""
     lower = message.lower().strip()
     data: dict = {}
     account_type = parse_account_type(lower)
@@ -236,14 +238,48 @@ def detect_account_creation(message: str) -> dict | None:
     amount = parse_amount(lower)
     if amount:
         data["opening_balance"] = amount
-    name = extract_account_name(message)
+    balance_date = parse_opening_balance_date(message)
+    if balance_date and amount:
+        data["opening_balance_date"] = balance_date
     institution = extract_institution(message)
     if institution:
         data["institution"] = institution
+    name = extract_account_name(message)
     name = resolve_account_name(name, institution)
     if name:
         data["name"] = name
     return data
+
+
+def detect_account_creation(message: str) -> dict | None:
+    if not wants_account_creation(message):
+        return None
+    data = extract_account_fields(message)
+    return data or {}
+
+
+def _merge_account_fields(wizard: dict, data: dict) -> bool:
+    """Preenche só campos vazios. Retorna True se algo mudou."""
+    changed = False
+    if data.get("name") and not wizard.get("name"):
+        wizard["name"] = data["name"]
+        changed = True
+    if data.get("account_type") and not wizard.get("account_type"):
+        wizard["account_type"] = data["account_type"]
+        changed = True
+    if data.get("institution") and not wizard.get("institution"):
+        wizard["institution"] = data["institution"]
+        wizard["institution_asked"] = True
+        changed = True
+    if data.get("opening_balance") is not None and not wizard.get("opening_balance_asked"):
+        wizard["opening_balance"] = data["opening_balance"]
+        wizard["opening_balance_asked"] = True
+        changed = True
+    if data.get("opening_balance_date") and not wizard.get("opening_balance_date_asked"):
+        wizard["opening_balance_date"] = data["opening_balance_date"]
+        wizard["opening_balance_date_asked"] = True
+        changed = True
+    return changed
 
 
 def _sanitize_wizard_name(wizard: dict) -> None:
@@ -544,6 +580,13 @@ def process_wizard_message(session: dict, message: str) -> AgentResponse | None:
 
     if is_cancel(message):
         clear_wizard(session)
+        from app.services.transaction_wizard import (
+            restore_paused_transaction_on_create_cancel,
+        )
+
+        restored = restore_paused_transaction_on_create_cancel(session, kind="account")
+        if restored:
+            return restored
         return AgentResponse(message="Cadastro de conta cancelado.", clear_wizard=True, source="wizard")
 
     next_field = _next_field(wizard)
@@ -598,12 +641,21 @@ def process_wizard_message(session: dict, message: str) -> AgentResponse | None:
 def begin_account_wizard(
     session: dict, message: str, initial: dict | None = None
 ) -> AgentResponse:
-    extracted = detect_account_creation(message) or {}
-    merged = {**extracted, **(initial or {})}
+    extracted = extract_account_fields(message)
+    initial_clean = {
+        k: v
+        for k, v in (initial or {}).items()
+        if v is not None and str(v).strip() != ""
+    }
+    merged = {**extracted, **initial_clean}
     start_wizard(session, merged)
     wizard = get_wizard(session)
     assert wizard is not None
     _sanitize_wizard_name(wizard)
+    # Apelido sem instituição conhecida → usa o apelido também como instituição
+    if wizard.get("name") and not wizard.get("institution"):
+        wizard["institution"] = wizard["name"]
+        wizard["institution_asked"] = True
     session[WIZARD_KEY] = wizard
 
     next_field = _next_field(wizard)

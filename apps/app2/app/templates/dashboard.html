@@ -83,7 +83,9 @@
 {# 2b. Indicadores por categoria #}
 <section class="mb-8">
   <h2 class="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3">Por categoria</h2>
-  <p class="text-xs text-slate-500 mb-3">{{ summary.period_label }} — realizados (sem cartão)</p>
+  <p class="text-xs text-slate-500 mb-3">
+    {{ summary.period_label }} — previsto × realizado e variação
+  </p>
   <div class="grid md:grid-cols-2 gap-6">
     <div class="rounded-xl bg-slate-900 border border-slate-800 p-5">
       <div class="flex items-center justify-between mb-4">
@@ -91,21 +93,35 @@
         <span class="text-sm font-mono text-rose-400">R$ {{ summary.expense }}</span>
       </div>
       {% if summary.expenses_by_category %}
-      <ul class="space-y-3">
-        {% for item in summary.expenses_by_category %}
-        <li>
-          <div class="flex justify-between text-sm mb-1 gap-2">
-            <span class="truncate">{{ item.category }}</span>
-            <span class="font-mono text-slate-300 shrink-0">R$ {{ item.amount }} <span class="text-slate-500">({{ item.percent }}%)</span></span>
-          </div>
-          <div class="h-2 rounded bg-slate-800 overflow-hidden">
-            <div class="h-full bg-rose-500/80" style="width: {{ [item.percent, 100]|min }}%"></div>
-          </div>
-        </li>
-        {% endfor %}
-      </ul>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-slate-500 border-b border-slate-800">
+            <tr>
+              <th class="text-left py-2 font-medium">Categoria</th>
+              <th class="text-right py-2 font-medium">Previsto</th>
+              <th class="text-right py-2 font-medium">Realizado</th>
+              <th class="text-right py-2 font-medium">Variação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in summary.expenses_by_category %}
+            <tr class="border-b border-slate-800/60">
+              <td class="py-2.5 pr-2 truncate max-w-[8rem]" title="{{ item.category }}">{{ item.category }}</td>
+              <td class="py-2.5 text-right font-mono text-slate-400">R$ {{ item.planned_amount }}</td>
+              <td class="py-2.5 text-right font-mono text-slate-200">R$ {{ item.actual_amount }}</td>
+              <td class="py-2.5 text-right font-mono {% if item.variance_cents == 0 %}text-slate-400{% elif item.favorable %}text-emerald-400{% else %}text-rose-400{% endif %}">
+                {{ item.variance_signed }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="text-xs text-slate-500 mt-3">
+        Variação = realizado − previsto. Em despesas, negativo (verde) = gastou menos que o previsto.
+      </p>
       {% else %}
-      <p class="text-slate-400 text-sm">Nenhuma despesa realizada neste período.</p>
+      <p class="text-slate-400 text-sm">Nenhuma despesa prevista ou realizada neste período.</p>
       {% endif %}
     </div>
     <div class="rounded-xl bg-slate-900 border border-slate-800 p-5">
@@ -114,21 +130,35 @@
         <span class="text-sm font-mono text-emerald-400">R$ {{ summary.income }}</span>
       </div>
       {% if summary.income_by_category %}
-      <ul class="space-y-3">
-        {% for item in summary.income_by_category %}
-        <li>
-          <div class="flex justify-between text-sm mb-1 gap-2">
-            <span class="truncate">{{ item.category }}</span>
-            <span class="font-mono text-slate-300 shrink-0">R$ {{ item.amount }} <span class="text-slate-500">({{ item.percent }}%)</span></span>
-          </div>
-          <div class="h-2 rounded bg-slate-800 overflow-hidden">
-            <div class="h-full bg-emerald-500/80" style="width: {{ [item.percent, 100]|min }}%"></div>
-          </div>
-        </li>
-        {% endfor %}
-      </ul>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="text-slate-500 border-b border-slate-800">
+            <tr>
+              <th class="text-left py-2 font-medium">Categoria</th>
+              <th class="text-right py-2 font-medium">Previsto</th>
+              <th class="text-right py-2 font-medium">Realizado</th>
+              <th class="text-right py-2 font-medium">Variação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in summary.income_by_category %}
+            <tr class="border-b border-slate-800/60">
+              <td class="py-2.5 pr-2 truncate max-w-[8rem]" title="{{ item.category }}">{{ item.category }}</td>
+              <td class="py-2.5 text-right font-mono text-slate-400">R$ {{ item.planned_amount }}</td>
+              <td class="py-2.5 text-right font-mono text-slate-200">R$ {{ item.actual_amount }}</td>
+              <td class="py-2.5 text-right font-mono {% if item.variance_cents == 0 %}text-slate-400{% elif item.favorable %}text-emerald-400{% else %}text-rose-400{% endif %}">
+                {{ item.variance_signed }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="text-xs text-slate-500 mt-3">
+        Variação = realizado − previsto. Em receitas, positivo (verde) = recebeu mais que o previsto.
+      </p>
       {% else %}
-      <p class="text-slate-400 text-sm">Nenhuma receita realizada neste período.</p>
+      <p class="text-slate-400 text-sm">Nenhuma receita prevista ou realizada neste período.</p>
       {% endif %}
     </div>
   </div>

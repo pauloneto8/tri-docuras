@@ -16,8 +16,7 @@ Documentação: [README.md](../../README.md), [docs/OPERATIONS.md](../../docs/OP
 Internet :80
   └── hosting-nginx (proxy)
         └── app2:8000 (AssistFin, rede proxy)
-              ├── app2-db (rede app2_internal)
-              └── ollama (só app2_internal — não exposto)
+              └── app2-db (rede app2_internal)
 ```
 
 - Código: `/opt/hosting/apps/app2`
@@ -88,7 +87,8 @@ Porta 443 pode estar despublicada até certificado válido existir.
 | Sintoma | Verificar |
 |---------|-----------|
 | 502 Bad Gateway | `docker compose ps app2` — container rodando? |
-| Chat trava / timeout | timeout `/agent/` no nginx (120s); Groq/Ollama |
+| Chat trava / timeout | timeout `/agent/` no nginx (120s); Groq |
+
 | Redirect loop login | `TRUSTED_HOSTS` inclui domínio real |
 | 429 no login | rate-limit nginx `auth_limit` — esperar 1 min |
 | Mudança não aparece | rebuild `app2`, não só reload nginx |
@@ -101,7 +101,7 @@ docker compose exec nginx nginx -t
 ## Checklist de deploy seguro
 
 - [ ] `APP2_SECRET_KEY` definida (não default)
-- [ ] Ollama só em `app2_internal`
+- [ ] `APP2_GROQ_API_KEY` configurada
 - [ ] App2 roda como `appuser` (Dockerfile)
 - [ ] Testes passando no container
 - [ ] Nginx com `server_tokens off` e `client_max_body_size 1m`

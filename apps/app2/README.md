@@ -1,6 +1,6 @@
 # AssistFin
 
-Aplicação web multiusuário de **finanças pessoais** com assistente de IA (Groq + Ollama), deploy em Docker na infraestrutura `/opt/hosting`.
+Aplicação web multiusuário de **finanças pessoais** com assistente de IA (Groq), deploy em Docker na infraestrutura `/opt/hosting`.
 
 ## Stack
 
@@ -8,7 +8,7 @@ Aplicação web multiusuário de **finanças pessoais** com assistente de IA (Gr
 |--------|------------|
 | Backend | FastAPI, SQLAlchemy 2, Alembic, Pydantic |
 | Banco | PostgreSQL 16 (`hosting-app2-db`) |
-| IA | Groq (prioridade) + Ollama `qwen3:1.7b` (fallback) |
+| IA | Groq (`openai/gpt-oss-120b` por padrão) |
 | UI | Jinja2, HTMX, Tailwind CDN |
 | Auth | Sessão assinada (cookie), bcrypt |
 | Proxy | Nginx (`hosting-nginx`) |
@@ -19,8 +19,7 @@ Aplicação web multiusuário de **finanças pessoais** com assistente de IA (Gr
 Internet :80/:443
   └── hosting-nginx (rede proxy)
         └── hosting-app2 :8000
-              ├── hosting-app2-db (rede app2_internal)
-              └── hosting-ollama (rede app2_internal — não exposto)
+              └── hosting-app2-db (rede app2_internal)
 ```
 
 - Código: `/opt/hosting/apps/app2`
@@ -37,7 +36,7 @@ Internet :80/:443
 - **Movimentos** — despesa (`expense`), receita (`income`), **transferência** (par `transfer_out` + `transfer_in`); tela em duas seções (**A realizar** / **Extrato**); cada movimento referencia **conta** e/ou **cartão**
 - **Previsto vs realizado** — `status` `planned` ou `actual`; realização via `realize_planned` (UI e wizard no assistente)
 - **Lançamentos fixos** — recorrência diária, semanal ou mensal; gera previstos automaticamente (~3 meses à frente); encerrar série remove pendentes
-- **Lançamentos parcelados** — parcelas mensais/semanais/quinzenais; valor total ou por parcela; parcela inicial parcial; datas de competência/vencimento no wizard; cancelar plano remove previstos pendentes
+- **Lançamentos parcelados** — parcelas mensais/semanais/quinzenais; valor total ou por parcela; parcela inicial parcial; datas de competência/vencimento no wizard; ao editar, pergunta se atualiza só a parcela ou as seguintes; cancelar plano remove previstos pendentes
 - **Cartões de crédito** — faturas por ciclo; compras no cartão não alteram saldo bancário; pagamento da fatura como despesa na conta de débito (sem duplicar despesa da compra)
 - **Datas por movimento** — competência (`competence_date`), vencimento (`due_date`), pagamento/realização (`payment_date`); `transaction_date` espelha a data de caixa
 - **Categorias** — padrão no seed + cadastro manual; nomes normalizados (primeira letra maiúscula, acentos)
@@ -45,10 +44,11 @@ Internet :80/:443
 - **Dashboard** — visão diária, semanal e mensal com:
   - Receitas e despesas do período (somente `income` / `expense`)
   - Resultado do período (receitas − despesas)
+  - **Por categoria** — despesas e receitas do período (valor, % do total, barra)
   - Saldo anterior e resultado final (saldos reais das contas)
   - Saldos por conta ao fim do período selecionado
   - **Faturas dos cartões** — total a pagar, vencimento no período, limite disponível (compras no cartão não entram no saldo bancário)
-
+  - Orçamentos do mês (quando definidos)
 ### Regras de transferência
 
 Transferências **não** entram em receitas nem despesas — são movimentos entre contas.
@@ -79,10 +79,14 @@ No assistente, ao lançar movimento o wizard pergunta **realizado ou previsto**,
 - **Fixo** → frequência (diária/semanal/mensal) e término opcional; gera série de previstos.
 - **Parcelado** → N parcelas, intervalo, parcela inicial, competência e vencimento da parcela atual; gera só da parcela informada até N.
 
-Na página **Movimentos** (`/transactions`), o formulário manual segue a mesma lógica:
-- **A realizar** — previstos pendentes (vencimento; selo `Fixo · …` quando recorrente; selo `3/12 · mensal` quando parcelado; ações **Realizar**, **Encerrar série** e **Cancelar parcelas**).
-- **Extrato** — somente realizados (data de pagamento; “de previsto” quando aplicável).
-- Previstos já liquidados não aparecem na lista (o par previsto/realizado fica no dashboard).
+Na página **Movimentos** (`/transactions`):
+- Filtro de período (**diária / semanal / mensal**; padrão = **mês atual**; navegação ← / Hoje / →)
+- **A realizar** — previstos pendentes do período (vencimento; selo `Fixo · …` / `3/12 · mensal`; **Realizar**, **Editar**, **Excluir**, **Encerrar série**, **Cancelar parcelas**)
+- **Extrato** — realizados do período (sem `transfer_in` duplicado; **Editar** / **Excluir**)
+- **Novo lançamento** → `/transactions/new` (página CRUD; não há formulário lateral)
+- Previstos já liquidados não aparecem na lista (o par previsto/realizado fica no dashboard)
+
+**Contas / Cartões / Orçamentos** também seguem CRUD em páginas dedicadas (`/accounts/new`, `/accounts/{id}/edit`, `/accounts/cards/new`, `/budgets/new`, etc.). Em **Cartões**, a lista é hierárquica: expandir cartão → faturas → movimentos; pagar fatura fica dentro da fatura expandida.
 
 **Realizar previsto:** na UI, escolha mesma conta ou outra conta; no assistente, wizard pergunta pagamento → mesma conta? → conta (se diferente).
 
@@ -113,9 +117,10 @@ Motor: `app/services/recurrence.py` (`ensure_recurring_horizon`, `deactivate_rec
 | Demais parcelas geradas | Sempre `planned` |
 | Inferência de datas | `ontem`/`hoje` na mensagem **não** substituem perguntas do parcelamento |
 | Cancelar parcelas | Desativa o plano; remove previstos pendentes (realizados permanecem) |
+| Editar parcela | Se há parcelas seguintes: perguntar só esta (`this`) ou esta e as seguintes (`subsequent`); valor/descrição/conta/categoria/tipo podem propagar; datas só na editada |
 | Transferências / fixo | Não suportam parcelamento |
 
-Motor: `app/services/installments.py` (`split_cents`, `repeat_cents`, `create_installment_plan`, `cancel_installment_plan`).
+Motor: `app/services/installments.py` (`split_cents`, `repeat_cents`, `create_installment_plan`, `cancel_installment_plan`, escopo em `list_installment_update_targets`).
 
 `list_transactions` aceita filtro `status` (`actual` | `planned` | `all`).
 
@@ -128,9 +133,10 @@ No wizard, datas isoladas (`10/08/2026`, `hoje`, etc.) preenchem o slot em andam
 - Markdown leve nas respostas (`*negrito*`, listas `- `) via filtro Jinja `chat_md` (HTML escapado)
 - **Chips clicáveis** quando falta resposta do usuário; welcome com atalhos
 - Confirmação obrigatória para ações de escrita
+- Após registrar despesa/receita (ou realizar previsto), o chat mostra **resumo da fatura** (se cartão) ou **resumo da conta** (se bancária)
 - Cancelar limpa estado no servidor (wizards, exclusões pendentes)
 - Correção ortográfica leve em descrições e nomes de categoria
-- Intenção: atalhos de regra para despesa/receita/realizar previsto/pagar fatura; demais pedidos via Groq, com Ollama e regras como fallback
+- Intenção: atalhos de regra para despesa/receita/realizar previsto/pagar fatura/listar e cadastrar categoria; demais pedidos via Groq, com regras como fallback se a API falhar
 
 ### Multiusuário e acesso
 
@@ -146,11 +152,16 @@ No wizard, datas isoladas (`10/08/2026`, `hoje`, etc.) preenchem o slot em andam
 |------|-----------|
 | `/login`, `/register` | Autenticação |
 | `/onboarding` | Primeira conta (apelido + saldo inicial + data) |
-| `/` | Dashboard com visão por período |
-| `/accounts` | Contas bancárias e saldos atuais |
-| `/accounts/cards` | Cartões de crédito (cadastro, faturas, pagar fatura) |
-| `/transactions` | Movimentos: **A realizar**, **Extrato**, formulário manual e encerrar série |
-| `/budgets` | Orçamentos |
+| `/` | Dashboard com visão por período (+ categorias, faturas) |
+| `/accounts` | Contas bancárias (lista CRUD) |
+| `/accounts/new`, `/accounts/{id}/edit` | Criar / editar conta |
+| `/accounts/cards` | Cartões (lista hierárquica: cartão → faturas → movimentos) |
+| `/accounts/cards/new`, `/accounts/cards/{id}/edit` | Criar / editar cartão |
+| `/accounts/invoices/{id}/pay` | Pagar fatura |
+| `/transactions` | Movimentos filtrados por período (padrão: mês) |
+| `/transactions/new`, `/transactions/{id}/edit` | Criar / editar lançamento |
+| `/budgets` | Orçamentos (filtro mês/ano) |
+| `/budgets/new`, `/budgets/{id}/edit` | Criar / editar orçamento |
 | `/admin` | Aprovação de usuários (root) |
 | `/agent/chat` | Chat HTMX do assistente |
 | `/api/health` | Health check (público) |
@@ -164,7 +175,7 @@ No wizard, datas isoladas (`10/08/2026`, `hoje`, etc.) preenchem o slot em andam
 | `register_transfer` | Transferência entre contas |
 | `update_transfer` | Corrigir transferência existente (origem, destino, valor ou data — **não** usar `update_transaction`) |
 | `realize_planned` | Converter previsão em realizado (wizard: pagamento, mesma/outra conta) |
-| `update_transaction` | Editar despesa/receita existente |
+| `update_transaction` | Editar despesa/receita (`type?`, `installment_scope?` this\|subsequent se houver parcelas seguintes) |
 | `delete_transaction` | Excluir (par de transferência junto) |
 | `update_account` | Editar conta bancária (saldo inicial, data, apelido…) |
 | `create_card` | Cadastrar cartão (wizard: apelido, fechamento, vencimento, conta de liquidação…) |
@@ -173,10 +184,11 @@ No wizard, datas isoladas (`10/08/2026`, `hoje`, etc.) preenchem o slot em andam
 | `list_invoices` | Listar faturas de cartão |
 | `pay_invoice` | Pagar fatura (despesa na conta de débito) |
 | `list_transactions` | Últimos movimentos (`limit`, `type`, `status`) |
-| `list_accounts` / `list_categories` | Listar cadastros (contas **e** cartões em `list_accounts`) |
+| `list_accounts` / `list_categories` | Listar cadastros (contas **e** cartões em `list_accounts`; `list_categories` aceita `type?`) |
 | `get_summary` | Resumo financeiro |
 | `get_budget_status` | Status dos orçamentos |
-| `create_account` / `create_category` | Cadastros via wizard |
+| `create_account` / `create_category` | Cadastros via wizard (`create_category` também aceita `names` em lote; nome com “e” sem vírgula = um nome) |
+| `update_category` / `delete_category` | Alterar ou excluir categoria (confirmação; exclusão bloqueia se houver lançamentos/orçamentos) |
 | `categorize` | Sugestão de categoria por palavras-chave |
 | `unsupported_action` | Pedido fora do escopo |
 
@@ -187,10 +199,9 @@ No wizard, datas isoladas (`10/08/2026`, `hoje`, etc.) preenchem o slot em andam
 | `APP2_SECRET_KEY` | Chave da sessão (**obrigatória** em produção) |
 | `APP2_ALLOW_REGISTRATION` | `true`/`false` — registro público |
 | `APP2_ROOT_EMAILS` | E-mails admin (vírgula) |
-| `APP2_GROQ_API_KEY` | API Groq (intenção ambígua) |
+| `APP2_GROQ_API_KEY` | API Groq (**obrigatória** para intenção via LLM) |
 | `APP2_GROQ_MODEL` | Modelo Groq (default `openai/gpt-oss-120b`) |
 | `APP2_DOMAIN` | Domínio no Nginx + `TRUSTED_HOSTS` |
-| `OLLAMA_URL` / `OLLAMA_MODEL` | LLM local de fallback |
 
 ## Segurança
 
@@ -200,7 +211,6 @@ No wizard, datas isoladas (`10/08/2026`, `hoje`, etc.) preenchem o slot em andam
 - **TrustedHostMiddleware** — hosts permitidos via `TRUSTED_HOSTS`
 - Headers: CSP, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`
 - OpenAPI/Swagger **desabilitados** em produção
-- Ollama apenas na rede interna Docker
 - Senhas com bcrypt; comparação timing-safe no CSRF
 - Health check mínimo (sem vazar dados internos)
 
@@ -225,7 +235,7 @@ Operações (reset de dados, migrações, debug): [docs/OPERATIONS.md](docs/OPER
 
 ## Testes
 
-Suite completa no container (**246** testes):
+Suite completa no container (**306** testes):
 
 ```bash
 docker compose exec -T app2 python -m pytest -q
@@ -276,7 +286,7 @@ app/
   schemas.py        # Pydantic, ToolCall, formatação BRL
   routers/          # pages (HTML), api (JSON), auth
   services/         # finance, recurrence, installments, credit_cards, wizards, tools, intents
-  agent/            # runner, llm, groq, ollama, prompt
+  agent/            # runner, llm, groq, prompt
   security/         # csrf, rate_limit
   templates/        # Jinja2 + partials HTMX (agent_*.html)
 tests/

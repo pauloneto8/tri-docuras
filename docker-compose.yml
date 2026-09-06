@@ -84,8 +84,6 @@ services:
       DB_USER: ${APP2_DB_USER}
       DB_PASSWORD: ${APP2_DB_PASSWORD}
       DB_NAME: ${APP2_DB_NAME}
-      OLLAMA_URL: http://ollama:11434
-      OLLAMA_MODEL: qwen3:1.7b
       GROQ_API_KEY: ${APP2_GROQ_API_KEY:-}
       GROQ_MODEL: ${APP2_GROQ_MODEL:-openai/gpt-oss-120b}
       SECRET_KEY: ${APP2_SECRET_KEY}
@@ -100,19 +98,6 @@ services:
     depends_on:
       app2-db:
         condition: service_healthy
-      ollama:
-        condition: service_started
-    restart: unless-stopped
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: hosting-ollama
-    environment:
-      OLLAMA_KEEP_ALIVE: 24h
-    volumes:
-      - ollama_models:/root/.ollama
-    networks:
-      - app2_internal
     restart: unless-stopped
 
   app2-db:
@@ -160,5 +145,3 @@ volumes:
     name: app1_db_data
   app2_db_data:
     name: app2_db_data
-  ollama_models:
-    name: ollama_models

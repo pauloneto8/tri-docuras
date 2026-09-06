@@ -408,15 +408,112 @@ def test_summary_category_breakdown():
 
         expenses = summary["expenses_by_category"]
         assert [e["category"] for e in expenses] == ["Alimentação", "Transporte"]
+        assert expenses[0]["actual_cents"] == 10000
+        assert expenses[0]["planned_cents"] == 0
+        assert expenses[0]["variance_cents"] == 10000
+        assert expenses[0]["favorable"] is False  # despesa acima do previsto
         assert expenses[0]["amount_cents"] == 10000
         assert expenses[0]["percent"] == 66.7
-        assert expenses[1]["amount_cents"] == 5000
+        assert expenses[1]["actual_cents"] == 5000
         assert expenses[1]["percent"] == 33.3
 
         income = summary["income_by_category"]
         assert len(income) == 1
         assert income[0]["category"] == "Salário"
-        assert income[0]["amount_cents"] == 20000
+        assert income[0]["actual_cents"] == 20000
+        assert income[0]["planned_cents"] == 0
+        assert income[0]["variance_cents"] == 20000
+        assert income[0]["favorable"] is True  # receita acima do previsto
         assert income[0]["percent"] == 100.0
+    finally:
+        _cleanup(db, user)
+
+
+def test_summary_category_plan_vs_actual_variance():
+    engine = create_engine(settings.database_url)
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"cat_var_{suffix}@test.com",
+        password="pass",
+        name="Cat Var",
+        is_active=True,
+    )
+    try:
+        _setup(db, user)
+        account = _create_account(db, user.id, f"Conta_{suffix}", opening_balance="1000")
+        ref = date(2026, 9, 15)
+        finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="200",
+                description="Mercado previsto",
+                account_name=account["name"],
+                category_name="Alimentação",
+                status="planned",
+                competence_date=date(2026, 9, 1),
+                due_date=date(2026, 9, 10),
+                transaction_date=date(2026, 9, 10),
+            ),
+        )
+        finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="150",
+                description="Mercado realizado",
+                account_name=account["name"],
+                category_name="Alimentação",
+                transaction_date=date(2026, 9, 8),
+            ),
+        )
+        finance.register_income(
+            db,
+            user.id,
+            RegisterIncomeInput(
+                amount="3000",
+                description="Salário previsto",
+                account_name=account["name"],
+                category_name="Salário",
+                status="planned",
+                competence_date=date(2026, 9, 1),
+                due_date=date(2026, 9, 5),
+                transaction_date=date(2026, 9, 5),
+            ),
+        )
+        finance.register_income(
+            db,
+            user.id,
+            RegisterIncomeInput(
+                amount="2800",
+                description="Salário recebido",
+                account_name=account["name"],
+                category_name="Salário",
+                transaction_date=date(2026, 9, 5),
+            ),
+        )
+
+        summary = finance.get_summary(
+            db, user.id, SummaryInput(period="month", ref_date=ref)
+        )
+        alimentacao = next(
+            e for e in summary["expenses_by_category"] if e["category"] == "Alimentação"
+        )
+        assert alimentacao["planned_cents"] == 20000
+        assert alimentacao["actual_cents"] == 15000
+        assert alimentacao["variance_cents"] == -5000
+        assert alimentacao["favorable"] is True
+        assert alimentacao["variance_signed"].startswith("-")
+
+        salario = next(
+            e for e in summary["income_by_category"] if e["category"] == "Salário"
+        )
+        assert salario["planned_cents"] == 300000
+        assert salario["actual_cents"] == 280000
+        assert salario["variance_cents"] == -20000
+        assert salario["favorable"] is False
     finally:
         _cleanup(db, user)

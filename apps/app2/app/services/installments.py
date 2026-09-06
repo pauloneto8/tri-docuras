@@ -7,7 +7,7 @@ import re
 from datetime import date, timedelta
 from typing import Literal
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models import InstallmentPlan, Transaction, CreditCard
@@ -38,6 +38,18 @@ def parse_installment_interval(value: str | None) -> InstallmentInterval | None:
         "quinzena": "biweekly",
     }
     return mapping.get(normalized)  # type: ignore[return-value]
+
+
+def is_installment_count_span(text: str, start: int, end: int) -> bool:
+    """True when text[start:end] is N in 'Nx', 'N vezes' or 'N parcelas' (not money)."""
+    if start < 0 or end > len(text) or start >= end:
+        return False
+    after = text[end:]
+    if re.match(r"\s*x\b", after, flags=re.IGNORECASE):
+        return True
+    if re.match(r"\s*(?:vezes|parcelas?)\b", after, flags=re.IGNORECASE):
+        return True
+    return False
 
 
 def parse_installment_count(message: str) -> int | None:
@@ -253,3 +265,105 @@ def cancel_installment_plan(db: Session, user_id: int, plan_id: int) -> None:
         )
     )
     db.commit()
+
+
+def installment_base_description(
+    description: str, index: int | None = None, count: int | None = None
+) -> str:
+    """Remove sufixo 'k/N' da descrição de parcela."""
+    text = (description or "").strip()
+    if not text:
+        return text
+    if index and count:
+        suffix = f" {index}/{count}"
+        if text.endswith(suffix):
+            return text[: -len(suffix)].strip()
+    return re.sub(r"\s+\d+\s*/\s*\d+\s*$", "", text).strip() or text
+
+
+def count_subsequent_installments(
+    db: Session, user_id: int, tx: Transaction
+) -> int:
+    if not tx.installment_plan_id or not tx.installment_index:
+        return 0
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(Transaction)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.installment_plan_id == tx.installment_plan_id,
+                Transaction.installment_index > tx.installment_index,
+            )
+        )
+        or 0
+    )
+
+
+def list_installment_update_targets(
+    db: Session,
+    user_id: int,
+    tx: Transaction,
+    scope: str,
+) -> list[Transaction]:
+    """Retorna parcelas afetadas por uma edição.
+
+    scope=this → só a atual
+    scope=subsequent → atual e todas com índice maior
+    """
+    if not tx.installment_plan_id or not tx.installment_index:
+        return [tx]
+    if scope == "this":
+        return [tx]
+    if scope != "subsequent":
+        raise ValueError("Escopo de parcelas inválido. Use 'this' ou 'subsequent'.")
+    return list(
+        db.scalars(
+            select(Transaction)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.installment_plan_id == tx.installment_plan_id,
+                Transaction.installment_index >= tx.installment_index,
+            )
+            .order_by(Transaction.installment_index.asc())
+        ).all()
+    )
+
+
+def parse_installment_scope_answer(message: str) -> str | None:
+    lower = (message or "").strip().lower()
+    if not lower:
+        return None
+    if any(
+        p in lower
+        for p in (
+            "só esta",
+            "so esta",
+            "somente esta",
+            "apenas esta",
+            "somente a parcela",
+            "só a parcela",
+            "so a parcela",
+            "esta parcela",
+            "apenas a parcela",
+        )
+    ) and "seguin" not in lower and "demais" not in lower and "todas" not in lower:
+        return "this"
+    if lower in {"this", "esta", "só esta parcela", "so esta parcela", "apenas esta parcela"}:
+        return "this"
+    if any(
+        p in lower
+        for p in (
+            "seguin",
+            "demais",
+            "todas as parcela",
+            "esta e as",
+            "esta e demais",
+            "restantes",
+            "subsequent",
+        )
+    ):
+        return "subsequent"
+    if lower in {"subsequent", "seguintes"}:
+        return "subsequent"
+    return None

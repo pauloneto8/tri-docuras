@@ -1,7 +1,6 @@
 import httpx
 
 from app.agent.groq import call_groq, groq_configured
-from app.agent.ollama import call_ollama, ensure_model_available
 from app.schemas import ToolCall
 
 
@@ -15,51 +14,28 @@ def _build_user_prompt(user_message: str, context: str | None) -> str:
 
 
 async def call_llm(user_message: str) -> tuple[ToolCall | None, str]:
-    """Tenta Ollama local; em falha, usa Groq como fallback."""
-    try:
-        tool_call = await call_ollama(user_message)
-        if tool_call:
-            return tool_call, "ollama"
-    except (httpx.HTTPError, ValueError, TypeError):
-        pass
-
-    if await groq_configured():
-        try:
-            tool_call = await call_groq(user_message)
-            if tool_call:
-                return tool_call, "groq"
-        except (httpx.HTTPError, ValueError, TypeError):
-            pass
-
-    return None, "ollama"
+    """Chama Groq para interpretar a mensagem."""
+    return await call_intent_llm(user_message)
 
 
 async def call_intent_llm(
     user_message: str, *, context: str | None = None
 ) -> tuple[ToolCall | None, str]:
-    """Interpreta intencao: Groq primeiro, Ollama como fallback."""
+    """Interpreta intenção via Groq apenas."""
     prompt = _build_user_prompt(user_message, context)
 
-    if await groq_configured():
-        try:
-            tool_call = await call_groq(prompt)
-            if tool_call:
-                return tool_call, "groq"
-        except (httpx.HTTPError, ValueError, TypeError):
-            pass
+    if not await groq_configured():
+        return None, "groq"
 
     try:
-        tool_call = await call_ollama(prompt)
+        tool_call = await call_groq(prompt)
         if tool_call:
-            return tool_call, "ollama"
+            return tool_call, "groq"
     except (httpx.HTTPError, ValueError, TypeError):
         pass
 
-    source = "groq" if await groq_configured() else "ollama"
-    return None, source
+    return None, "groq"
 
 
 async def llm_available() -> bool:
-    ollama_ok = await ensure_model_available()
-    groq_ok = await groq_configured()
-    return ollama_ok or groq_ok
+    return await groq_configured()

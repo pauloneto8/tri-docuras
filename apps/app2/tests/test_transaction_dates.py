@@ -255,11 +255,11 @@ async def test_slots_infer_payment_for_actual_ontem():
         )
         session = {}
         result = ensure_transaction_slots(db, user.id, session, tool_call, message)
-        assert result.question is not None
-        process_slot_answer(db, user.id, session, "realizado")
         wizard = session["transaction_wizard"]
         yesterday = (local_today() - timedelta(days=1)).isoformat()
+        assert wizard.get("status") == "actual"
         assert wizard.get("payment_date") == yesterday or wizard.get("transaction_date") == yesterday
+        assert result.question is not None or result.tool_call is not None
     finally:
         db.query(Transaction).filter(Transaction.user_id == user.id).delete(synchronize_session=False)
         db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)

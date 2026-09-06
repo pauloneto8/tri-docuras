@@ -679,6 +679,7 @@ def list_invoices(
     *,
     card_name: str | None = None,
     account_name: str | None = None,
+    card_id: int | None = None,
     limit: int = 12,
 ) -> list[dict]:
     from app.services.finance import resolve_card_for_transaction
@@ -691,7 +692,9 @@ def list_invoices(
         .order_by(CardInvoice.due_date.desc())
         .limit(limit)
     )
-    if name and name.strip():
+    if card_id is not None:
+        stmt = stmt.where(CardInvoice.card_id == card_id)
+    elif name and name.strip():
         card = resolve_card_for_transaction(db, user_id, name.strip())
         stmt = stmt.where(CardInvoice.card_id == card.id)
 
@@ -709,6 +712,50 @@ def list_invoices(
                     item["settlement_account_name"] = settlement.name
         results.append(item)
     return results
+
+
+def list_invoice_movements(db: Session, user_id: int, invoice_id: int) -> list[dict]:
+    from app.services.finance import format_transaction
+    from sqlalchemy.orm import joinedload
+
+    rows = db.scalars(
+        select(Transaction)
+        .options(
+            joinedload(Transaction.account),
+            joinedload(Transaction.category),
+            joinedload(Transaction.card),
+        )
+        .where(
+            Transaction.user_id == user_id,
+            Transaction.invoice_id == invoice_id,
+            Transaction.type == "expense",
+        )
+        .order_by(Transaction.transaction_date.desc(), Transaction.id.desc())
+    ).unique().all()
+    return [format_transaction(tx) for tx in rows]
+
+
+def cards_with_nested_invoices(
+    db: Session,
+    user_id: int,
+    *,
+    invoices_per_card: int = 12,
+) -> list[dict]:
+    """Cartões com faturas e movimentos aninhados para a UI expansível."""
+    cards = list_credit_cards(db, user_id)
+    for card in cards:
+        invoices = list_invoices(
+            db, user_id, card_id=card["id"], limit=invoices_per_card
+        )
+        for inv in invoices:
+            movements = list_invoice_movements(db, user_id, inv["id"])
+            inv["movements"] = movements
+            inv["movements_count"] = len(movements)
+        card["invoices"] = invoices
+        card["invoices_count"] = len(invoices)
+        unpaid = [i for i in invoices if i["status"] != "paid" and i["total_cents"] > 0]
+        card["unpaid_invoices_count"] = len(unpaid)
+    return cards
 
 
 def pay_invoice(

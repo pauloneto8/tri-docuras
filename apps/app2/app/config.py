@@ -9,8 +9,6 @@ class Settings(BaseSettings):
 
     app_name: str = "assistfin"
     database_url: str = "postgresql://app2:app2@app2-db:5432/app2"
-    ollama_url: str = "http://ollama:11434"
-    ollama_model: str = "qwen3:1.7b"
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
     port: int = 8000

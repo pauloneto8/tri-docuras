@@ -13,6 +13,9 @@
 | "resumo do mês" no wizard tx | escape + summary | `test_runner_wizard_escape.py` |
 | Cancelar no meio do wizard | estado limpo | `test_agent_cancel.py` |
 | "criar categoria consumo" | nome "Consumo" | `test_category_wizard.py` |
+| "Cadastre a categoria Vale e Auxílio" | um nome (não divide no “e”) | `test_category_wizard.py` |
+| "Cadastre as categorias: A, B e C" | lote `names` | `test_category_wizard.py` |
+| Editar parcela 2/12 (valor) | pergunta this/subsequent | `test_update_transaction.py` |
 | "despesa" → "previsto" | pergunta competência | `test_transaction_wizard.py` |
 | "despesa" → "realizado" | pergunta data da realização | `test_transaction_wizard.py` |
 | previsto: competência + vencimento | `competence_date` + `due_date` | `test_transaction_slots.py` |
