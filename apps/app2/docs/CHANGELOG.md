@@ -5,6 +5,8 @@ Registro das principais evoluções do projeto (App 2).
 ## Unreleased
 
 - **OFX cartão** — importação com revisão em `/accounts/cards/{id}/ofx`: cria compras, concilia por FITID/valor/data/descrição e trata créditos como pagar/vincular fatura; staging `ofx_import_*` + `transactions.ofx_fitid`; docs em ARCHITECTURE/OPERATIONS/SECURITY e skill `assistfin-credit-cards`
+- **OFX conta** — importação bancária em `/accounts/{id}/ofx` (débito=despesa, crédito=receita, status `actual`); migração `019` (`account_id` no lote)
+- **CSV** — mesmo fluxo de revisão de cartão/conta; parser analisa o arquivo “como está” (detecta delimitador, preâmbulo e colunas de data/valor/descrição sem exigir nomes fixos) em `statement_parse.py`
 - **OFX revisão** — nenhum lançamento é ignorado sem confirmação; cada movimento exige escolha de fatura de vínculo; categoria memorizada por descrição OFX
 - **Excluir fatura** — botão na UI de cartões; remove fatura e movimentos do cartão ligados; pagamento na conta de liquidação (se pago) é mantido
 - **Admin** — backup e restauração do PostgreSQL em `/admin` (criar, baixar, restaurar com confirmação `RESTAURAR`, excluir); dumps em volume `app2_backups`; cliente `postgresql-client` no container

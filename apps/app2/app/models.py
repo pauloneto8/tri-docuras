@@ -329,8 +329,11 @@ class OfxImportBatch(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    card_id: Mapped[int] = mapped_column(
-        ForeignKey("credit_cards.id", ondelete="CASCADE"), nullable=False, index=True
+    card_id: Mapped[int | None] = mapped_column(
+        ForeignKey("credit_cards.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="CASCADE"), nullable=True, index=True
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
@@ -339,7 +342,8 @@ class OfxImportBatch(Base):
     )
 
     user: Mapped["User"] = relationship()
-    card: Mapped["CreditCard"] = relationship()
+    card: Mapped["CreditCard | None"] = relationship()
+    account: Mapped["Account | None"] = relationship()
     lines: Mapped[list["OfxImportLine"]] = relationship(
         back_populates="batch",
         cascade="all, delete-orphan",

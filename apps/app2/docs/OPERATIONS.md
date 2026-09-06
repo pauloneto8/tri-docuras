@@ -36,7 +36,7 @@ Na tela `/admin` (usuário root):
 
 1. **Criar backup agora** — gera `assistfin_YYYYMMDD_HHMMSS.dump` (formato custom `pg_dump -Fc`)
 2. **Baixar** / **Excluir** arquivos listados
-3. **Restaurar** — digite exatamente `RESTAURAR` e confirme. O serviço encerra outras conexões, recria o schema `public` e aplica o dump com `pg_restore` (sem `--single-transaction`, que falhava em silêncio com cliente 17 × servidor 16).
+3. **Restaurar** — digite exatamente `RESTAURAR` e confirme. O serviço encerra outras conexões, recria o schema `public`, aplica o dump com `pg_restore` e em seguida roda `alembic upgrade head` (para dumps antigos ganharem tabelas novas, ex. OFX).
 
 Arquivos ficam no volume Docker `app2_backups` (`/app/data/backups` no container). Mantém os últimos 20 dumps.
 
@@ -51,7 +51,7 @@ docker compose exec -T app2-db pg_dump -U app2 -d app2 -Fc -f /tmp/manual.dump
 
 Em `/accounts/cards`, use **Importar OFX** no cartão:
 
-1. Envie o arquivo `.ofx` (ou `.qfx`) do cartão — limite na app **5 MB** (respeite também `client_max_body_size` do Nginx)
+1. Envie o arquivo `.ofx` / `.qfx` / `.csv` do cartão — limite na app **5 MB** (respeite também `client_max_body_size` do Nginx)
 2. Revise cada linha:
    - **Criar** compra prevista no cartão
    - **Conciliar** com lançamento existente (mesmo valor, data ±3 dias, descrição parecida)
@@ -60,6 +60,20 @@ Em `/accounts/cards`, use **Importar OFX** no cartão:
 3. Confirme — FITIDs ficam em `transactions.ofx_fitid` (reimportação é idempotente)
 
 Lotes pendentes (`ofx_import_batches`) expiram em **24h**. Serviço: `app/services/ofx_card_import.py`. Testes: `tests/test_ofx_card_import.py`.
+
+## Importação OFX de conta bancária
+
+Em `/accounts`, use **Importar OFX** na conta:
+
+1. Envie o extrato `.ofx` / `.qfx` / `.csv` (máx. 5 MB)
+2. Revise: débitos → despesas, créditos → receitas; criar ou conciliar; categoria opcional (memorizada)
+3. Confirme — lançamentos entram como `actual` na data do extrato e alteram o saldo; FITID em `transactions.ofx_fitid`
+
+CSV esperado (`;` ou `,`): o arquivo pode vir no formato exportado pelo banco.
+O parser analisa o conteúdo e identifica sozinho data, valor (ou débito/crédito) e descrição —
+não exige nomes fixos de coluna. Sem identificador, gera um FITID estável.
+
+Serviço: `app/services/ofx_account_import.py` + `statement_parse.py`. Testes: `tests/test_ofx_account_import.py`, `tests/test_statement_parse.py`.
 
 ## Testes
 
@@ -76,6 +90,7 @@ docker compose exec -T app2 python -m pytest tests/test_recurrence.py -q
 docker compose exec -T app2 python -m pytest tests/test_installments.py -q
 docker compose exec -T app2 python -m pytest tests/test_credit_cards.py -q
 docker compose exec -T app2 python -m pytest tests/test_ofx_card_import.py -q
+docker compose exec -T app2 python -m pytest tests/test_ofx_account_import.py -q
 docker compose exec -T app2 python -m pytest tests/test_realize_planned_wizard.py -q
 docker compose exec -T app2 python -m pytest tests/test_multi_movements.py -q
 docker compose exec -T app2 python -m pytest tests/test_chat_format.py -q

@@ -1,10 +1,7 @@
-"""Importação OFX de cartão de crédito: parse, matching e aplicação."""
+"""Importação OFX/CSV de cartão de crédito: parse, matching e aplicação."""
 
 from __future__ import annotations
 
-import re
-import unicodedata
-from dataclasses import dataclass
 from datetime import date, timedelta, timezone
 from difflib import SequenceMatcher
 from typing import Any, Literal
@@ -23,6 +20,14 @@ from app.models import (
     Transaction,
 )
 from app.schemas import TransactionCreate
+from app.services.statement_parse import (
+    OfxTxn,
+    detect_statement_format,
+    normalize_memo,
+    parse_csv,
+    parse_ofx,
+    parse_statement,
+)
 from app.timezone import local_now
 
 Direction = Literal["debit", "credit"]
@@ -41,129 +46,6 @@ PAYMENT_DATE_WINDOW_DAYS = 5
 MATCH_SCORE_THRESHOLD = 0.45
 BATCH_TTL_HOURS = 24
 AMOUNT_TOLERANCE_CENTS = 1
-
-_STMTTRN_RE = re.compile(r"<STMTTRN>(.*?)</STMTTRN>", re.IGNORECASE | re.DOTALL)
-_TAG_RE = re.compile(
-    r"<(FITID|DTPOSTED|TRNAMT|TRNTYPE|MEMO|NAME|CHECKNUM)>([^<\r\n]+)",
-    re.IGNORECASE,
-)
-
-
-@dataclass(frozen=True)
-class OfxTxn:
-    fitid: str
-    posted_date: date
-    amount_cents: int
-    direction: Direction
-    memo: str
-    trntype: str
-
-
-def _strip_accents(text: str) -> str:
-    normalized = unicodedata.normalize("NFKD", text)
-    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
-
-
-def normalize_memo(text: str) -> str:
-    cleaned = _strip_accents(text or "").lower()
-    cleaned = re.sub(r"[^a-z0-9\s]", " ", cleaned)
-    return re.sub(r"\s+", " ", cleaned).strip()
-
-
-def _parse_ofx_date(raw: str) -> date:
-    digits = re.sub(r"[^0-9]", "", raw.strip())
-    if len(digits) < 8:
-        raise ValueError(f"Data OFX inválida: {raw!r}")
-    return date(int(digits[0:4]), int(digits[4:6]), int(digits[6:8]))
-
-
-def _parse_amount_to_cents(raw: str) -> int:
-    text = raw.strip().replace(" ", "")
-    if not text:
-        raise ValueError("Valor OFX vazio.")
-    negative = text.startswith("-")
-    text = text.lstrip("+-")
-    if "," in text and "." in text:
-        if text.rfind(",") > text.rfind("."):
-            text = text.replace(".", "").replace(",", ".")
-        else:
-            text = text.replace(",", "")
-    elif "," in text:
-        text = text.replace(",", ".")
-    value = float(text)
-    cents = int(round(abs(value) * 100))
-    return -cents if negative or value < 0 else cents
-
-
-def _direction_from_amount_and_type(signed_cents: int, trntype: str) -> Direction:
-    t = (trntype or "").upper()
-    if t in {"CREDIT", "DEP", "DIRECTDEP", "PAYMENT", "XFER"} and signed_cents > 0:
-        return "credit"
-    if t in {"DEBIT", "POS", "ATM", "CHECK", "FEE", "SRVCHG"} and signed_cents < 0:
-        return "debit"
-    if signed_cents < 0:
-        return "debit"
-    if signed_cents > 0:
-        return "credit"
-    return "debit"
-
-
-def parse_ofx(content: str | bytes) -> list[OfxTxn]:
-    if isinstance(content, bytes):
-        for encoding in ("utf-8", "latin-1", "cp1252"):
-            try:
-                text = content.decode(encoding)
-                break
-            except UnicodeDecodeError:
-                continue
-        else:
-            text = content.decode("utf-8", errors="replace")
-    else:
-        text = content
-
-    text = text.replace("\x00", "")
-    # Normalize self-closing / XML end tags for tag extraction
-    blocks = _STMTTRN_RE.findall(text)
-    if not blocks:
-        # OFX 1.x sometimes omits closing STMTTRN; split by opening tag
-        parts = re.split(r"<STMTTRN>", text, flags=re.IGNORECASE)
-        blocks = parts[1:] if len(parts) > 1 else []
-
-    txns: list[OfxTxn] = []
-    seen_fitids: set[str] = set()
-    for block in blocks:
-        fields: dict[str, str] = {}
-        for match in _TAG_RE.finditer(block):
-            fields[match.group(1).upper()] = match.group(2).strip()
-        fitid = fields.get("FITID") or fields.get("CHECKNUM")
-        if not fitid:
-            continue
-        if fitid in seen_fitids:
-            continue
-        raw_date = fields.get("DTPOSTED")
-        raw_amt = fields.get("TRNAMT")
-        if not raw_date or raw_amt is None:
-            continue
-        signed = _parse_amount_to_cents(raw_amt)
-        if signed == 0:
-            continue
-        trntype = fields.get("TRNTYPE", "")
-        direction = _direction_from_amount_and_type(signed, trntype)
-        memo = (fields.get("MEMO") or fields.get("NAME") or "Movimento OFX").strip()[:255]
-        seen_fitids.add(fitid)
-        txns.append(
-            OfxTxn(
-                fitid=fitid[:128],
-                posted_date=_parse_ofx_date(raw_date),
-                amount_cents=abs(signed),
-                direction=direction,
-                memo=memo,
-                trntype=trntype.upper(),
-            )
-        )
-    if not txns:
-        raise ValueError("Nenhuma transação encontrada no arquivo OFX.")
-    return txns
 
 
 def description_score(a: str, b: str) -> float:
@@ -428,7 +310,7 @@ def create_batch(
 
     expire_stale_batches(db, user_id)
     ensure_invoices_for_card(db, card)
-    txns = parse_ofx(content)
+    txns = parse_statement(content, filename=filename)
     known = _existing_fitids(db, user_id)
     card_txs = _card_transactions(db, user_id, card.id)
     used_tx_ids: set[int] = set()

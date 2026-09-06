@@ -235,6 +235,28 @@ def _dispose_app_pool() -> None:
         pass
 
 
+def _run_migrations_after_restore() -> None:
+    """Alinha schema do dump (possivelmente antigo) com o código atual."""
+    try:
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+            cwd="/app",
+        )
+    except FileNotFoundError as exc:
+        raise ValueError(
+            "Alembic não encontrado para migrar após a restauração."
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError("Tempo esgotado ao migrar após a restauração.") from exc
+    if result.returncode != 0:
+        err = (result.stderr or result.stdout or "falha desconhecida").strip()
+        raise ValueError(f"Falha ao migrar após restauração: {err[:400]}")
+
+
 def _restore_stderr_is_fatal(stderr: str) -> bool:
     """True se houver erro de pg_restore que não seja SET incompatível."""
     text_l = stderr.lower()
@@ -309,6 +331,7 @@ def restore_backup(filename: str, *, confirm: str) -> str:
 
     try:
         _assert_restore_complete()
+        _run_migrations_after_restore()
     except ValueError:
         raise
     except Exception as exc:

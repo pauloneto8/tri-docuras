@@ -30,6 +30,7 @@ from app.schemas import (
 )
 from app.services import admin, finance
 from app.services import ofx_card_import
+from app.services import ofx_account_import
 from app.timezone import local_today
 from app.services.conversations import get_or_create_conversation, log_message
 from app.services.transaction_wizard import (
@@ -580,6 +581,161 @@ async def delete_account_form(
     except ValueError as exc:
         return _flash_and_redirect(request, "/accounts", error=str(exc))
     return _flash_and_redirect(request, "/accounts", success="Conta desativada com sucesso.")
+
+
+@router.get("/accounts/{account_id}/ofx", response_class=HTMLResponse)
+async def account_ofx_upload_page(
+    account_id: int,
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    templates = get_templates(request)
+    account = finance.find_account(db, user.id, account_id=account_id)
+    if not account:
+        return _flash_and_redirect(request, "/accounts", error="Conta não encontrada.")
+    ofx_card_import.expire_stale_batches(db, user.id)
+    return templates.TemplateResponse(
+        "account_ofx_upload.html",
+        {
+            "request": request,
+            "user": user,
+            "account": finance.format_account(account, db=db),
+            "csrf_token": ensure_csrf_token(request),
+            "error": request.session.pop("flash_error", None),
+        },
+    )
+
+
+@router.post("/accounts/{account_id}/ofx", response_class=HTMLResponse)
+async def account_ofx_upload(
+    account_id: int,
+    request: Request,
+    csrf_token: str = Form(...),
+    file: UploadFile = File(...),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    templates = get_templates(request)
+    validate_csrf_token(request, csrf_token)
+    account = finance.find_account(db, user.id, account_id=account_id)
+    if not account:
+        return _flash_and_redirect(request, "/accounts", error="Conta não encontrada.")
+    try:
+        raw = await file.read()
+        if not raw:
+            raise ValueError("Arquivo OFX vazio.")
+        if len(raw) > 5 * 1024 * 1024:
+            raise ValueError("Arquivo OFX muito grande (máx. 5 MB).")
+        batch = ofx_account_import.create_batch(
+            db,
+            user.id,
+            account,
+            filename=file.filename or "extrato.ofx",
+            content=raw,
+        )
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            "account_ofx_upload.html",
+            {
+                "request": request,
+                "user": user,
+                "account": finance.format_account(account, db=db),
+                "csrf_token": ensure_csrf_token(request),
+                "error": str(exc),
+            },
+            status_code=400,
+        )
+    return RedirectResponse(
+        url=f"/accounts/{account_id}/ofx/{batch.id}",
+        status_code=303,
+    )
+
+
+@router.get("/accounts/{account_id}/ofx/{batch_id}", response_class=HTMLResponse)
+async def account_ofx_review_page(
+    account_id: int,
+    batch_id: int,
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    templates = get_templates(request)
+    account = finance.find_account(db, user.id, account_id=account_id)
+    if not account:
+        return _flash_and_redirect(request, "/accounts", error="Conta não encontrada.")
+    try:
+        batch = ofx_account_import.get_batch(db, user.id, account_id, batch_id)
+        review = ofx_account_import.batch_review_context(db, batch)
+    except ValueError as exc:
+        return _flash_and_redirect(request, f"/accounts/{account_id}/ofx", error=str(exc))
+    return templates.TemplateResponse(
+        "account_ofx_review.html",
+        {
+            "request": request,
+            "user": user,
+            "account": finance.format_account(account, db=db),
+            "review": review,
+            "csrf_token": ensure_csrf_token(request),
+            "error": request.session.pop("flash_error", None),
+        },
+    )
+
+
+@router.post("/accounts/{account_id}/ofx/{batch_id}/apply", response_class=HTMLResponse)
+async def account_ofx_apply(
+    account_id: int,
+    batch_id: int,
+    request: Request,
+    csrf_token: str = Form(...),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    validate_csrf_token(request, csrf_token)
+    account = finance.find_account(db, user.id, account_id=account_id)
+    if not account:
+        return _flash_and_redirect(request, "/accounts", error="Conta não encontrada.")
+    form = await request.form()
+    choices: dict[int, dict] = {}
+    for key, value in form.multi_items():
+        if key.startswith("action_"):
+            line_id = int(key.removeprefix("action_"))
+            choices.setdefault(line_id, {})["action"] = str(value)
+        elif key.startswith("transaction_id_"):
+            line_id = int(key.removeprefix("transaction_id_"))
+            choices.setdefault(line_id, {})["transaction_id"] = str(value)
+        elif key.startswith("category_id_"):
+            line_id = int(key.removeprefix("category_id_"))
+            choices.setdefault(line_id, {})["category_id"] = str(value)
+    try:
+        summary = ofx_account_import.apply_batch(db, user.id, account, batch_id, choices)
+        msg = ofx_account_import.format_apply_summary(summary)
+    except ValueError as exc:
+        return _flash_and_redirect(
+            request,
+            f"/accounts/{account_id}/ofx/{batch_id}",
+            error=str(exc),
+        )
+    return _flash_and_redirect(request, "/accounts", success=msg)
+
+
+@router.post("/accounts/{account_id}/ofx/{batch_id}/cancel", response_class=HTMLResponse)
+async def account_ofx_cancel(
+    account_id: int,
+    batch_id: int,
+    request: Request,
+    csrf_token: str = Form(...),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    validate_csrf_token(request, csrf_token)
+    try:
+        ofx_account_import.cancel_batch(db, user.id, account_id, batch_id)
+    except ValueError as exc:
+        return _flash_and_redirect(request, "/accounts", error=str(exc))
+    return _flash_and_redirect(
+        request, "/accounts", success="Importação OFX descartada."
+    )
 
 
 @router.post("/accounts/cards", response_class=HTMLResponse)

@@ -4,9 +4,9 @@
 <div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
   <div>
     <h1 class="text-lg font-semibold text-slate-100">Importar extrato</h1>
-    <p class="text-sm text-slate-400">{{ card.name }}{% if card.institution %} · {{ card.institution }}{% endif %}</p>
+    <p class="text-sm text-slate-400">{{ account.name }}{% if account.institution %} · {{ account.institution }}{% endif %}</p>
   </div>
-  <a href="/accounts/cards" class="text-sm text-emerald-400 hover:text-emerald-300">← Voltar aos cartões</a>
+  <a href="/accounts" class="text-sm text-emerald-400 hover:text-emerald-300">← Voltar às contas</a>
 </div>
 
 {% if error %}
@@ -15,12 +15,12 @@
 
 <section class="max-w-xl rounded-xl bg-slate-900 border border-slate-800 p-5 space-y-4">
   <p class="text-sm text-slate-400">
-    Envie o extrato do cartão em <strong class="font-medium text-slate-300">OFX/QFX</strong> ou
+    Envie o extrato da conta em <strong class="font-medium text-slate-300">OFX/QFX</strong> ou
     <strong class="font-medium text-slate-300">CSV</strong>.
-    O CSV pode vir “como o banco/cartão exportou”: o AssistFin detecta sozinho data, valor e descrição.
-    Na próxima tela você revisa o que criar, conciliar ou pagar.
+    O CSV pode vir “como o banco exportou”: o AssistFin detecta sozinho data, valor e descrição.
+    Na próxima tela você revisa o que criar ou conciliar.
   </p>
-  <form method="post" action="/accounts/cards/{{ card.id }}/ofx" enctype="multipart/form-data" class="space-y-3">
+  <form method="post" action="/accounts/{{ account.id }}/ofx" enctype="multipart/form-data" class="space-y-3">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div>
       <label class="block text-sm text-slate-400 mb-1">Arquivo OFX ou CSV</label>
@@ -30,7 +30,7 @@
     </div>
     <div class="flex flex-col sm:flex-row gap-2 pt-2">
       <button type="submit" class="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium">Continuar</button>
-      <a href="/accounts/cards" class="flex-1 rounded-lg border border-slate-700 px-4 py-2 text-center text-slate-300 hover:bg-slate-800">Cancelar</a>
+      <a href="/accounts" class="flex-1 rounded-lg border border-slate-700 px-4 py-2 text-center text-slate-300 hover:bg-slate-800">Cancelar</a>
     </div>
   </form>
 </section>

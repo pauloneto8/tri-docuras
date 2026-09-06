@@ -63,7 +63,7 @@
           <p class="font-semibold text-amber-300">R$ {{ a.current_invoice_total }}</p>
         </div>
         {% endif %}
-        <a href="/accounts/cards/{{ a.id }}/ofx" class="text-sm text-emerald-400 hover:text-emerald-300">Importar OFX</a>
+        <a href="/accounts/cards/{{ a.id }}/ofx" class="text-sm text-emerald-400 hover:text-emerald-300">Importar extrato</a>
         <a href="/accounts/cards/{{ a.id }}/edit" class="text-sm text-emerald-400 hover:text-emerald-300">Editar</a>
         <form method="post" action="/accounts/cards/{{ a.id }}/delete" onsubmit="return confirm('Desativar este cartão?')">
           <button type="submit" class="text-sm text-slate-400 hover:text-rose-400">Desativar</button>
@@ -191,6 +191,7 @@
       <div class="flex items-center gap-4">
         <span class="text-lg font-semibold text-emerald-400">R$ {{ a.balance }}</span>
         <div class="flex items-center gap-2">
+          <a href="/accounts/{{ a.id }}/ofx" class="text-sm text-emerald-400 hover:text-emerald-300">Importar extrato</a>
           <a href="/accounts/{{ a.id }}/edit" class="text-sm text-emerald-400 hover:text-emerald-300">Editar</a>
           {% if all_accounts|length > 1 %}
           <form method="post" action="/accounts/{{ a.id }}/delete" onsubmit="return confirm('Desativar esta conta?')">

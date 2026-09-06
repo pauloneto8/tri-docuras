@@ -19,14 +19,16 @@ paths: app/services/credit_cards.py, app/services/finance.py, app/services/card_
 - Pagar fatura = despesa na conta de débito (`pay_invoice`); marca fatura como `paid` — **não** duplica despesa da compra.
 - Ciclo: compra após fechamento vai para a **próxima** fatura.
 - Exclusão de cartão = `is_active=false` (soft delete); histórico de faturas e lançamentos preservado.
-- **OFX** — importação com revisão; débitos criam/conciliam compras (`ofx_fitid`); créditos sugerem pagar/vincular fatura; **nada é ignorado sem confirmação**; cada linha exige fatura de vínculo; categoria sugerida/memorizada por descrição (`ofx_category_memory`).
+- **OFX/CSV** — importação com revisão; débitos criam/conciliam compras (`ofx_fitid`); créditos sugerem pagar/vincular fatura; **nada é ignorado sem confirmação**; cada linha exige fatura de vínculo; categoria sugerida/memorizada por descrição (`ofx_category_memory`). CSV usa as mesmas rotinas (`statement_parse.py`).
 
 ## Arquivos
 
 | Arquivo | Papel |
 |---------|--------|
 | `app/services/credit_cards.py` | Ciclo, `ensure_invoices`, `pay_invoice`, limite, `cards_with_nested_invoices`, `list_invoice_movements` |
-| `app/services/ofx_card_import.py` | Parse OFX, matching, lote de revisão, `apply_batch` |
+| `app/services/statement_parse.py` | Parse OFX/QFX/CSV → estrutura comum |
+| `app/services/ofx_card_import.py` | Matching, lote de revisão, `apply_batch` (cartão) |
+| `app/services/ofx_account_import.py` | Importação OFX/CSV de conta bancária (reusa parse/memória) |
 | Templates | `accounts.html` (hierarquia), `card_form.html`, `card_edit.html`, `card_ofx_*.html` |
 | `app/services/finance.py` | `create_card`, `update_card`, `deactivate_card`, `find_card` |
 | `app/services/card_wizard.py` | Wizard do assistente para cadastro (`create_card`) |
@@ -52,6 +54,7 @@ paths: app/services/credit_cards.py, app/services/finance.py, app/services/card_
 - `/accounts/cards` — hierarquia expansível: cartão → faturas → movimentos (`cards_with_nested_invoices`); CRUD em `/accounts/cards/new` e `/{id}/edit`
 - `POST /accounts/cards` — criar cartão; `POST /accounts/cards/{id}` — editar; desativar via delete
 - `/accounts/cards/{id}/ofx` — upload OFX → revisão → aplicar (criar / conciliar / pagar fatura)
+- `/accounts/{id}/ofx` — upload OFX bancário → revisão → aplicar (débito=despesa, crédito=receita, `actual`)
 - `POST /accounts/invoices/{id}/pay` — pagar fatura (dentro da fatura expandida)
 - `POST /accounts/invoices/{id}/delete` — excluir fatura e movimentos do cartão ligados (pagamento bancário permanece)
 - Chat: após compra no cartão, `invoice_context_summary` via `enrich_register_result`

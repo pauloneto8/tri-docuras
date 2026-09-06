@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Revisar OFX — AssistFin{% endblock %}
+{% block content %}
+<div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+  <div>
+    <h1 class="text-lg font-semibold text-slate-100">Revisar importação OFX</h1>
+    <p class="text-sm text-slate-400">
+      {{ account.name }} · {{ review.filename }}
+      · {{ review.counts.total }} linha{% if review.counts.total != 1 %}s{% endif %}
+    </p>
+    <p class="text-xs text-slate-500 mt-1">
+      Débitos viram despesas e créditos viram receitas (realizados na data do extrato).
+    </p>
+  </div>
+  <a href="/accounts/{{ account.id }}/ofx" class="text-sm text-emerald-400 hover:text-emerald-300">← Outro arquivo</a>
+</div>
+
+{% if error %}
+<p class="mb-4 rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-2 text-rose-300 text-sm">{{ error }}</p>
+{% endif %}
+
+{% if review.status != 'pending' %}
+<p class="mb-4 rounded-lg border border-amber-800 bg-amber-950/40 px-4 py-2 text-amber-200 text-sm">
+  Este lote já foi {{ review.status }}. Envie o OFX novamente se precisar.
+</p>
+{% else %}
+
+<div class="mb-4 flex flex-wrap gap-2 text-xs text-slate-400">
+  {% if review.counts.create %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.create }} criar</span>{% endif %}
+  {% if review.counts.match %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.match }} conciliar</span>{% endif %}
+  {% if review.counts.already_imported %}<span class="rounded-full border border-slate-700 px-2 py-1">{{ review.counts.already_imported }} já importados</span>{% endif %}
+</div>
+
+<form method="post" action="/accounts/{{ account.id }}/ofx/{{ review.batch_id }}/apply" class="space-y-3">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  {% for line in review.lines %}
+  <section class="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+      <div class="min-w-0">
+        <p class="font-medium text-slate-100 truncate">{{ line.memo }}</p>
+        <p class="text-xs text-slate-500 mt-1">
+          {{ line.posted_date }}
+          · {% if line.direction == 'debit' %}Despesa{% else %}Receita{% endif %}
+          · FITID {{ line.fitid }}
+        </p>
+      </div>
+      <p class="font-mono shrink-0 {% if line.direction == 'debit' %}text-rose-400{% else %}text-emerald-400{% endif %}">
+        R$ {{ line.amount }}
+      </p>
+    </div>
+
+    {% if line.suggested_action == 'already_imported' %}
+    <input type="hidden" name="action_{{ line.id }}" value="already_imported">
+    <p class="text-sm text-slate-400">Já importado anteriormente — mantido sem alteração.</p>
+    {% else %}
+    <div>
+      <label class="block text-xs text-slate-400 mb-1">Ação</label>
+      <select name="action_{{ line.id }}" required class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+        <option value="create" {% if line.chosen_action == 'create' %}selected{% endif %}>
+          Criar {% if line.direction == 'debit' %}despesa{% else %}receita{% endif %}
+        </option>
+        <option value="match" {% if line.chosen_action == 'match' %}selected{% endif %}>Conciliar com lançamento existente</option>
+        <option value="skip" {% if line.chosen_action == 'skip' %}selected{% endif %}>Ignorar</option>
+      </select>
+    </div>
+
+    <div>
+      <label class="block text-xs text-slate-400 mb-1">Lançamento para conciliar</label>
+      <select name="transaction_id_{{ line.id }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+        <option value="">Selecione…</option>
+        {% for c in line.candidates %}
+        <option value="{{ c.id }}" {% if line.chosen_transaction_id == c.id %}selected{% endif %}>
+          #{{ c.id }} · {{ c.description }} · {{ c.competence_date }} · {{ c.status }}{% if c.score %} ({{ c.score }}){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      {% if not line.candidates %}
+      <p class="text-xs text-slate-500 mt-1">Nenhum candidato automático — use “Criar” ou ignore.</p>
+      {% endif %}
+    </div>
+
+    <div>
+      <label class="block text-xs text-slate-400 mb-1">Categoria</label>
+      <select name="category_id_{{ line.id }}" class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+        <option value="">Sem categoria</option>
+        {% for cat in line.category_options %}
+        <option value="{{ cat.id }}" {% if line.chosen_category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-slate-500 mt-1">A escolha é lembrada para descrições iguais nas próximas importações.</p>
+    </div>
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  <div class="flex flex-col sm:flex-row gap-2 pt-2">
+    <button type="submit" class="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 font-medium"
+            onclick="return confirm('Aplicar as ações confirmadas?')">Confirmar importação</button>
+    <button type="submit" form="cancel-ofx" class="flex-1 rounded-lg border border-slate-700 px-4 py-2 text-slate-300 hover:bg-slate-800">Descartar</button>
+  </div>
+</form>
+
+<form id="cancel-ofx" method="post" action="/accounts/{{ account.id }}/ofx/{{ review.batch_id }}/cancel">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+</form>
+{% endif %}
+{% endblock %}

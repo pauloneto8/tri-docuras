@@ -88,6 +88,7 @@ def test_restore_backup_calls_pg_restore(backup_tmpdir, monkeypatch):
     with (
         patch("app.services.db_backup._reset_public_schema") as reset,
         patch("app.services.db_backup._assert_restore_complete") as assert_ok,
+        patch("app.services.db_backup._run_migrations_after_restore") as migrate,
         patch("app.services.db_backup._dispose_app_pool") as dispose,
         patch(
             "app.services.db_backup.subprocess.run",
@@ -99,6 +100,7 @@ def test_restore_backup_calls_pg_restore(backup_tmpdir, monkeypatch):
     assert restored == name
     reset.assert_called_once()
     assert_ok.assert_called_once()
+    migrate.assert_called_once()
     assert dispose.call_count == 2
     cmd = mocked.call_args[0][0]
     assert cmd[0] == "pg_restore"
@@ -125,6 +127,7 @@ def test_restore_ignores_transaction_timeout_error(backup_tmpdir, monkeypatch):
     with (
         patch("app.services.db_backup._reset_public_schema"),
         patch("app.services.db_backup._assert_restore_complete"),
+        patch("app.services.db_backup._run_migrations_after_restore"),
         patch("app.services.db_backup._dispose_app_pool"),
         patch(
             "app.services.db_backup.subprocess.run",
@@ -150,6 +153,7 @@ def test_restore_fails_on_real_pg_restore_error(backup_tmpdir, monkeypatch):
     with (
         patch("app.services.db_backup._reset_public_schema"),
         patch("app.services.db_backup._assert_restore_complete"),
+        patch("app.services.db_backup._run_migrations_after_restore"),
         patch("app.services.db_backup._dispose_app_pool"),
         patch(
             "app.services.db_backup.subprocess.run",

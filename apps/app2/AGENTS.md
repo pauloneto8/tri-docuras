@@ -88,7 +88,8 @@ Corrigir transferência: ferramenta `update_transfer` (origem, destino, valor, d
 - Wizard de cadastro: `card_wizard.py`
 - UI `/accounts/cards`: hierarquia expansível cartão → faturas → movimentos (`cards_with_nested_invoices`)
 - Excluir fatura: `POST /accounts/invoices/{id}/delete` — remove fatura + movimentos do cartão; pagamento bancário (se houver) permanece
-- Import OFX: `/accounts/cards/{id}/ofx` — upload → revisão → criar/conciliar/pagar (`ofx_card_import.py`); `transactions.ofx_fitid` para idempotência; créditos ≈ fatura → `pay_invoice` / vínculo; estornos → ignorar
+- Import OFX/CSV cartão: `/accounts/cards/{id}/ofx` — upload → revisão → criar/conciliar/pagar (`ofx_card_import.py` + `statement_parse.py`); `transactions.ofx_fitid` para idempotência; créditos ≈ fatura → `pay_invoice` / vínculo
+- Import OFX/CSV conta: `/accounts/{id}/ofx` — upload → revisão → criar/conciliar (`ofx_account_import.py`); débito=despesa `actual`, crédito=receita `actual`
 - Chat após lançamento: `enrich_register_result` anexa `context_summary` (fatura do cartão ou saldo da conta)
 
 ### UI Movimentos (`/transactions`)
@@ -125,7 +126,7 @@ Previstos liquidados **não** listados (evita duplicata). Pares previsto/realiza
 | Área | Arquivos |
 |------|----------|
 | Cálculos | `app/services/finance.py`, `app/services/recurrence.py`, `app/services/installments.py`, `app/services/credit_cards.py` |
-| Import OFX | `app/services/ofx_card_import.py`, templates `card_ofx_*.html` |
+| Import OFX/CSV | `statement_parse.py`, `ofx_card_import.py`, `ofx_account_import.py`, templates `card_ofx_*`, `account_ofx_*` |
 | Agente | `app/agent/runner.py`, `app/services/tools.py`, `app/agent/prompt.py` |
 | Escopo de parcela | `app/services/installment_scope_flow.py`, `app/services/installments.py` |
 | Wizards | `transaction_wizard.py`, `transaction_slots.py`, `realize_planned_slots.py`, `account_wizard.py`, `category_wizard.py`, `card_wizard.py`, `transfer_slots.py`, `pay_invoice_slots.py` |
