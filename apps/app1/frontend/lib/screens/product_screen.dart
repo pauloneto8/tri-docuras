@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tri_docuras/cart/cart_added_result.dart';
 import 'package:tri_docuras/cart/cart_item.dart';
 import 'package:tri_docuras/cart/cart_scope.dart';
+import 'package:tri_docuras/favorites/favorites_scope.dart';
 import 'package:tri_docuras/models/product.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
@@ -37,7 +38,14 @@ class _ProductScreenState extends State<ProductScreen> {
     _quantity = 2;
     _size = _sizeOptions.first;
     _lactoseFree = false;
-    _favorited = widget.product.featured;
+    final favorites = FavoritesScope.of(context);
+    _favorited = favorites.isFavorite(widget.product.id);
+    favorites.load().then((_) {
+      if (!mounted) return;
+      setState(() {
+        _favorited = favorites.isFavorite(widget.product.id);
+      });
+    });
   }
 
   double get _unitPrice => widget.product.price + (_lactoseFree ? _lactoseExtra : 0);
@@ -83,7 +91,14 @@ class _ProductScreenState extends State<ProductScreen> {
                     _ProductHeader(
                       favorited: _favorited,
                       onBack: () => Navigator.of(context).pop(),
-                      onFavorite: () => setState(() => _favorited = !_favorited),
+                      onFavorite: () async {
+                        await FavoritesScope.of(context).toggle(widget.product.id);
+                        if (!mounted) return;
+                        setState(() {
+                          _favorited = FavoritesScope.of(context)
+                              .isFavorite(widget.product.id);
+                        });
+                      },
                     ),
                     Expanded(
                       child: SingleChildScrollView(

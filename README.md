@@ -95,7 +95,7 @@ Expor apenas `80`, `443` e SSH conforme a política do provedor.
 | `hosting-app1` | API Dart Frog (`/api/*`) |
 | `hosting-app1-db` | PostgreSQL 16 |
 
-Fluxo completo: catálogo → checkout → Pix (Mercado Pago) → confirmação → rastreamento.
+Fluxo completo: catálogo → checkout → Pix (Mercado Pago) → confirmação → rastreamento. App com 4 abas: Início, Pedidos, Favoritos e Perfil.
 
 | URL | Função |
 |-----|--------|
@@ -103,7 +103,7 @@ Fluxo completo: catálogo → checkout → Pix (Mercado Pago) → confirmação 
 | https://tridocuras.com.br/admin | Painel de pedidos da loja |
 | https://tridocuras.com.br/api/health | Health da API |
 
-Credenciais em `/opt/hosting/.env`: `APP1_MP_*` (Pix), `APP1_ADMIN_PASSWORD` (painel). **Não commitar** o `.env`.
+Credenciais em `/opt/hosting/.env`: `APP1_MP_*` (Pix), `APP1_ADMIN_PASSWORD` (painel). WhatsApp da loja no app: `apps/app1/frontend/lib/config.dart` (`storeWhatsApp`). **Não commitar** o `.env`.
 
 ```bash
 docker compose build app1-web && docker compose up -d app1-web   # só frontend

@@ -5,8 +5,10 @@ import 'package:tri_docuras/cart/cart_scope.dart';
 import 'package:tri_docuras/config.dart';
 import 'package:tri_docuras/models/product.dart';
 import 'package:tri_docuras/screens/cart_screen.dart';
+import 'package:tri_docuras/screens/favorites_screen.dart';
 import 'package:tri_docuras/screens/order_tracking_screen.dart';
 import 'package:tri_docuras/screens/product_screen.dart';
+import 'package:tri_docuras/screens/profile_screen.dart';
 import 'package:tri_docuras/services/api_service.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
@@ -122,6 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _CatalogHeader(
                   cartCount: cartCount,
                   onCartTap: _openCart,
+                  onMenuTap: () => StoreMenuSheet.show(context),
                 ),
                 Expanded(
                   child: LayoutBuilder(
@@ -133,11 +136,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: SizedBox(
                           width: contentWidth.toDouble(),
                           height: constraints.maxHeight,
-                          child: _navIndex == 0
-                              ? _buildCatalog()
-                              : _navIndex == 1
-                                  ? OrderLookupScreen(api: _api)
-                                  : _buildPlaceholderTab(),
+                          child: switch (_navIndex) {
+                            0 => _buildCatalog(),
+                            1 => OrderLookupScreen(api: _api),
+                            2 => FavoritesScreen(
+                                api: _api,
+                                onBrowseCatalog: () => setState(() => _navIndex = 0),
+                              ),
+                            _ => const ProfileScreen(),
+                          },
                         ),
                       );
                     },
@@ -162,30 +169,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
       ],
-    );
-  }
-
-  Widget _buildPlaceholderTab() {
-    const labels = ['', '', 'Favoritos', 'Perfil'];
-    return ColoredBox(
-      color: AppColors.cream,
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.favorite, size: 36, color: AppColors.pink),
-              const SizedBox(height: 16),
-              Text(
-                '${labels[_navIndex]} — em breve',
-                style: Theme.of(context).textTheme.headlineSmall,
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -283,10 +266,12 @@ class _CatalogHeader extends StatelessWidget {
   const _CatalogHeader({
     required this.cartCount,
     required this.onCartTap,
+    required this.onMenuTap,
   });
 
   final int cartCount;
   final VoidCallback onCartTap;
+  final VoidCallback onMenuTap;
 
   @override
   Widget build(BuildContext context) {
@@ -298,7 +283,7 @@ class _CatalogHeader extends StatelessWidget {
           children: [
             TdIconButton(
               icon: Icons.menu,
-              onPressed: () {},
+              onPressed: onMenuTap,
               tint: AppColors.peach,
             ),
             Expanded(

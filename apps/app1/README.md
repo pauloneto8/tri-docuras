@@ -52,22 +52,37 @@ Categorias: `brownies`, `combos`.
 
 ## Estado atual do produto
 
-### Implementado (cliente — 6 telas)
+### Implementado (app cliente)
+
+#### Fluxo de compra (6 telas)
 
 | # | Tela | Resumo |
 |---|------|--------|
-| 1 | Catálogo | Busca, chips, grade, badge do carrinho, balão ao adicionar item |
-| 2 | Produto | Opções, quantidade, Adicionar → catálogo com confirmação |
-| 3 | Carrinho | Stepper, **Remover** item, entrega (retirar / receber R$ 6,00) |
-| 4 | Checkout | Nome, WhatsApp, endereço (entrega), Pix via Mercado Pago |
-| 5 | Pagamento Pix | QR escaneável, copia-e-cola, timer 10 min, confirmação automática |
-| 6 | Confirmação | Resumo do pedido, link para rastreamento, voltar à loja |
+| 1 | Catálogo | Busca, chips, grade, menu ☰, badge do carrinho, balão ao adicionar |
+| 2 | Produto | Opções, favorito ♥, quantidade, Adicionar → catálogo |
+| 3 | Carrinho | Stepper, remover item, entrega (retirar / receber R$ 6,00) |
+| 4 | Checkout | Nome, WhatsApp, endereço, Pix via Mercado Pago |
+| 5 | Pagamento Pix | QR, copia-e-cola, confirmação automática |
+| 6 | Confirmação | Resumo, rastreamento, voltar à loja |
+
+#### Bottom navigation (4 abas)
+
+| Aba | Tela | Resumo |
+|-----|------|--------|
+| Início | Catálogo | Grade de produtos |
+| Pedidos | `OrderLookupScreen` | Consulta `TD-0001` + timeline |
+| Favoritos | `FavoritesScreen` | Lista persistida (`shared_preferences`) |
+| Perfil | `ProfileScreen` | Info da loja, entrega, WhatsApp |
+
+**Menu ☰** (catálogo): bottom sheet `StoreMenuSheet` com horário, entrega e sobre a loja.
 
 **Entrega:** apenas Nazaré da Mata - PE (CEP 55.800-000); taxa R$ 6,00 para receber em casa.
 
-**Navegação cliente:** catálogo → produto → carrinho → checkout → Pix → confirmação → (opcional) rastreamento.
+**Navegação compra:** catálogo → produto → carrinho → checkout → Pix → confirmação → (opcional) rastreamento.
 
-**Aba Pedidos** no app: consulta por número (`TD-0001`) e timeline com polling.
+**Favoritos:** coração na tela do produto; IDs salvos localmente no dispositivo/navegador.
+
+**Contato da loja:** `AppConfig.storeWhatsApp` em `frontend/lib/config.dart` (ajustar número real).
 
 Carrinho e checkout no Flutter; **Gerar Pix** grava o pedido (`POST /api/orders`), gera cobrança Pix no Mercado Pago e exibe QR + copia-e-cola. A confirmação é automática via webhook + polling (`GET /api/orders/{id}`).
 
@@ -92,6 +107,8 @@ Transições no painel: `paid` → `preparing` → `ready` → `completed` (com 
 | `APP1_MP_TEST_*` / `APP1_MP_USE_TEST` | Não | Sandbox Mercado Pago |
 | `APP1_ADMIN_PASSWORD` | Para painel | Senha de https://tridocuras.com.br/admin |
 | `APP1_DOMAIN` | Sim | Domínio público + webhook MP |
+
+WhatsApp exibido no Perfil do app: `frontend/lib/config.dart` → `storeWhatsApp` (não é variável de `.env`).
 
 Modelo completo: [`../../.env.example`](../../.env.example) na raiz do hosting.
 
@@ -217,6 +234,7 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 | Widgets base | `frontend/lib/widgets/` |
 | Telas | `frontend/lib/screens/` |
 | Carrinho (memória) | `frontend/lib/cart/` |
+| Favoritos (local) | `frontend/lib/favorites/` |
 | Checkout / endereço | `frontend/lib/checkout/` |
 
 ## Testes
@@ -243,6 +261,7 @@ docker run --rm -v /opt/hosting/apps/app1/api:/app -w /app dart:stable sh -c "da
 | `test/checkout/order_payload_test.dart` | Payload do POST /orders |
 | `test/models/created_order_test.dart` | Parse da resposta (pedido + Pix) |
 | `test/models/order_tracking_test.dart` | Parse da timeline |
+| `test/favorites/favorites_controller_test.dart` | Toggle de favoritos |
 | `test/widget_test.dart` | Smoke do app |
 
 ## Mobile
@@ -250,6 +269,7 @@ docker run --rm -v /opt/hosting/apps/app1/api:/app -w /app dart:stable sh -c "da
 - **Android:** abrir `frontend/` no Android Studio e build APK/AAB
 - **iOS:** requer Mac + Xcode (projeto em `frontend/ios/`)
 - API mobile: `https://tridocuras.com.br/api` em `frontend/lib/config.dart` (web usa `/api` relativo)
+- WhatsApp da loja: ajustar `storeWhatsApp` no mesmo `config.dart`
 
 ## Documentação
 

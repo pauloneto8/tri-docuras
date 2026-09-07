@@ -10,50 +10,46 @@ App multiplataforma da doceria Tri Doçuras (Android, iOS e web).
 - `http` — consumo da API
 - `google_fonts` — Lora + Poppins (design system)
 - `qr_flutter` — QR Code Pix a partir do `copy_code`
+- `shared_preferences` — favoritos persistidos no dispositivo
+- `url_launcher` — WhatsApp e links externos no Perfil
 
 ## Estrutura
 
 ```
 lib/
-├── main.dart              # MaterialApp + CartScope + tema
-├── config.dart            # apiBaseUrl (web: /api, mobile: host)
+├── main.dart              # MaterialApp + CartScope + FavoritesScope
+├── config.dart            # apiBaseUrl, storeWhatsApp, appVersion
 ├── cart/
-│   ├── cart_controller.dart   # itens, deliveryMode, taxa entrega, removeAt
+│   ├── cart_controller.dart
 │   ├── cart_item.dart
 │   ├── cart_scope.dart
-│   ├── cart_added_result.dart # balão "Adicionado ao carrinho"
+│   ├── cart_added_result.dart
 │   └── delivery_mode.dart
+├── favorites/
+│   ├── favorites_controller.dart  # IDs favoritos + shared_preferences
+│   └── favorites_scope.dart
 ├── theme/
-│   ├── app_colors.dart    # paleta do design system
-│   └── app_theme.dart     # ThemeData + tipografia
+│   ├── app_colors.dart
+│   └── app_theme.dart
 ├── models/
 │   ├── product.dart
-│   ├── created_order.dart     # CreatedOrder, PixPayment, OrderStatus
-│   └── order_tracking.dart    # OrderTracking, TrackingStep
+│   ├── created_order.dart
+│   └── order_tracking.dart
 ├── services/api_service.dart
 ├── screens/
-│   ├── home_screen.dart           # catálogo (tela 1) + aba Pedidos
-│   ├── product_screen.dart        # detalhe do produto (tela 2)
-│   ├── cart_screen.dart           # carrinho (tela 3)
-│   ├── checkout_screen.dart       # checkout (tela 4)
-│   ├── pix_screen.dart            # pagamento Pix (tela 5)
-│   ├── confirmation_screen.dart   # confirmação (tela 6)
-│   └── order_tracking_screen.dart # rastreamento + consulta por número
+│   ├── home_screen.dart           # catálogo + bottom nav (4 abas)
+│   ├── product_screen.dart
+│   ├── cart_screen.dart
+│   ├── checkout_screen.dart
+│   ├── pix_screen.dart
+│   ├── confirmation_screen.dart
+│   ├── order_tracking_screen.dart # rastreamento + OrderLookupScreen
+│   ├── favorites_screen.dart      # aba Favoritos
+│   └── profile_screen.dart        # aba Perfil + StoreMenuSheet
 ├── checkout/
-│   ├── checkout_draft.dart
-│   ├── checkout_validators.dart
-│   ├── delivery_address.dart
-│   ├── delivery_address_validators.dart
-│   ├── order_summary.dart
-│   └── whatsapp_input_formatter.dart
+│   └── ...
 └── widgets/
-    ├── td_button.dart
-    ├── td_chip.dart
-    ├── td_icon_button.dart
-    ├── td_photo_frame.dart
-    ├── td_quantity_stepper.dart
-    ├── td_search_field.dart
-    └── td_text_field.dart
+    └── ...
 ```
 
 ## Design system
@@ -109,19 +105,18 @@ Render PNG das páginas (comparação visual): `/root/.cursor/docs/tri-docuras/r
 
 Implementada conforme página 4 do PDF (lado esquerdo):
 
-- **Header:** menu (círculo peach) | wordmark Lora Italic centralizado | carrinho (círculo peach) + badge dinâmico (`CartController.itemCount`)
+- **Header:** menu ☰ (`StoreMenuSheet`) | wordmark | carrinho + badge
 - **Busca:** `TdSearchField` — placeholder "Buscar brownie..."
 - **Chips:** Todos / Brownies / Combos
-- **Grade:** 2 colunas fixas, cards off-white com moldura circular
-- **Navegação:** toque no card ou em "Adicionar" abre a tela de produto
-- **Balão ao adicionar:** volta ao catálogo + `CartAddedBanner` (5 s) com link **Ver carrinho**
-- **Bottom nav:** Catálogo (0), **Pedidos** (1 — consulta `TD-0001`), Favoritos/Perfil (em breve)
+- **Grade:** 2 colunas, cards com moldura
+- **Balão ao adicionar:** 5 s com link **Ver carrinho**
+- **Bottom nav:** Início · Pedidos · Favoritos · Perfil (todas implementadas)
 
 ### Tela 2 — Produto (`product_screen.dart`)
 
 Implementada conforme página 4 do PDF (lado direito):
 
-- **Header:** voltar (←) e favorito (♥) em círculos peach
+- **Header:** voltar (←) e favorito (♥) — persiste via `FavoritesController`
 - **Moldura** grande, nome (Lora), preço `/ unidade`, descrição
 - **Opções** (brownies): chips `9x9cm` / `Fatia grande` + toggle `Sem lactose +R$3`
 - **Combos:** sem chips de tamanho/extra
@@ -165,7 +160,26 @@ Integrada com Mercado Pago (produção ou teste):
 - **Tentar novamente** chama `POST /api/orders/{id}/pix` se a cobrança expirar
 - Confirmação automática → `ConfirmationScreen` (limpa carrinho)
 
-### Aba Pedidos (`home_screen.dart` + `order_tracking_screen.dart`)
+### Aba Favoritos (`favorites_screen.dart`)
+
+- Lista produtos favoritados (filtro por IDs em `FavoritesController`)
+- Remover favorito na lista ou na tela do produto
+- Estado vazio com botão **Ver catálogo**
+- Persistência: `shared_preferences` (sobrevive a refresh no web)
+
+### Aba Perfil (`profile_screen.dart`)
+
+- Cards: retirada, entrega, pagamento Pix, WhatsApp da loja
+- Botão WhatsApp abre `wa.me` via `url_launcher`
+- Versão do app (`AppConfig.appVersion`)
+- Número da loja: `AppConfig.storeWhatsApp` em `config.dart`
+
+### Menu da loja (`StoreMenuSheet` em `profile_screen.dart`)
+
+- Abre pelo ícone ☰ no catálogo
+- Horário de retirada, área de entrega, tagline da marca
+
+### Aba Pedidos (`order_tracking_screen.dart`)
 
 - **OrderLookupScreen** embutida na aba Pedidos da bottom nav
 - Campo para número do pedido (`TD-0001`) com validação
@@ -192,10 +206,13 @@ HomeScreen ──(ícone carrinho / Ver carrinho)──► CartScreen ──(Fin
 CheckoutScreen ──(Gerar Pix → POST /api/orders)──► PixScreen ──(paid / polling)──► ConfirmationScreen
 ConfirmationScreen ──(Acompanhar pedido)──► OrderTrackingScreen
 HomeScreen (aba Pedidos) ──(TD-0001)──► OrderTrackingScreen
+HomeScreen (aba Favoritos) ──► FavoritesScreen ──► ProductScreen
+HomeScreen (aba Perfil) ──► ProfileScreen
+HomeScreen (menu ☰) ──► StoreMenuSheet
 ConfirmationScreen ──(Voltar à loja)──► HomeScreen (carrinho limpo)
 ```
 
-Estado do carrinho: `CartController` em memória (`add`, `updateQuantity`, `removeAt`, `deliveryFeeAmount = 6`). Badge do header = `itemCount`.
+Estado do carrinho: `CartController` em memória. Favoritos: `FavoritesController` + `shared_preferences`.
 
 Pedidos persistidos na API; pagamento via webhook MP + polling; status operacional atualizado no painel `/admin` e refletido na timeline do cliente.
 
@@ -218,7 +235,8 @@ flutter test
 | `test/checkout/order_payload_test.dart` | Payload do POST /orders |
 | `test/models/created_order_test.dart` | Parse da resposta (pedido + Pix) |
 | `test/models/order_tracking_test.dart` | Parse da timeline |
-| `test/widget_test.dart` | Smoke |
+| `test/favorites/favorites_controller_test.dart` | Toggle e remoção de favoritos |
+| `test/widget_test.dart` | Smoke do app |
 
 ## Desenvolvimento
 
@@ -237,7 +255,7 @@ flutter run -d android
 flutter run -d ios   # requer Mac
 ```
 
-Altere `lib/config.dart` para apontar a API ao ambiente de dev.
+Altere `lib/config.dart` para API de dev e o WhatsApp da loja (`storeWhatsApp`).
 
 ## Deploy web (VPS)
 

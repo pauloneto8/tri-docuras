@@ -48,6 +48,15 @@ Admin (fora do Flutter): `POST /api/admin/session`, `GET /api/admin/orders`, `PO
 - Botão na `confirmation_screen.dart`
 - Modelo: `lib/models/order_tracking.dart`
 
+## Favoritos e Perfil
+
+- `lib/favorites/` — `FavoritesController` + `FavoritesScope`; persistência `shared_preferences`
+- `favorites_screen.dart` — aba Favoritos (bottom nav índice 2)
+- `profile_screen.dart` — aba Perfil (índice 3) + `StoreMenuSheet` (menu ☰ no catálogo)
+- Coração em `product_screen.dart` — toggle via `FavoritesScope`
+- WhatsApp da loja: `AppConfig.storeWhatsApp` em `config.dart` (não é variável de ambiente)
+- Deps: `shared_preferences`, `url_launcher`
+
 ## Design system (v1)
 
 ### Paleta (`lib/theme/app_colors.dart`)
@@ -75,13 +84,15 @@ Dark `#412414`, Brown `#6A3A23`, Tan `#A4653C`, Cream `#FDEFE2`, Pink `#E6A6A4`,
 
 | # | Arquivo | Notas |
 |---|---------|-------|
-| 1 | `home_screen.dart` | Catálogo; aba Pedidos = consulta rastreamento |
-| 2 | `product_screen.dart` | Adicionar → pop com `CartAddedResult` |
+| 1 | `home_screen.dart` | Catálogo; bottom nav: Início, Pedidos, Favoritos, Perfil |
+| 2 | `product_screen.dart` | Favorito ♥ + Adicionar → pop com `CartAddedResult` |
 | 3 | `cart_screen.dart` | Remover item, entrega R$ 6,00 |
 | 4 | `checkout_screen.dart` | Nome, WhatsApp, endereço; `createOrder` |
 | 5 | `pix_screen.dart` | QR + copia-e-cola, polling, confirmação automática |
 | 6 | `confirmation_screen.dart` | Resumo + link rastreamento |
 | — | `order_tracking_screen.dart` | Timeline + `OrderLookupScreen` |
+| — | `favorites_screen.dart` | Lista favoritos (local) |
+| — | `profile_screen.dart` | Info loja + `StoreMenuSheet` |
 
 ## Layout web
 
@@ -93,6 +104,7 @@ Dark `#412414`, Brown `#6A3A23`, Tan `#A4653C`, Cream `#FDEFE2`, Pink `#E6A6A4`,
 
 - Web: `apiBaseUrl` = `/api` (`lib/config.dart`)
 - Mobile: `https://tridocuras.com.br/api`
+- `storeWhatsApp` / `appVersion` em `config.dart`
 - Modelos: `created_order.dart`, `order_tracking.dart`
 
 ## Deploy e verificação
