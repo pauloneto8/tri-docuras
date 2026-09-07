@@ -18,7 +18,10 @@ O frontend Flutter consome estes endpoints no checkout e na tela de pagamento.
 | POST | `/api/admin/session` | Login do painel (senha → token) |
 | GET | `/api/admin/orders` | Lista pedidos para a loja (autenticado) |
 | POST | `/api/admin/orders/{id}/status` | Atualiza status do pedido |
-| GET | `/admin` | Painel web de pedidos |
+| GET | `/api/admin/products` | Lista produtos (inclui ocultos) |
+| POST | `/api/admin/products` | Cria produto |
+| PUT | `/api/admin/products/{id}` | Atualiza produto |
+| GET | `/admin` | Painel web (pedidos + produtos) |
 
 ### Exemplo — health
 

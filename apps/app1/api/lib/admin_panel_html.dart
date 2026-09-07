@@ -3,7 +3,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tri Doçuras — Pedidos</title>
+  <title>Tri Doçuras — Painel</title>
   <style>
     :root {
       --dark: #412414;
@@ -25,6 +25,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     }
     .wrap { max-width: 960px; margin: 0 auto; padding: 16px; }
     h1 { font-size: 1.5rem; margin: 0 0 4px; }
+    h2 { font-size: 1.1rem; margin: 0 0 12px; }
     .sub { color: var(--brown); margin: 0 0 20px; font-size: 0.95rem; }
     .card {
       background: var(--card);
@@ -35,13 +36,14 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     }
     .login { max-width: 360px; margin: 48px auto; }
     label { display: block; font-size: 0.75rem; font-weight: 600; letter-spacing: .05em; margin-bottom: 6px; color: var(--brown); }
-    input, select, button {
+    input, select, textarea, button {
       font: inherit;
       border-radius: 10px;
       border: 1px solid rgba(65,36,20,.15);
       padding: 10px 12px;
     }
-    input { width: 100%; background: #fff; }
+    input, select, textarea { width: 100%; background: #fff; }
+    textarea { min-height: 72px; resize: vertical; }
     button {
       background: var(--pink);
       color: #fff;
@@ -53,8 +55,8 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     button.secondary { background: var(--peach); color: var(--dark); }
     button:disabled { opacity: .55; cursor: not-allowed; }
     .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
-    .tabs { display: flex; flex-wrap: wrap; gap: 8px; }
-    .tab {
+    .tabs, .main-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tab, .main-tab {
       background: var(--peach);
       color: var(--dark);
       border: none;
@@ -64,7 +66,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       font-weight: 600;
       font-size: 0.85rem;
     }
-    .tab.active { background: var(--dark); color: #fff; }
+    .tab.active, .main-tab.active { background: var(--dark); color: #fff; }
     .badge {
       display: inline-block;
       padding: 4px 10px;
@@ -79,8 +81,10 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     .badge.preparing { background: #b07a4f; }
     .badge.ready { background: var(--pink); }
     .badge.completed { background: var(--disabled); color: var(--brown); }
-    .order-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
-    .order-id { font-weight: 700; font-size: 1.05rem; }
+    .badge.available { background: var(--success); }
+    .badge.hidden-product { background: var(--disabled); color: var(--brown); }
+    .order-head, .product-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+    .order-id, .product-name { font-weight: 700; font-size: 1.05rem; }
     .meta { color: var(--brown); font-size: 0.9rem; line-height: 1.5; }
     .items { margin: 10px 0; padding-left: 18px; }
     .items li { margin-bottom: 4px; }
@@ -89,8 +93,15 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     .error { color: #a33; font-size: 0.9rem; margin-top: 8px; }
     .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
     a.wa { color: var(--pink); text-decoration: none; font-weight: 600; }
+    .form-grid { display: grid; gap: 12px; }
+    .form-row { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+    .checks { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+    .checks label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.9rem; letter-spacing: 0; }
+    .checks input { width: auto; }
+    .section-view[hidden] { display: none !important; }
     @media (max-width: 600px) {
       .wrap { padding: 12px; }
+      .form-row { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -98,7 +109,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
   <div class="wrap">
     <div id="loginView" class="login card">
       <h1>Tri Doçuras</h1>
-      <p class="sub">Painel de pedidos</p>
+      <p class="sub">Painel da loja</p>
       <label for="password">SENHA</label>
       <input id="password" type="password" autocomplete="current-password" placeholder="Senha do painel">
       <div style="height:12px"></div>
@@ -109,32 +120,87 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     <div id="panelView" hidden>
       <div class="topbar">
         <div>
-          <h1>Pedidos</h1>
-          <p class="sub">Fila da loja — atualize o status conforme prepara e entrega</p>
+          <h1>Tri Doçuras</h1>
+          <p class="sub">Gerencie pedidos e catálogo</p>
         </div>
         <button id="logoutBtn" type="button" class="secondary">Sair</button>
       </div>
 
-      <div class="toolbar">
-        <div class="tabs" id="tabs">
-          <button class="tab active" data-status="active">Fila</button>
-          <button class="tab" data-status="paid">Pagos</button>
-          <button class="tab" data-status="preparing">Em preparo</button>
-          <button class="tab" data-status="ready">Prontos</button>
-          <button class="tab" data-status="pending_payment">Aguardando Pix</button>
-          <button class="tab" data-status="completed">Concluídos</button>
-        </div>
-        <button id="refreshBtn" type="button" class="secondary">Atualizar</button>
+      <div class="main-tabs" id="mainTabs" style="margin-bottom:16px">
+        <button class="main-tab active" data-section="orders">Pedidos</button>
+        <button class="main-tab" data-section="products">Produtos</button>
       </div>
 
-      <div id="orders"></div>
-      <div id="listError" class="error"></div>
+      <div id="ordersView" class="section-view">
+        <div class="toolbar">
+          <div class="tabs" id="tabs">
+            <button class="tab active" data-status="active">Fila</button>
+            <button class="tab" data-status="paid">Pagos</button>
+            <button class="tab" data-status="preparing">Em preparo</button>
+            <button class="tab" data-status="ready">Prontos</button>
+            <button class="tab" data-status="pending_payment">Aguardando Pix</button>
+            <button class="tab" data-status="completed">Concluídos</button>
+          </div>
+          <button id="refreshBtn" type="button" class="secondary">Atualizar</button>
+        </div>
+        <div id="orders"></div>
+        <div id="listError" class="error"></div>
+      </div>
+
+      <div id="productsView" class="section-view" hidden>
+        <div class="toolbar">
+          <button id="newProductBtn" type="button">Novo produto</button>
+          <button id="refreshProductsBtn" type="button" class="secondary">Atualizar</button>
+        </div>
+
+        <div id="productFormCard" class="card" hidden>
+          <h2 id="productFormTitle">Novo produto</h2>
+          <form id="productForm" class="form-grid">
+            <input type="hidden" id="productId" value="">
+            <div>
+              <label for="productName">NOME</label>
+              <input id="productName" required maxlength="255" placeholder="Ex.: Brownie Tradicional">
+            </div>
+            <div>
+              <label for="productDescription">DESCRIÇÃO</label>
+              <textarea id="productDescription" placeholder="Descrição exibida no app"></textarea>
+            </div>
+            <div class="form-row">
+              <div>
+                <label for="productPrice">PREÇO (R$)</label>
+                <input id="productPrice" type="number" min="0.01" step="0.01" required placeholder="12.00">
+              </div>
+              <div>
+                <label for="productCategory">CATEGORIA</label>
+                <select id="productCategory" required>
+                  <option value="brownies">Brownies</option>
+                  <option value="combos">Combos</option>
+                </select>
+              </div>
+            </div>
+            <div class="checks">
+              <label><input id="productFeatured" type="checkbox"> Destaque no catálogo</label>
+              <label><input id="productAvailable" type="checkbox" checked> Visível no app</label>
+            </div>
+            <div class="actions">
+              <button id="saveProductBtn" type="submit">Salvar</button>
+              <button id="cancelProductBtn" type="button" class="secondary">Cancelar</button>
+            </div>
+          </form>
+          <div id="productFormError" class="error"></div>
+        </div>
+
+        <div id="products"></div>
+        <div id="productsError" class="error"></div>
+      </div>
     </div>
   </div>
 
   <script>
     const TOKEN_KEY = "td_admin_token";
     let currentStatus = "active";
+    let currentSection = "orders";
+    let ordersTimer = null;
 
     const loginView = document.getElementById("loginView");
     const panelView = document.getElementById("panelView");
@@ -145,6 +211,21 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     const ordersEl = document.getElementById("orders");
     const listError = document.getElementById("listError");
     const refreshBtn = document.getElementById("refreshBtn");
+    const ordersView = document.getElementById("ordersView");
+    const productsView = document.getElementById("productsView");
+    const productsEl = document.getElementById("products");
+    const productsError = document.getElementById("productsError");
+    const productFormCard = document.getElementById("productFormCard");
+    const productForm = document.getElementById("productForm");
+    const productFormTitle = document.getElementById("productFormTitle");
+    const productFormError = document.getElementById("productFormError");
+    const productIdInput = document.getElementById("productId");
+    const productNameInput = document.getElementById("productName");
+    const productDescriptionInput = document.getElementById("productDescription");
+    const productPriceInput = document.getElementById("productPrice");
+    const productCategoryInput = document.getElementById("productCategory");
+    const productFeaturedInput = document.getElementById("productFeatured");
+    const productAvailableInput = document.getElementById("productAvailable");
 
     function token() { return sessionStorage.getItem(TOKEN_KEY); }
     function setToken(value) {
@@ -212,6 +293,30 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       '</article>';
     }
 
+    function renderProduct(product) {
+      const badge = product.available
+        ? '<span class="badge available">' + product.availability_label + '</span>'
+        : '<span class="badge hidden-product">' + product.availability_label + '</span>';
+      const featured = product.featured ? ' · Destaque' : '';
+      const description = product.description
+        ? '<div class="meta">' + product.description + '</div>'
+        : '';
+
+      return '<article class="card">' +
+        '<div class="product-head">' +
+          '<div class="product-name">' + product.name + '</div>' +
+          badge +
+        '</div>' +
+        description +
+        '<div class="meta">' +
+          formatMoney(product.price) + ' · ' + product.category_label + featured +
+        '</div>' +
+        '<div class="actions">' +
+          '<button type="button" class="secondary" data-edit-product="' + product.id + '">Editar</button>' +
+        '</div>' +
+      '</article>';
+    }
+
     async function api(path, options) {
       const headers = Object.assign({ "Content-Type": "application/json" }, options && options.headers || {});
       if (token()) headers.Authorization = "Bearer " + token();
@@ -236,7 +341,8 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         });
         setToken(data.token);
         showPanel();
-        await loadOrders();
+        await refreshCurrentSection();
+        startOrdersTimer();
       } catch (error) {
         loginError.textContent = error.message || "Não foi possível entrar.";
       } finally {
@@ -280,7 +386,140 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       }
     }
 
+    function resetProductForm() {
+      productIdInput.value = "";
+      productNameInput.value = "";
+      productDescriptionInput.value = "";
+      productPriceInput.value = "";
+      productCategoryInput.value = "brownies";
+      productFeaturedInput.checked = false;
+      productAvailableInput.checked = true;
+      productFormError.textContent = "";
+      productFormTitle.textContent = "Novo produto";
+    }
+
+    function showProductForm(product) {
+      productFormCard.hidden = false;
+      productFormError.textContent = "";
+      if (product) {
+        productFormTitle.textContent = "Editar produto";
+        productIdInput.value = product.id;
+        productNameInput.value = product.name;
+        productDescriptionInput.value = product.description || "";
+        productPriceInput.value = Number(product.price).toFixed(2);
+        productCategoryInput.value = product.category;
+        productFeaturedInput.checked = !!product.featured;
+        productAvailableInput.checked = !!product.available;
+      } else {
+        resetProductForm();
+      }
+    }
+
+    function hideProductForm() {
+      productFormCard.hidden = true;
+      resetProductForm();
+    }
+
+    function productPayload() {
+      return {
+        name: productNameInput.value.trim(),
+        description: productDescriptionInput.value.trim(),
+        price: Number(productPriceInput.value),
+        category: productCategoryInput.value,
+        featured: productFeaturedInput.checked,
+        available: productAvailableInput.checked
+      };
+    }
+
+    async function loadProducts() {
+      productsError.textContent = "";
+      productsEl.innerHTML = '<div class="empty">Carregando…</div>';
+      try {
+        const data = await api("/api/admin/products");
+        const products = data.products || [];
+        if (!products.length) {
+          productsEl.innerHTML = '<div class="empty">Nenhum produto cadastrado.</div>';
+          return;
+        }
+        productsEl.innerHTML = products.map(renderProduct).join("");
+        productsEl.querySelectorAll("[data-edit-product]").forEach(function(btn) {
+          btn.addEventListener("click", function() {
+            const id = Number(btn.getAttribute("data-edit-product"));
+            const product = products.find(function(item) { return item.id === id; });
+            if (product) showProductForm(product);
+          });
+        });
+      } catch (error) {
+        productsEl.innerHTML = "";
+        productsError.textContent = error.message;
+      }
+    }
+
+    async function saveProduct(event) {
+      event.preventDefault();
+      productFormError.textContent = "";
+      const saveBtn = document.getElementById("saveProductBtn");
+      saveBtn.disabled = true;
+      try {
+        const payload = productPayload();
+        const editingId = productIdInput.value;
+        if (editingId) {
+          await api("/api/admin/products/" + encodeURIComponent(editingId), {
+            method: "PUT",
+            body: JSON.stringify(payload)
+          });
+        } else {
+          await api("/api/admin/products", {
+            method: "POST",
+            body: JSON.stringify(payload)
+          });
+        }
+        hideProductForm();
+        await loadProducts();
+      } catch (error) {
+        productFormError.textContent = error.message;
+      } finally {
+        saveBtn.disabled = false;
+      }
+    }
+
+    function showSection(section) {
+      currentSection = section;
+      document.querySelectorAll(".main-tab").forEach(function(el) {
+        el.classList.toggle("active", el.dataset.section === section);
+      });
+      ordersView.hidden = section !== "orders";
+      productsView.hidden = section !== "products";
+      if (section === "orders") {
+        loadOrders();
+        startOrdersTimer();
+      } else {
+        stopOrdersTimer();
+        loadProducts();
+      }
+    }
+
+    async function refreshCurrentSection() {
+      if (currentSection === "orders") await loadOrders();
+      else await loadProducts();
+    }
+
+    function startOrdersTimer() {
+      stopOrdersTimer();
+      if (currentSection === "orders") {
+        ordersTimer = setInterval(loadOrders, 30000);
+      }
+    }
+
+    function stopOrdersTimer() {
+      if (ordersTimer) {
+        clearInterval(ordersTimer);
+        ordersTimer = null;
+      }
+    }
+
     function showLogin() {
+      stopOrdersTimer();
       loginView.hidden = false;
       panelView.hidden = true;
     }
@@ -288,6 +527,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     function showPanel() {
       loginView.hidden = true;
       panelView.hidden = false;
+      showSection(currentSection);
     }
 
     document.getElementById("tabs").addEventListener("click", function(event) {
@@ -299,6 +539,12 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       loadOrders();
     });
 
+    document.getElementById("mainTabs").addEventListener("click", function(event) {
+      const tab = event.target.closest(".main-tab");
+      if (!tab) return;
+      showSection(tab.dataset.section);
+    });
+
     loginBtn.addEventListener("click", login);
     passwordInput.addEventListener("keydown", function(event) {
       if (event.key === "Enter") login();
@@ -308,11 +554,15 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       showLogin();
     });
     refreshBtn.addEventListener("click", loadOrders);
+    document.getElementById("refreshProductsBtn").addEventListener("click", loadProducts);
+    document.getElementById("newProductBtn").addEventListener("click", function() {
+      showProductForm(null);
+    });
+    document.getElementById("cancelProductBtn").addEventListener("click", hideProductForm);
+    productForm.addEventListener("submit", saveProduct);
 
     if (token()) {
       showPanel();
-      loadOrders();
-      setInterval(loadOrders, 30000);
     } else {
       showLogin();
     }

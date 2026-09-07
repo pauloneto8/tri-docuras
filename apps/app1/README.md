@@ -37,6 +37,9 @@ Domínio em `/opt/hosting/.env` → `APP1_DOMAIN` (`tridocuras.com.br`). HTTPS v
 | POST | `/api/admin/session` | Login do painel |
 | GET | `/api/admin/orders` | Lista pedidos (autenticado) |
 | POST | `/api/admin/orders/{id}/status` | Atualiza status do pedido |
+| GET | `/api/admin/products` | Lista produtos (inclui ocultos) |
+| POST | `/api/admin/products` | Cria produto |
+| PUT | `/api/admin/products/{id}` | Atualiza produto |
 
 ### Catálogo em produção (set/2026)
 
@@ -152,8 +155,9 @@ docker compose build app1 app1-web && docker compose up -d app1 app1-web
 
 | Item | Estado |
 |------|--------|
+| CRUD de produtos no `/admin` | Implementado |
+| Fotos no catálogo | Futuro |
 | Notificação WhatsApp ao confirmar pagamento | Futuro |
-| Fotos e CRUD de produtos | Futuro |
 
 ### Painel da loja
 
