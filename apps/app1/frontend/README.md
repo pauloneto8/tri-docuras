@@ -28,15 +28,17 @@ lib/
 │   └── app_theme.dart     # ThemeData + tipografia
 ├── models/
 │   ├── product.dart
-│   └── created_order.dart   # CreatedOrder, PixPayment, OrderStatus
+│   ├── created_order.dart     # CreatedOrder, PixPayment, OrderStatus
+│   └── order_tracking.dart    # OrderTracking, TrackingStep
 ├── services/api_service.dart
 ├── screens/
-│   ├── home_screen.dart      # catálogo (tela 1)
-│   ├── product_screen.dart   # detalhe do produto (tela 2)
-│   ├── cart_screen.dart      # carrinho (tela 3)
-│   ├── checkout_screen.dart  # checkout (tela 4)
-│   ├── pix_screen.dart       # pagamento Pix (tela 5)
-│   └── confirmation_screen.dart # confirmação (tela 6)
+│   ├── home_screen.dart           # catálogo (tela 1) + aba Pedidos
+│   ├── product_screen.dart        # detalhe do produto (tela 2)
+│   ├── cart_screen.dart           # carrinho (tela 3)
+│   ├── checkout_screen.dart       # checkout (tela 4)
+│   ├── pix_screen.dart            # pagamento Pix (tela 5)
+│   ├── confirmation_screen.dart   # confirmação (tela 6)
+│   └── order_tracking_screen.dart # rastreamento + consulta por número
 ├── checkout/
 │   ├── checkout_draft.dart
 │   ├── checkout_validators.dart
@@ -70,8 +72,8 @@ Render PNG das páginas (comparação visual): `/root/.cursor/docs/tri-docuras/r
 | Cream | `#FDEFE2` | fundo do app |
 | Pink | `#E6A6A4` | coração na moldura |
 | Pink Deep | `#D67F7C` | CTAs, nav ativo, badge carrinho |
-| Success | `#7C9473` | status pago (futuro) |
-| Warning | `#C98A3C` | aguardando pagamento (futuro) |
+| Success | `#7C9473` | status pago / etapa concluída na timeline |
+| Warning | `#C98A3C` | aguardando pagamento Pix |
 | Card | `#FFFBF6` | fundo dos cards de produto |
 | Peach | `#F7E3D0` | chips inativos, círculos do header, preenchimento da moldura |
 | Sky | `#99D2F3` | ícone de busca, ícone Pedidos (nav) |
@@ -113,7 +115,7 @@ Implementada conforme página 4 do PDF (lado esquerdo):
 - **Grade:** 2 colunas fixas, cards off-white com moldura circular
 - **Navegação:** toque no card ou em "Adicionar" abre a tela de produto
 - **Balão ao adicionar:** volta ao catálogo + `CartAddedBanner` (5 s) com link **Ver carrinho**
-- **Bottom nav:** dentro do `body` (Column), não `Scaffold.bottomNavigationBar`
+- **Bottom nav:** Catálogo (0), **Pedidos** (1 — consulta `TD-0001`), Favoritos/Perfil (em breve)
 
 ### Tela 2 — Produto (`product_screen.dart`)
 
@@ -163,12 +165,24 @@ Integrada com Mercado Pago (produção ou teste):
 - **Tentar novamente** chama `POST /api/orders/{id}/pix` se a cobrança expirar
 - Confirmação automática → `ConfirmationScreen` (limpa carrinho)
 
+### Aba Pedidos (`home_screen.dart` + `order_tracking_screen.dart`)
+
+- **OrderLookupScreen** embutida na aba Pedidos da bottom nav
+- Campo para número do pedido (`TD-0001`) com validação
+- Abre **OrderTrackingScreen** com timeline e polling (15 s)
+- `GET /api/orders/{id}/tracking`
+
 ### Tela 6 — Confirmação (`confirmation_screen.dart`)
 
-Implementada conforme página 6 do PDF (lado direito):
+- Pedido confirmado, resumo (#pedido, retirada/entrega, total, badge Pago)
+- **Acompanhar pedido** → `OrderTrackingScreen`
+- **Voltar à loja** (limpa stack → catálogo)
 
-- Pedido confirmado, resumo (#pedido, retirada/entrega, total, status Pago)
-- Acompanhar pedido (em breve), Voltar à loja (limpa stack → catálogo)
+### Rastreamento (`order_tracking_screen.dart`)
+
+- Timeline vertical (pedido recebido → pago → preparo → pronto → concluído)
+- Atualização manual e automática (polling)
+- Mensagem de conclusão quando `status = completed`
 
 ### Fluxo de navegação
 
@@ -176,16 +190,18 @@ Implementada conforme página 6 do PDF (lado direito):
 HomeScreen ──► ProductScreen ──(Adicionar)──► catálogo + balão (5 s, Ver carrinho)
 HomeScreen ──(ícone carrinho / Ver carrinho)──► CartScreen ──(Finalizar)──► CheckoutScreen
 CheckoutScreen ──(Gerar Pix → POST /api/orders)──► PixScreen ──(paid / polling)──► ConfirmationScreen
+ConfirmationScreen ──(Acompanhar pedido)──► OrderTrackingScreen
+HomeScreen (aba Pedidos) ──(TD-0001)──► OrderTrackingScreen
 ConfirmationScreen ──(Voltar à loja)──► HomeScreen (carrinho limpo)
 ```
 
 Estado do carrinho: `CartController` em memória (`add`, `updateQuantity`, `removeAt`, `deliveryFeeAmount = 6`). Badge do header = `itemCount`.
 
-Pedidos são persistidos na API; pagamento confirmado via webhook Mercado Pago + polling no cliente.
+Pedidos persistidos na API; pagamento via webhook MP + polling; status operacional atualizado no painel `/admin` e refletido na timeline do cliente.
 
 ### Pendente
 
-Rastreamento de pedidos (UI “em breve”).
+Notificação WhatsApp; fotos e CRUD de produtos no catálogo.
 
 ## Testes
 
@@ -201,6 +217,7 @@ flutter test
 | `test/checkout/delivery_address_validators_test.dart` | Endereço (entrega) |
 | `test/checkout/order_payload_test.dart` | Payload do POST /orders |
 | `test/models/created_order_test.dart` | Parse da resposta (pedido + Pix) |
+| `test/models/order_tracking_test.dart` | Parse da timeline |
 | `test/widget_test.dart` | Smoke |
 
 ## Desenvolvimento

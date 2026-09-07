@@ -7,8 +7,11 @@ Infraestrutura Docker para hospedar duas aplicações isoladas, com Nginx como p
 ```
 Internet :80/:443
     └── nginx (hosting-nginx)
-            ├── tridocuras.com.br → app1-web (Flutter) + /api → app1 (Dart Frog)
-            └── assistfin.com.br  → app2 (AssistFin + agente IA)
+            ├── tridocuras.com.br
+            │     ├── /        → app1-web (Flutter)
+            │     ├── /api/*   → app1 (Dart Frog)
+            │     └── /admin   → app1 (painel de pedidos)
+            └── assistfin.com.br → app2 (AssistFin + agente IA)
 ```
 
 Cada app tem stack isolada: container web/API, PostgreSQL dedicado, rede interna e volume de dados próprios.
@@ -36,6 +39,8 @@ Cada app tem stack isolada: container web/API, PostgreSQL dedicado, rede interna
 |----------|-------|-----|
 | `APP1_DOMAIN` | `tridocuras.com.br` | Tri Doçuras |
 | `APP2_DOMAIN` | `assistfin.com.br` | AssistFin |
+
+Variáveis adicionais do App 1 (Pix, painel admin): ver [`apps/app1/README.md`](apps/app1/README.md) e [`.env.example`](.env.example).
 
 ## Comandos úteis
 
@@ -90,7 +95,15 @@ Expor apenas `80`, `443` e SSH conforme a política do provedor.
 | `hosting-app1` | API Dart Frog (`/api/*`) |
 | `hosting-app1-db` | PostgreSQL 16 |
 
-Fluxo de compra completo (6 telas): catálogo → produto → carrinho → checkout → Pix → confirmação. Pedidos e pagamento Pix integrados ao backend (Mercado Pago). **Painel da loja:** https://tridocuras.com.br/admin (`APP1_ADMIN_PASSWORD` no `.env`).
+Fluxo completo: catálogo → checkout → Pix (Mercado Pago) → confirmação → rastreamento.
+
+| URL | Função |
+|-----|--------|
+| https://tridocuras.com.br | Loja (Flutter web) |
+| https://tridocuras.com.br/admin | Painel de pedidos da loja |
+| https://tridocuras.com.br/api/health | Health da API |
+
+Credenciais em `/opt/hosting/.env`: `APP1_MP_*` (Pix), `APP1_ADMIN_PASSWORD` (painel). **Não commitar** o `.env`.
 
 ```bash
 docker compose build app1-web && docker compose up -d app1-web   # só frontend

@@ -10,10 +10,22 @@ paths: lib/**,web/**,pubspec.yaml,android/**,ios/**
 
 - App: `/opt/hosting/apps/app1/frontend` (`tri_docuras` v1.0.0+1)
 - API: Dart Frog em `/opt/hosting/apps/app1/api`
-- Endpoints: `GET /api/products`, `GET /api/health`, `POST /api/orders`, `GET /api/orders/{id}`, `POST /api/orders/{id}/pix`
 - Produção: https://tridocuras.com.br
-- Web deploy: `docker compose build app1-web && docker compose up -d app1-web` em `/opt/hosting`
+- Painel loja: https://tridocuras.com.br/admin (`APP1_ADMIN_PASSWORD` em `/opt/hosting/.env`)
+- Web deploy: `docker compose build app1 app1-web && docker compose up -d app1 app1-web` em `/opt/hosting`
 - Design system PDF: `/root/.cursor/docs/tri-docuras/design-system-tri-docuras.pdf`
+
+## API (endpoints usados pelo app)
+
+| Método | Rota | Uso |
+|--------|------|-----|
+| GET | `/api/products` | Catálogo |
+| POST | `/api/orders` | Checkout → criar pedido + Pix |
+| GET | `/api/orders/{id}` | Polling pagamento Pix |
+| POST | `/api/orders/{id}/pix` | Regenerar Pix expirado |
+| GET | `/api/orders/{id}/tracking` | Timeline de rastreamento |
+
+Admin (fora do Flutter): `POST /api/admin/session`, `GET /api/admin/orders`, `POST /api/admin/orders/{id}/status`.
 
 ## Integração Pix (Mercado Pago)
 
@@ -21,24 +33,26 @@ paths: lib/**,web/**,pubspec.yaml,android/**,ios/**
 - Tela 5 renderiza QR com `qr_flutter` a partir do `copy_code`
 - Polling `GET /api/orders/{id}` até `status = paid`; webhook MP na API
 - `mp_mode: test` na resposta → banner no app (Pix sandbox não paga em banco real)
-- Credenciais em `/opt/hosting/.env`: `APP1_MP_ACCESS_TOKEN`, `APP1_MP_USE_TEST`, etc.
+- Credenciais: `APP1_MP_ACCESS_TOKEN`, `APP1_MP_USE_TEST` no `.env`
 
 ## Painel da loja
 
 - URL: https://tridocuras.com.br/admin
-- Senha: `APP1_ADMIN_PASSWORD` no `.env`
+- Senha: `APP1_ADMIN_PASSWORD` no `/opt/hosting/.env` (reiniciar `app1` após alterar)
 - Status: `paid` → `preparing` → `ready` → `completed`
 
 ## Rastreamento (cliente)
 
-- `GET /api/orders/{id}/tracking` — timeline
-- Aba **Pedidos** no app ou botão na confirmação
+- `order_tracking_screen.dart` — timeline + polling 15 s
+- `OrderLookupScreen` na aba **Pedidos** (`home_screen.dart`)
+- Botão na `confirmation_screen.dart`
+- Modelo: `lib/models/order_tracking.dart`
 
 ## Design system (v1)
 
 ### Paleta (`lib/theme/app_colors.dart`)
 
-Dark `#412414`, Brown `#6A3A23`, Tan `#A4653C`, Cream `#FDEFE2`, Pink `#E6A6A4`, Pink Deep `#D67F7C`, Card `#FFFBF6`, Peach `#F7E3D0`, Sky `#99D2F3`, Disabled `#E6D9CC`.
+Dark `#412414`, Brown `#6A3A23`, Tan `#A4653C`, Cream `#FDEFE2`, Pink `#E6A6A4`, Pink Deep `#D67F7C`, Card `#FFFBF6`, Peach `#F7E3D0`, Sky `#99D2F3`, Disabled `#E6D9CC`, Success `#7C9473`, Warning `#C98A3C`.
 
 ### Componentes (`lib/widgets/`)
 
@@ -57,21 +71,21 @@ Dark `#412414`, Brown `#6A3A23`, Tan `#A4653C`, Cream `#FDEFE2`, Pink `#E6A6A4`,
 - `order_payload.dart` — monta body do `POST /api/orders`
 - PII só em memória (`CheckoutDraft`); token MP só no backend
 
-### Telas (fluxo completo)
+### Telas
 
 | # | Arquivo | Notas |
 |---|---------|-------|
-| 1 | `home_screen.dart` | Catálogo, balão ao adicionar |
+| 1 | `home_screen.dart` | Catálogo; aba Pedidos = consulta rastreamento |
 | 2 | `product_screen.dart` | Adicionar → pop com `CartAddedResult` |
 | 3 | `cart_screen.dart` | Remover item, entrega R$ 6,00 |
 | 4 | `checkout_screen.dart` | Nome, WhatsApp, endereço; `createOrder` |
 | 5 | `pix_screen.dart` | QR + copia-e-cola, polling, confirmação automática |
-| 6 | `confirmation_screen.dart` | Limpa carrinho, voltar à loja |
+| 6 | `confirmation_screen.dart` | Resumo + link rastreamento |
+| — | `order_tracking_screen.dart` | Timeline + `OrderLookupScreen` |
 
 ## Layout web
 
 - Nav inferior no `body` (Column), não `bottomNavigationBar`
-- `MaterialApp.builder` com `Scaffold` cream; balão do carrinho é widget overlay no catálogo
 - `AppTheme.maxContentWidth` = 430px
 - Hard refresh após deploy (`Ctrl+Shift+R`)
 
@@ -79,7 +93,7 @@ Dark `#412414`, Brown `#6A3A23`, Tan `#A4653C`, Cream `#FDEFE2`, Pink `#E6A6A4`,
 
 - Web: `apiBaseUrl` = `/api` (`lib/config.dart`)
 - Mobile: `https://tridocuras.com.br/api`
-- Modelos: `CreatedOrder`, `PixPayment`, `OrderStatus` em `lib/models/created_order.dart`
+- Modelos: `created_order.dart`, `order_tracking.dart`
 
 ## Deploy e verificação
 
@@ -91,8 +105,7 @@ curl -s https://tridocuras.com.br/api/health
 ## Testes
 
 ```bash
-cd /opt/hosting/apps/app1/frontend
-flutter test
+cd /opt/hosting/apps/app1/frontend && flutter test
 ```
 
 ## Pendente

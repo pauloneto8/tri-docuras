@@ -115,6 +115,68 @@ curl -s https://tridocuras.com.br/api/orders/TD-0001
 curl -s -X POST https://tridocuras.com.br/api/orders/TD-0001/pix
 ```
 
+### Exemplo — rastreamento (cliente)
+
+```bash
+curl -s https://tridocuras.com.br/api/orders/TD-0001/tracking
+```
+
+```json
+{
+  "order": {
+    "id": "TD-0001",
+    "status": "preparing",
+    "status_label": "Em preparo",
+    "delivery_mode": "pickup",
+    "delivery_label": "Retirada",
+    "total": 24.0,
+    "is_paid": true,
+    "is_completed": false
+  },
+  "timeline": [
+    {"key": "received", "label": "Pedido recebido", "done": true, "current": false},
+    {"key": "paid", "label": "Pagamento confirmado", "done": true, "current": false},
+    {"key": "preparing", "label": "Em preparo", "done": true, "current": true}
+  ]
+}
+```
+
+### Exemplo — login do painel
+
+```bash
+curl -s -X POST https://tridocuras.com.br/api/admin/session \
+  -H 'Content-Type: application/json' \
+  -d '{"password":"SUA_SENHA"}'
+```
+
+Resposta: `{ "token": "..." }`. Use em `Authorization: Bearer <token>` nas rotas `/api/admin/*`.
+
+### Exemplo — listar pedidos (admin)
+
+```bash
+curl -s "https://tridocuras.com.br/api/admin/orders?status=active" \
+  -H "Authorization: Bearer SEU_TOKEN"
+```
+
+### Exemplo — atualizar status (admin)
+
+```bash
+curl -s -X POST https://tridocuras.com.br/api/admin/orders/TD-0001/status \
+  -H "Authorization: Bearer SEU_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"status":"preparing"}'
+```
+
+## Ciclo de vida do status
+
+| Status | Descrição |
+|--------|-----------|
+| `pending_payment` | Aguardando Pix |
+| `paid` | Pagamento confirmado (webhook MP) |
+| `preparing` | Em preparo (painel admin) |
+| `ready` | Pronto para retirada/entrega |
+| `completed` | Retirado ou entregue |
+
 ## Tabelas
 
 | Tabela | Uso |
@@ -132,20 +194,34 @@ api/
 ├── lib/
 │   ├── db.dart                    # Postgres, schema, seed
 │   ├── orders.dart                # Validação, criação, Pix, webhook sync
+│   ├── order_tracking.dart        # Timeline para o cliente
+│   ├── admin_orders.dart          # Listagem e status (painel)
+│   ├── admin_auth.dart            # Autenticação do painel
+│   ├── admin_panel_html.dart      # UI HTML do /admin
 │   ├── mercado_pago_client.dart   # Cliente API MP v1 payments
 │   └── mercado_pago_config.dart   # Credenciais e URL do webhook
 ├── routes/
 │   ├── _middleware.dart           # CORS + init DB
+│   ├── admin/
+│   │   └── index.dart             # GET /admin (HTML)
 │   └── api/
 │       ├── health.dart
 │       ├── products.dart
+│       ├── admin/
+│       │   ├── session.dart         # POST login
+│       │   └── orders/              # GET lista, POST status
 │       ├── orders/
-│       │   ├── index.dart         # POST create
+│       │   ├── index.dart           # POST create
 │       │   └── [id]/
-│       │       ├── index.dart     # GET status
-│       │       └── pix.dart       # POST regenerar Pix
+│       │       ├── index.dart       # GET status
+│       │       ├── pix.dart         # POST regenerar Pix
+│       │       └── tracking.dart    # GET timeline cliente
 │       └── webhooks/
 │           └── mercadopago.dart
+├── test/
+│   ├── mercado_pago_client_test.dart
+│   ├── admin_orders_test.dart
+│   └── order_tracking_test.dart
 ├── bin/
 │   ├── wait_for_db.dart
 │   └── seed.dart
@@ -174,7 +250,13 @@ Filtros `status`: `active` (fila), `paid`, `preparing`, `ready`, `pending_paymen
 
 Fluxo de status após pagamento: `paid` → `preparing` → `ready` → `completed`.
 
-Variável: `APP1_ADMIN_PASSWORD` no `.env`.
+**Configuração:**
+
+1. Defina `APP1_ADMIN_PASSWORD` no `/opt/hosting/.env` (não commitar).
+2. `docker compose up -d app1` após alterar a senha.
+3. Nginx deve rotear `/admin` para `app1:8080` (já configurado em `nginx/ssl/app1.conf`).
+
+O login (`POST /api/admin/session`) retorna um token Bearer válido enquanto a senha não mudar.
 
 ## Mercado Pago (Pix)
 
@@ -187,7 +269,7 @@ Variáveis no `/opt/hosting/.env` (repassadas ao container `app1`):
 | `APP1_MP_TEST_PUBLIC_KEY` | `MP_TEST_PUBLIC_KEY` | Public Key de teste |
 | `APP1_MP_USE_TEST` | `MP_USE_TEST` | `true` = sandbox; `false` = produção |
 | `APP1_DOMAIN` | `APP1_DOMAIN` | Domínio público (monta URL do webhook) |
-| `APP1_ADMIN_PASSWORD` | Senha do painel `/admin` |
+| `APP1_ADMIN_PASSWORD` | `APP1_ADMIN_PASSWORD` | Senha do painel `/admin` |
 
 Webhook no painel MP: `https://tridocuras.com.br/api/webhooks/mercadopago`
 

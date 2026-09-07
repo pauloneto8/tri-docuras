@@ -18,6 +18,7 @@ Doceria online especializada em brownies. Cliente multiplataforma (Android, iOS,
 |---------|---------|
 | `/` | Flutter web (`app1-web`) |
 | `/api/*` | Dart Frog (`app1:8080`) |
+| `/admin` | Painel de pedidos da loja (`app1:8080`) |
 
 Domínio em `/opt/hosting/.env` → `APP1_DOMAIN` (`tridocuras.com.br`). HTTPS via Let's Encrypt (`/opt/hosting/certs`).
 
@@ -31,6 +32,11 @@ Domínio em `/opt/hosting/.env` → `APP1_DOMAIN` (`tridocuras.com.br`). HTTPS v
 | GET | `/api/orders/{id}` | Status do pedido (`pending_payment` / `paid`) |
 | POST | `/api/orders/{id}/pix` | Regenerar cobrança Pix (se expirada) |
 | POST | `/api/webhooks/mercadopago` | Webhook de confirmação de pagamento |
+| GET | `/api/orders/{id}/tracking` | Timeline de rastreamento (cliente) |
+| GET | `/admin` | Painel web da loja |
+| POST | `/api/admin/session` | Login do painel |
+| GET | `/api/admin/orders` | Lista pedidos (autenticado) |
+| POST | `/api/admin/orders/{id}/status` | Atualiza status do pedido |
 
 ### Catálogo em produção (set/2026)
 
@@ -55,13 +61,39 @@ Categorias: `brownies`, `combos`.
 | 3 | Carrinho | Stepper, **Remover** item, entrega (retirar / receber R$ 6,00) |
 | 4 | Checkout | Nome, WhatsApp, endereço (entrega), Pix via Mercado Pago |
 | 5 | Pagamento Pix | QR escaneável, copia-e-cola, timer 10 min, confirmação automática |
-| 6 | Confirmação | Resumo do pedido, status Pago, voltar à loja |
+| 6 | Confirmação | Resumo do pedido, link para rastreamento, voltar à loja |
 
 **Entrega:** apenas Nazaré da Mata - PE (CEP 55.800-000); taxa R$ 6,00 para receber em casa.
 
-**Navegação:** catálogo → produto → carrinho → checkout → Pix → confirmação.
+**Navegação cliente:** catálogo → produto → carrinho → checkout → Pix → confirmação → (opcional) rastreamento.
+
+**Aba Pedidos** no app: consulta por número (`TD-0001`) e timeline com polling.
 
 Carrinho e checkout no Flutter; **Gerar Pix** grava o pedido (`POST /api/orders`), gera cobrança Pix no Mercado Pago e exibe QR + copia-e-cola. A confirmação é automática via webhook + polling (`GET /api/orders/{id}`).
+
+### Ciclo de vida do pedido
+
+| Status | Quem define | Significado |
+|--------|-------------|-------------|
+| `pending_payment` | Sistema | Aguardando Pix |
+| `paid` | Webhook MP | Pagamento confirmado |
+| `preparing` | Painel `/admin` | Em preparo |
+| `ready` | Painel `/admin` | Pronto para retirada/entrega |
+| `completed` | Painel `/admin` | Retirado ou entregue |
+
+Transições no painel: `paid` → `preparing` → `ready` → `completed` (com atalhos permitidos, ex.: `paid` → `ready`).
+
+### Variáveis de ambiente (`/opt/hosting/.env`)
+
+| Variável | Obrigatória | Uso |
+|----------|-------------|-----|
+| `APP1_DB_*` | Sim | PostgreSQL |
+| `APP1_MP_ACCESS_TOKEN` | Para Pix real | Access Token de produção |
+| `APP1_MP_TEST_*` / `APP1_MP_USE_TEST` | Não | Sandbox Mercado Pago |
+| `APP1_ADMIN_PASSWORD` | Para painel | Senha de https://tridocuras.com.br/admin |
+| `APP1_DOMAIN` | Sim | Domínio público + webhook MP |
+
+Modelo completo: [`../../.env.example`](../../.env.example) na raiz do hosting.
 
 ### Mercado Pago (Pix)
 
@@ -110,19 +142,28 @@ docker compose build app1 app1-web && docker compose up -d app1 app1-web
 
 **URL:** https://tridocuras.com.br/admin
 
-Senha em `APP1_ADMIN_PASSWORD` no `.env`. O painel lista pedidos, mostra itens/endereço/WhatsApp e permite avançar o status:
+1. Defina `APP1_ADMIN_PASSWORD` no `/opt/hosting/.env` (senha forte; não versionar).
+2. Reinicie a API: `docker compose up -d app1`.
+3. Acesse `/admin`, informe a senha e gerencie a fila.
 
-`paid` → `preparing` → `ready` → `completed`
+O painel lista pedidos com itens, endereço, total e link para WhatsApp do cliente. Atualização automática a cada 30 s.
 
-Abas: Fila (pagos + preparo + prontos), filtros por status, atualização automática a cada 30 s.
+**Abas:** Fila (`active` = pagos + preparo + prontos), Pagos, Em preparo, Prontos, Aguardando Pix, Concluídos.
+
+```bash
+# Trocar senha: edite APP1_ADMIN_PASSWORD no .env e reinicie app1
+cd /opt/hosting && docker compose up -d app1
+```
 
 ### Rastreamento (cliente)
 
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/orders/{id}/tracking` | Timeline do pedido para o cliente |
+| Onde | Como |
+|------|------|
+| App — aba **Pedidos** | Digite `TD-0001` e consulte a timeline |
+| Tela de confirmação | Botão **Acompanhar pedido** |
+| API | `GET /api/orders/{id}/tracking` |
 
-No app: aba **Pedidos** (consulta por `TD-0001`) ou botão **Acompanhar pedido** na confirmação.
+A timeline reflete os mesmos status do painel da loja (polling a cada 15 s no app).
 
 ## Operações
 
@@ -178,7 +219,21 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 | Carrinho (memória) | `frontend/lib/cart/` |
 | Checkout / endereço | `frontend/lib/checkout/` |
 
-## Testes (frontend)
+## Testes
+
+### API (`apps/app1/api`)
+
+```bash
+docker run --rm -v /opt/hosting/apps/app1/api:/app -w /app dart:stable sh -c "dart pub get && dart test"
+```
+
+| Arquivo | Cobertura |
+|---------|-----------|
+| `test/mercado_pago_client_test.dart` | Status de pagamento MP |
+| `test/admin_orders_test.dart` | Labels e transições de status |
+| `test/order_tracking_test.dart` | Timeline do cliente |
+
+### Frontend
 
 | Arquivo | Cobertura |
 |---------|-----------|
@@ -186,7 +241,8 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 | `test/checkout/checkout_validators_test.dart` | Nome, WhatsApp |
 | `test/checkout/delivery_address_validators_test.dart` | Endereço de entrega |
 | `test/checkout/order_payload_test.dart` | Payload do POST /orders |
-| `test/models/created_order_test.dart` | Parse da resposta da API |
+| `test/models/created_order_test.dart` | Parse da resposta (pedido + Pix) |
+| `test/models/order_tracking_test.dart` | Parse da timeline |
 | `test/widget_test.dart` | Smoke do app |
 
 ## Mobile
