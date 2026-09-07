@@ -5,7 +5,7 @@ description: >-
   transferências, orçamentos e regras de negócio. Use ao alterar dashboard,
   finance.py, modelos, onboarding, contas, movimentos, resumos por período
   ou saldo inicial com data.
-paths: app/services/finance.py, app/models.py, app/schemas.py, app/services/recurrence.py, app/services/installments.py, app/services/credit_cards.py, app/templates/dashboard.html, app/templates/accounts.html, app/templates/transactions.html, app/templates/transaction_form.html, app/templates/transaction_edit.html, app/templates/budgets.html, app/templates/budget_form.html, app/templates/budget_edit.html, app/routers/pages.py, tests/test_summary.py, tests/test_transfers.py, tests/test_update_transfer.py, tests/test_planned_transactions.py, tests/test_recurrence.py, tests/test_installments.py, tests/test_credit_cards.py
+paths: app/services/finance.py, app/models.py, app/schemas.py, app/services/recurrence.py, app/services/installments.py, app/services/credit_cards.py, app/services/statement_parse.py, app/templates/dashboard.html, app/templates/accounts.html, app/templates/transactions.html, app/templates/transaction_form.html, app/templates/transaction_edit.html, app/templates/budgets.html, app/templates/budget_form.html, app/templates/budget_edit.html, app/routers/pages.py, tests/test_summary.py, tests/test_transfers.py, tests/test_update_transfer.py, tests/test_planned_transactions.py, tests/test_recurrence.py, tests/test_installments.py, tests/test_credit_cards.py, tests/test_statement_parse.py
 ---
 
 # AssistFin — Domínio financeiro
@@ -38,16 +38,16 @@ Realizar: `realize_planned()` cria lançamento `actual` com `source_planned_id`.
 
 ## UI Movimentos (`/transactions`)
 
-Filtro: `period` + `ref_date` (padrão **month** / hoje) — mesma lógica de período do dashboard (`resolve_period_bounds` / `format_period_label`).
+Filtro: `period` + `ref_date` (padrão **month** / hoje) + opcional `account_id`, `card_id`, `category_id`, `type` (`expense`|`income`|`transfer`|`all`). Estado na sessão (`transactions_list_filter`) até `?clear=1`. Mesma lógica de período do dashboard (`resolve_period_bounds` / `format_period_label`).
 
 | Seção | Query / regra | Exibição |
 |-------|---------------|----------|
-| **A realizar** | `status=planned`, `not is_realized`, no período | Vencimento; selo Previsto / `Fixo · …` / `3/12 · mensal`; **Realizar** / **Editar** / **Excluir** / Encerrar série / Cancelar parcelas |
-| **Extrato** | `status=actual`, no período; omite `transfer_in` e compras de cartão | Pagamento; “de previsto” se `source_planned_id`; **Editar** / **Excluir** |
+| **A realizar** | `status=planned`, `not is_realized`, no período (+ filtros) | Vencimento; selo Previsto / `Fixo · …` / `3/12 · mensal`; **Realizar** / **Editar** / **Excluir** / Encerrar série / Cancelar parcelas |
+| **Extrato** | `status=actual`, no período (+ filtros); omite `transfer_in`; omite compras de cartão até filtrar por `card_id` | Pagamento; “de previsto” se `source_planned_id`; **Editar** / **Excluir** |
 
 CRUD: `/transactions/new`, `/transactions/{id}/edit`, `POST .../delete` — sem formulário lateral na lista. Contas, cartões e orçamentos seguem o mesmo padrão.
 
-Previstos liquidados **não** aparecem na lista. `ListTransactionsInput.status`: `actual` | `planned` | `all` (default `all` — chat/API inalterados).
+Previstos liquidados **não** aparecem na lista. `ListTransactionsInput.status`: `actual` | `planned` | `all` (default `all` — chat/API inalterados). Filtros de lista na UI: `pages.py` (`_resolve_transactions_filters`).
 
 Formulário (`transaction_form.html` / `transaction_edit.html`): realizado → data da realização; previsto → competência + vencimento; **fixo** → frequência + término; **parcelado** → N + intervalo + radios total vs parcela. O form cria da parcela 1; o wizard pergunta `installment_start_index`. **Editar**: tipo Despesa/Receita alterável; se a parcela tiver seguintes, radio `installment_scope` (`this` \| `subsequent`) obrigatório. **Realizar**: pagamento obrigatório; mesma conta ou outra.
 
@@ -63,7 +63,7 @@ Formulário (`transaction_form.html` / `transaction_edit.html`): realizado → d
 - Tabela `card_invoices`; transações têm `card_id` e/ou `account_id` (pelo menos um)
 - Compra no cartão = despesa na fatura; **não** altera saldo bancário
 - Pagar fatura = despesa na conta de débito (liquidação)
-- **OFX**: importação com revisão (`ofx_card_import.py`); débitos criam/conciliam (`ofx_fitid`); créditos podem pagar/vincular fatura
+- **Extrato**: importação com revisão (`statement_parse.py` + `ofx_card_import.py` / `ofx_account_import.py`); OFX/CSV/PDF (cartão e conta); Flash CSV na conta; débitos criam/conciliam (`ofx_fitid`); créditos no cartão podem pagar/vincular fatura
 - Ver skill `assistfin-credit-cards`
 
 ## Lançamentos fixos
@@ -128,7 +128,7 @@ Após `register_expense` / `register_income` / `realize_planned`, `enrich_regist
 - Transferência ≠ despesa/receita nos cards do período
 - Corrigir transferência = `update_transfer`, não `update_transaction`
 - Página `/accounts` = saldo **atual**; dashboard = saldo **histórico** ao fim do período
-- Página `/transactions` = filtro de período + **A realizar** + **Extrato**; não misturar previsto liquidado com realizado na lista
+- Página `/transactions` = filtros (período + conta/cartão/categoria/tipo, sessão até Limpar) + **A realizar** + **Extrato**; não misturar previsto liquidado com realizado na lista
 - Extrato omite `transfer_in` (par aparece só pela saída)
 - Lançamentos exigem confirmação no agente
 

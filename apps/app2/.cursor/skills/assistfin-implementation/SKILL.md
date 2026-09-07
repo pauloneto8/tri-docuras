@@ -21,12 +21,12 @@ app/
   models.py        # SQLAlchemy (transfer_group_id, status, recurrence_id, card_id, ofx_fitid)
   schemas.py       # Pydantic, ToolCall, format_brl
   routers/         # pages (HTML), api (JSON), auth
-  services/        # finance, recurrence, installments, credit_cards, ofx_card_import, wizards, tools, intents
+  services/        # finance, recurrence, installments, credit_cards, statement_parse, ofx_*_import, wizards, tools, intents
   agent/           # runner, llm, groq, prompt
   security/        # csrf, rate_limit
-  templates/       # Jinja2 + HTMX + agent partials + card_ofx_*
-tests/             # pytest (315 testes no container)
-alembic/           # migrações 001–017
+  templates/       # Jinja2 + HTMX + agent partials + card_ofx_* + account_ofx_*
+tests/             # pytest (343 testes no container)
+alembic/           # migrações 001–019
 docs/              # ARCHITECTURE, OPERATIONS, SECURITY, CHANGELOG
 ```
 

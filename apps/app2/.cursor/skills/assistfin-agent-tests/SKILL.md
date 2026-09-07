@@ -71,7 +71,9 @@ docker compose exec -T app2 python -m pytest \
 | `test_account_wizard.py` | wizard conta (inclui data do saldo inicial) |
 | `test_card_wizard.py` | wizard cadastro de cartão |
 | `test_credit_cards.py` | domínio cartões e faturas |
-| `test_ofx_card_import.py` | parse OFX, create/match, pay_invoice, idempotência FITID |
+| `test_ofx_card_import.py` | importação cartão: create/match, pay_invoice, FITID |
+| `test_ofx_account_import.py` | importação conta: débito=despesa, crédito=receita |
+| `test_statement_parse.py` | OFX/CSV/PDF/Flash (saldo vs valor, Flash TAB/NBSP) |
 | `test_update_card.py` | `update_card`, `deactivate_card`, rule-based |
 | `test_runner_update_card.py` | confirmação update/delete cartão no runner |
 | `test_category_wizard.py` | wizard categoria, lote, “Vale e Auxílio”, normalização nome, update de tipo |

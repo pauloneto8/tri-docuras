@@ -16,11 +16,11 @@
 | `update_transaction` / `delete_transaction` | Editar/excluir (par em transferências na exclusão); edição aceita `type` e `installment_scope` |
 | `update_account` | Editar conta bancária (saldo inicial, data, apelido…) |
 | `create_card` / `update_card` / `deactivate_card` | CRUD de cartão de crédito |
-| `ofx_card_import` (serviço) | Parse/matching/apply OFX de cartão — ver skill `assistfin-credit-cards` |
+| `ofx_card_import` / `ofx_account_import` / `statement_parse` | Extrato OFX/CSV/PDF/Flash — ver skill `assistfin-credit-cards` |
 | `create_account` / `create_category` | Cadastros; `create_category` com mesmo nome e outro tipo **atualiza** o tipo |
 | `update_category` / `delete_category` | Alterar ou excluir categoria |
 | `complete_onboarding` | Primeira conta |
-| `list_transactions` | Movimentos (`limit`, `type`, `status?`) |
+| `list_transactions` | Movimentos (`limit`, `type`, `status?`, `account_id?`, `card_id?`, `category_id?`, `start_date`/`end_date`) |
 | `list_user_categories` | Categorias do usuário (`category_type?`) |
 | `get_budget_status` | Orçamentos vs gasto |
 | `_account_balance_at` | Saldo de uma conta em uma data |
@@ -53,6 +53,8 @@
 | 015 | `card_invoices`, `transactions.invoice_id` |
 | 016 | `credit_cards`, `transactions.card_id`; migração de contas `cartao` legadas |
 | 017 | `transactions.ofx_fitid`; `ofx_import_batches` / `ofx_import_lines` (revisão OFX) |
+| 018 | `ofx_category_memory` (categoria sugerida por descrição) |
+| 019 | `ofx_import_batches.account_id` (importação de conta; `card_id` nullable) |
 
 ## Formatação BRL
 

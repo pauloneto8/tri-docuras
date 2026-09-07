@@ -18,7 +18,7 @@
 ## CSRF
 
 - Token em `session["csrf_token"]` para usuários logados
-- Validado em POST sensíveis (logout, onboarding, admin, **importação OFX** de cartão)
+- Validado em POST sensíveis (logout, onboarding, admin, **importação de extrato** cartão/conta)
 - Comparação com `secrets.compare_digest` (timing-safe)
 
 ## Rate limiting
@@ -49,13 +49,13 @@ Definidos em `app/main.py` e espelhados no Nginx:
 - Nunca commitar `.env`, `APP2_SECRET_KEY`, `APP2_GROQ_API_KEY`
 - Permissão recomendada no `.env`: `chmod 600`
 - Health check não expõe versões internas ou credenciais
-- Extratos OFX: processados em memória/staging por usuário; **não** armazenam PAN; limite de upload na app 5 MB (Nginx `client_max_body_size` pode ser menor — tipicamente 1m)
+- Extratos OFX/CSV/PDF/Flash: processados em memória/staging por usuário; **não** armazenam PAN; limite de upload na app **10 MB** (Nginx `client_max_body_size` pode ser menor — tipicamente 1m; aumente se for importar PDF/CSV grandes)
 
 ## Isolamento de dados
 
 - Todas as entidades financeiras têm `user_id` FK
 - Queries de negócio filtram por usuário logado
-- Lotes OFX (`ofx_import_batches`) e linhas amarrados a `user_id` + `card_id` do dono
+- Lotes OFX (`ofx_import_batches`) e linhas amarrados a `user_id` + `card_id` ou `account_id` do dono
 - FITID único por usuário (`uq_transactions_user_ofx_fitid`) evita reimportação duplicada
 - Testes de isolamento em `tests/test_isolation.py`
 
@@ -66,7 +66,7 @@ Definidos em `app/main.py` e espelhados no Nginx:
 - Ferramentas validadas por Pydantic antes de `execute_tool`
 - Logs de conversa para auditoria (sem dados de cartão — app não armazena PAN)
 - Mensagens do assistente passam por `chat_md`: HTML escapado antes de negrito/listas (XSS)
-- Importação OFX é **somente UI** (sem ferramenta de chat na v1)
+- Importação de extrato é **somente UI** (sem ferramenta de chat na v1)
 
 ## Checklist de deploy seguro
 
@@ -75,4 +75,4 @@ Definidos em `app/main.py` e espelhados no Nginx:
 - [ ] `APP2_GROQ_API_KEY` configurada
 - [ ] HTTPS quando em produção pública (Let's Encrypt via `issue-certs.sh`)
 - [ ] Testes passando após deploy
-- [ ] Nginx `client_max_body_size` adequado para upload OFX (app aceita até 5 MB)
+- [ ] Nginx `client_max_body_size` adequado para upload de extrato (app aceita até **10 MB**)

@@ -1362,6 +1362,12 @@ def list_transactions(
         stmt = stmt.where(Transaction.transaction_date >= payload.start_date)
     if payload.end_date is not None:
         stmt = stmt.where(Transaction.transaction_date <= payload.end_date)
+    if payload.account_id is not None:
+        stmt = stmt.where(Transaction.account_id == payload.account_id)
+    if payload.card_id is not None:
+        stmt = stmt.where(Transaction.card_id == payload.card_id)
+    if payload.category_id is not None:
+        stmt = stmt.where(Transaction.category_id == payload.category_id)
     rows = db.scalars(stmt).unique().all()
     include_user = user_id is None
     planned_ids = [tx.id for tx in rows if tx.status == "planned"]

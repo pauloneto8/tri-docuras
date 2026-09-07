@@ -4,22 +4,22 @@ Registro das principais evoluções do projeto (App 2).
 
 ## Unreleased
 
-- **OFX cartão** — importação com revisão em `/accounts/cards/{id}/ofx`: cria compras, concilia por FITID/valor/data/descrição e trata créditos como pagar/vincular fatura; staging `ofx_import_*` + `transactions.ofx_fitid`; docs em ARCHITECTURE/OPERATIONS/SECURITY e skill `assistfin-credit-cards`
-- **OFX conta** — importação bancária em `/accounts/{id}/ofx` (débito=despesa, crédito=receita, status `actual`); migração `019` (`account_id` no lote)
-- **CSV** — mesmo fluxo de revisão de cartão/conta; parser analisa o arquivo “como está” (detecta delimitador, preâmbulo e colunas de data/valor/descrição sem exigir nomes fixos) em `statement_parse.py`
-- **OFX revisão** — nenhum lançamento é ignorado sem confirmação; cada movimento exige escolha de fatura de vínculo; categoria memorizada por descrição OFX
-- **Excluir fatura** — botão na UI de cartões; remove fatura e movimentos do cartão ligados; pagamento na conta de liquidação (se pago) é mantido
-- **Admin** — backup e restauração do PostgreSQL em `/admin` (criar, baixar, restaurar com confirmação `RESTAURAR`, excluir); dumps em volume `app2_backups`; cliente `postgresql-client` no container
-- **Restore** — correção: reset do schema `public` + validação pós-restore (antes `--single-transaction` + `SET transaction_timeout` do pg_dump 17 faziam o restore falhar sem alterar dados); evita 500 ao fechar a sessão HTTP após `pg_terminate_backend`
-- **LLM** — Ollama removido; intenção via LLM usa **somente Groq**; fallback de regras se a API falhar/rate-limit
-- Serviço `ollama` removido do `docker-compose.yml`
-- **Wizard de lançamento** — extrai da mensagem cartão/conta, status, datas e modo; só pergunta o que faltar; modo único/fixo/parcelado não defaulta `single` só por ter valor
-- **Editar movimento** — formulário permite alterar tipo Despesa↔Receita; categorias filtradas pelo tipo escolhido
-- **Editar parcela** — se houver parcelas seguintes, pergunta escopo `this` (só esta) ou `subsequent` (esta e as seguintes); valor/descrição/conta/categoria/tipo propagam; datas só na parcela editada (UI + assistente via `installment_scope`)
-- **Categorias no assistente** — `list_categories`, `update_category`, `delete_category` ligados; cadastro em lote (`names`); nome com “e” sem vírgula (ex.: *Vale e Auxílio*) permanece um nome; se o nome já existe com outro tipo, `create_category` atualiza o tipo; sem tipo explícito o wizard pergunta (não assume despesa)
-- **Dashboard** — previsto × realizado por categoria (`planned_*` / `actual_*` / `variance_*` em `expenses_by_category` / `income_by_category`)
-- **Formulário de movimentos** — `category_id` (e outros ints opcionais) aceitam string vazia do HTML select
-- Suite: **316** testes.
+- **Filtros em Movimentos** — conta, cartão, **categoria** e tipo; período diária/semanal/mensal; estado memorizado na sessão HTTP até `?clear=1` (Limpar → padrão mês atual sem restrições)
+- **Importação de extrato** — OFX/QFX, CSV e PDF (texto) no mesmo fluxo de revisão (cartão e conta); parser compartilhado `statement_parse.py`; upload até **10 MB**
+- **PDF** — `pdfplumber`; ignora coluna/saldo final da linha; sinal negativo (Unicode, `75,50-`, célula separada); PDFs escaneados não suportados
+- **Flash CSV** — `flash_extrato_*.csv` (TAB, `-R$` com NBSP, ignora saldo); débitos/créditos pelo sinal
+- **CSV genérico** — detecta delimitador, preâmbulo e colunas sem nomes fixos
+- **OFX cartão** — `/accounts/cards/{id}/ofx`: criar/conciliar/pagar fatura; staging `ofx_import_*` + `transactions.ofx_fitid`
+- **OFX conta** — `/accounts/{id}/ofx` (débito=despesa, crédito=receita, `actual`); migração `019` (`account_id` no lote)
+- **OFX revisão** — nada ignorado sem confirmação; fatura de vínculo; categoria memorizada por descrição
+- **Excluir fatura** — remove fatura + movimentos do cartão; pagamento bancário (se pago) permanece
+- **Admin** — backup/restauração PostgreSQL em `/admin`; volume `app2_backups`
+- **Restore** — reset do schema `public` + `alembic upgrade head` pós-restore
+- **LLM** — somente Groq; fallback de regras se a API falhar
+- **Wizard / edição** — slots só perguntam o que faltar; editar tipo Despesa↔Receita; escopo de parcela `this`/`subsequent`
+- **Categorias no assistente** — `list_categories` / `update_category` / `delete_category`; lote `names`
+- **Dashboard** — previsto × realizado por categoria
+- Suite: **pytest** no container (`tests/test_statement_parse.py`, filtros em `test_summary.py`, OFX conta/cartão)
 
 ## 2026-09-04 — CRUD nas telas, filtros, cartões aninhados e resumo no chat
 

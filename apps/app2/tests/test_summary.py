@@ -352,6 +352,120 @@ def test_list_transactions_filters_by_period_dates():
         _cleanup(db, user)
 
 
+def test_list_transactions_filters_by_account_and_card():
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"filt_{suffix}@test.com",
+        password="secret1",
+        name="Filter User",
+        is_active=True,
+    )
+    try:
+        from app.models import CardInvoice, CreditCard
+        from app.schemas import CreateCardInput, ListTransactionsInput
+
+        _setup(db, user)
+        a1 = _create_account(db, user.id, f"ContaA_{suffix}", opening_balance="1000")
+        a2 = _create_account(db, user.id, f"ContaB_{suffix}", opening_balance="1000")
+        card = finance.create_card(
+            db,
+            user.id,
+            CreateCardInput(
+                name=f"Visa_{suffix}",
+                closing_day=10,
+                due_day=17,
+                credit_limit="3000",
+                settlement_account_name=a1["name"],
+            ),
+        )
+        finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="15",
+                description="Na conta A",
+                account_name=a1["name"],
+                category_name="Outros",
+                payment_date=date(2026, 9, 5),
+                transaction_date=date(2026, 9, 5),
+            ),
+        )
+        finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="25",
+                description="Na conta B",
+                account_name=a2["name"],
+                category_name="Outros",
+                payment_date=date(2026, 9, 6),
+                transaction_date=date(2026, 9, 6),
+            ),
+        )
+        finance.register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="40",
+                description="Compra loja XYZ",
+                card_name=card["name"],
+                category_name="Outros",
+                competence_date=date(2026, 9, 7),
+                due_date=date(2026, 9, 17),
+                status="planned",
+            ),
+        )
+        by_account_b = finance.list_transactions(
+            db,
+            user.id,
+            ListTransactionsInput(limit=50, account_id=a2["id"]),
+        )
+        assert {t["description"] for t in by_account_b} == {"Na conta B"}
+        by_card = finance.list_transactions(
+            db,
+            user.id,
+            ListTransactionsInput(limit=50, card_id=card["id"]),
+        )
+        assert len(by_card) == 1
+        assert by_card[0]["description"] == "Compra loja XYZ"
+        expenses = finance.list_transactions(
+            db,
+            user.id,
+            ListTransactionsInput(limit=50, type="expense"),
+        )
+        assert {t["description"] for t in expenses} >= {
+            "Na conta A",
+            "Na conta B",
+            "Compra loja XYZ",
+        }
+        cat_id = by_account_b[0]["category_id"]
+        assert cat_id is not None
+        by_cat = finance.list_transactions(
+            db,
+            user.id,
+            ListTransactionsInput(limit=50, category_id=cat_id),
+        )
+        assert len(by_cat) >= 1
+        assert all(t["category_id"] == cat_id for t in by_cat)
+    finally:
+        from app.models import CardInvoice, CreditCard
+
+        db.query(Transaction).filter(Transaction.user_id == user.id).delete(
+            synchronize_session=False
+        )
+        db.query(CardInvoice).filter(CardInvoice.user_id == user.id).delete(
+            synchronize_session=False
+        )
+        db.query(CreditCard).filter(CreditCard.user_id == user.id).delete(
+            synchronize_session=False
+        )
+        db.commit()
+        _cleanup(db, user)
+
+
 def test_summary_category_breakdown():
     engine = create_engine(settings.database_url)
     Session = sessionmaker(bind=engine)

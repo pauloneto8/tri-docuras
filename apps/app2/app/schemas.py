@@ -231,6 +231,9 @@ class ListTransactionsInput(BaseModel):
     status: Literal["actual", "planned", "all"] = "all"
     start_date: date | None = None
     end_date: date | None = None
+    account_id: int | None = None
+    card_id: int | None = None
+    category_id: int | None = None
 
 
 class RegisterTransferInput(BaseModel):

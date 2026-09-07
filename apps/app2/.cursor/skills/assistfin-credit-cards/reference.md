@@ -10,6 +10,7 @@
 Legado: contas `account_type=cartao` migradas para `credit_cards` na revisão `016` e desativadas.
 Migração `017`: `ofx_fitid` + tabelas de importação.
 Migração `018`: `ofx_category_memory` + categoria nas linhas do lote.
+Migração `019`: `ofx_import_batches.account_id` (importação de conta; `card_id` nullable).
 
 ## API interna (`finance.py`)
 
@@ -31,11 +32,12 @@ from app.services.credit_cards import (
 )
 ```
 
-## Importação OFX (`ofx_card_import.py`)
+## Importação de extrato (`statement_parse` + `ofx_card_import` / `ofx_account_import`)
 
 ```python
+from app.services.statement_parse import parse_statement  # OFX/QFX, CSV, PDF, Flash
+
 from app.services.ofx_card_import import (
-    parse_ofx,
     create_batch,
     get_batch,
     batch_review_context,
@@ -44,11 +46,13 @@ from app.services.ofx_card_import import (
     format_apply_summary,
 )
 
-txns = parse_ofx(content)  # OfxTxn: fitid, posted_date, amount_cents, direction, memo
+txns = parse_statement(content, filename)  # OfxTxn: fitid, posted_date, amount_cents, direction, memo
 batch = create_batch(db, user_id, card, filename, content)
 review = batch_review_context(db, batch)
 summary = apply_batch(db, user_id, card, batch.id, choices)
 ```
+
+Formatos: OFX/QFX; CSV genérico; PDF texto (`pdfplumber`, valor ≠ saldo na linha); Flash (`flash_extrato_*.csv`, TAB, `-R$` + NBSP). Limite de upload: **10 MB**.
 
 | Ação | Quando | Efeito |
 |------|--------|--------|
@@ -80,7 +84,7 @@ TransactionCreate(..., ofx_fitid?)  # usado no apply create
 | `delete_card` | `card_id` ou `card_name` | — |
 | `pay_invoice` | `account_name` ou `invoice_id` | `from_account_name`, `payment_date?` |
 
-Importação OFX **não** tem ferramenta de chat na v1 (somente UI).
+Importação de extrato **não** tem ferramenta de chat na v1 (somente UI).
 
 ## UI
 
@@ -89,7 +93,8 @@ Importação OFX **não** tem ferramenta de chat na v1 (somente UI).
 - CRUD: `/accounts/cards/new`, `/accounts/cards/{id}/edit` (conta de liquidação obrigatória)
 - **Pagar fatura** dentro da fatura expandida
 - **Excluir fatura** — remove a fatura e compras do cartão ligadas; pagamento na conta (se pago) permanece
-- **Importar OFX**: `/accounts/cards/{id}/ofx` → revisão → aplicar (`card_ofx_upload.html`, `card_ofx_review.html`)
+- **Importar extrato (cartão)**: `/accounts/cards/{id}/ofx` → revisão → aplicar (`card_ofx_*.html`)
+- **Importar extrato (conta)**: `/accounts/{id}/ofx` → revisão → aplicar (`account_ofx_*.html`; débito=despesa, crédito=receita)
 
 ## Reset de dados
 

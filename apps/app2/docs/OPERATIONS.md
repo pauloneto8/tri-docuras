@@ -47,33 +47,51 @@ docker compose exec -T app2-db pg_dump -U app2 -d app2 -Fc -f /tmp/manual.dump
 # ou pela UI em /admin
 ```
 
-## Importação OFX de cartão
+## Importação de extrato (cartão)
 
-Em `/accounts/cards`, use **Importar OFX** no cartão:
+Em `/accounts/cards`, use **Importar extrato** no cartão:
 
-1. Envie o arquivo `.ofx` / `.qfx` / `.csv` do cartão — limite na app **5 MB** (respeite também `client_max_body_size` do Nginx)
+1. Envie `.ofx` / `.qfx` / `.csv` / `.pdf` (texto selecionável) — limite na app **10 MB** (respeite também `client_max_body_size` do Nginx)
 2. Revise cada linha:
    - **Criar** compra prevista no cartão
    - **Conciliar** com lançamento existente (mesmo valor, data ±3 dias, descrição parecida)
-   - **Pagar fatura** / **vincular pagamento** (créditos OFX com valor ≈ fatura)
+   - **Pagar fatura** / **vincular pagamento** (créditos com valor ≈ fatura)
    - **Ignorar** (estornos sem fatura correspondente)
 3. Confirme — FITIDs ficam em `transactions.ofx_fitid` (reimportação é idempotente)
 
 Lotes pendentes (`ofx_import_batches`) expiram em **24h**. Serviço: `app/services/ofx_card_import.py`. Testes: `tests/test_ofx_card_import.py`.
 
-## Importação OFX de conta bancária
+## Importação de extrato (conta bancária)
 
-Em `/accounts`, use **Importar OFX** na conta:
+Em `/accounts`, use **Importar extrato** na conta:
 
-1. Envie o extrato `.ofx` / `.qfx` / `.csv` (máx. 5 MB)
+1. Envie `.ofx` / `.qfx` / `.csv` / `.pdf` (máx. 10 MB); Flash: `flash_extrato_*.csv`
 2. Revise: débitos → despesas, créditos → receitas; criar ou conciliar; categoria opcional (memorizada)
 3. Confirme — lançamentos entram como `actual` na data do extrato e alteram o saldo; FITID em `transactions.ofx_fitid`
 
-CSV esperado (`;` ou `,`): o arquivo pode vir no formato exportado pelo banco.
-O parser analisa o conteúdo e identifica sozinho data, valor (ou débito/crédito) e descrição —
-não exige nomes fixos de coluna. Sem identificador, gera um FITID estável.
+### Formatos CSV / PDF / Flash
 
-Serviço: `app/services/ofx_account_import.py` + `statement_parse.py`. Testes: `tests/test_ofx_account_import.py`, `tests/test_statement_parse.py`.
+| Formato | Notas |
+|--------|--------|
+| **CSV genérico** | Delimitador `;` / `,` / TAB; preâmbulo do banco ok; colunas inferidas (data, valor ou débito/crédito, descrição); sem ID → FITID sintético estável |
+| **Flash** | Arquivos `flash_extrato_*.csv` (export do app): TAB, valores `-R$ x,xx` (NBSP), colunas Data/Hora/Movimentação/Valor/Tipo/Saldo — **saldo ignorado**; sinal define despesa/receita |
+| **PDF** | Texto selecionável via `pdfplumber`; linhas com valor + saldo usam o **valor do lançamento** (não o saldo); PDFs só imagem **não** suportados |
+
+Serviço: `statement_parse.py` + `ofx_account_import.py` / `ofx_card_import.py`. Testes: `tests/test_statement_parse.py`, `tests/test_ofx_account_import.py`.
+
+## Filtros da tela Movimentos
+
+Em `/transactions`:
+
+| Filtro | Query | Padrão |
+|--------|-------|--------|
+| Período | `period` (`day`\|`week`\|`month`) + `ref_date` | mês / hoje |
+| Conta | `account_id` | todas |
+| Cartão | `card_id` | todos (extrato omite compras de cartão até filtrar) |
+| Categoria | `category_id` | todas |
+| Tipo | `type` (`expense`\|`income`\|`transfer`\|`all`) | todos |
+
+O conjunto aplicado (incluindo período) fica na **sessão** (`transactions_list_filter`) ao filtrar ou navegar. Voltar pelo menu `/transactions` restaura o último filtro. **Limpar** (`/transactions?clear=1`) apaga a sessão e volta ao padrão.
 
 ## Testes
 
@@ -91,6 +109,7 @@ docker compose exec -T app2 python -m pytest tests/test_installments.py -q
 docker compose exec -T app2 python -m pytest tests/test_credit_cards.py -q
 docker compose exec -T app2 python -m pytest tests/test_ofx_card_import.py -q
 docker compose exec -T app2 python -m pytest tests/test_ofx_account_import.py -q
+docker compose exec -T app2 python -m pytest tests/test_statement_parse.py -q
 docker compose exec -T app2 python -m pytest tests/test_realize_planned_wizard.py -q
 docker compose exec -T app2 python -m pytest tests/test_multi_movements.py -q
 docker compose exec -T app2 python -m pytest tests/test_chat_format.py -q

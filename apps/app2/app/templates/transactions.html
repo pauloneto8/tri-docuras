@@ -15,29 +15,29 @@
   </div>
   <div class="flex flex-wrap items-center gap-2">
     <div class="inline-flex rounded-lg border border-slate-700 overflow-hidden text-sm" role="group" aria-label="Filtros de período">
-      <a href="/transactions?period=day&ref_date={{ ref_date }}"
+      <a href="/transactions?period=day&ref_date={{ ref_date }}{{ filter_suffix }}"
          class="px-3 py-1.5 {% if period == 'day' %}bg-emerald-600 text-white{% else %}bg-slate-900 text-slate-300 hover:bg-slate-800{% endif %}">
         Diária
       </a>
-      <a href="/transactions?period=week&ref_date={{ ref_date }}"
+      <a href="/transactions?period=week&ref_date={{ ref_date }}{{ filter_suffix }}"
          class="px-3 py-1.5 {% if period == 'week' %}bg-emerald-600 text-white{% else %}bg-slate-900 text-slate-300 hover:bg-slate-800{% endif %}">
         Semanal
       </a>
-      <a href="/transactions?period=month&ref_date={{ ref_date }}"
+      <a href="/transactions?period=month&ref_date={{ ref_date }}{{ filter_suffix }}"
          class="px-3 py-1.5 {% if period == 'month' %}bg-emerald-600 text-white{% else %}bg-slate-900 text-slate-300 hover:bg-slate-800{% endif %}">
         Mensal
       </a>
     </div>
     <div class="inline-flex rounded-lg border border-slate-700 overflow-hidden text-sm">
-      <a href="/transactions?period={{ period }}&ref_date={{ prev_ref_date }}"
+      <a href="/transactions?period={{ period }}&ref_date={{ prev_ref_date }}{{ filter_suffix }}"
          class="px-3 py-1.5 bg-slate-900 text-slate-300 hover:bg-slate-800" aria-label="Período anterior">
         ←
       </a>
-      <a href="/transactions?period={{ period }}&ref_date={{ today }}"
+      <a href="/transactions?period={{ period }}&ref_date={{ today }}{{ filter_suffix }}"
          class="px-3 py-1.5 bg-slate-900 text-slate-300 hover:bg-slate-800">
         Hoje
       </a>
-      <a href="/transactions?period={{ period }}&ref_date={{ next_ref_date }}"
+      <a href="/transactions?period={{ period }}&ref_date={{ next_ref_date }}{{ filter_suffix }}"
          class="px-3 py-1.5 bg-slate-900 text-slate-300 hover:bg-slate-800" aria-label="Próximo período">
         →
       </a>
@@ -48,6 +48,68 @@
     </a>
   </div>
 </div>
+
+<form method="get" action="/transactions" class="mb-6 rounded-xl border border-slate-800 bg-slate-900 p-4">
+  <input type="hidden" name="period" value="{{ period }}">
+  <input type="hidden" name="ref_date" value="{{ ref_date }}">
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+    <div>
+      <label class="block text-xs text-slate-400 mb-1" for="filter-account">Conta bancária</label>
+      <select id="filter-account" name="account_id"
+              class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+        <option value="">Todas</option>
+        {% for a in accounts %}
+        <option value="{{ a.id }}" {% if filter_account_id == a.id %}selected{% endif %}>{{ a.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-slate-400 mb-1" for="filter-card">Cartão</label>
+      <select id="filter-card" name="card_id"
+              class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+        <option value="">Todos</option>
+        {% for c in credit_cards %}
+        <option value="{{ c.id }}" {% if filter_card_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-slate-400 mb-1" for="filter-category">Categoria</label>
+      <select id="filter-category" name="category_id"
+              class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+        <option value="">Todas</option>
+        {% for cat in categories %}
+        <option value="{{ cat.id }}" {% if filter_category_id == cat.id %}selected{% endif %}>
+          {{ cat.name }} ({{ cat.type_label }})
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs text-slate-400 mb-1" for="filter-type">Tipo de movimento</label>
+      <select id="filter-type" name="type"
+              class="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm">
+        <option value="all" {% if filter_type == 'all' %}selected{% endif %}>Todos</option>
+        <option value="expense" {% if filter_type == 'expense' %}selected{% endif %}>Despesa</option>
+        <option value="income" {% if filter_type == 'income' %}selected{% endif %}>Receita</option>
+        <option value="transfer" {% if filter_type == 'transfer' %}selected{% endif %}>Transferência</option>
+      </select>
+    </div>
+    <div class="flex items-end gap-2">
+      <button type="submit"
+              class="flex-1 rounded-lg bg-slate-700 hover:bg-slate-600 px-3 py-2 text-sm font-medium text-slate-100">
+        Filtrar
+      </button>
+      <a href="/transactions?clear=1"
+         class="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800{% if filter_active %} border-amber-700/60 text-amber-200{% endif %}">
+        Limpar
+      </a>
+    </div>
+  </div>
+  {% if filter_active %}
+  <p class="mt-3 text-xs text-slate-500">Filtro memorizado nesta sessão — use Limpar para voltar ao padrão (mês atual, sem restrições).</p>
+  {% endif %}
+</form>
 
 <div class="space-y-6">
   {# Seção: A realizar #}

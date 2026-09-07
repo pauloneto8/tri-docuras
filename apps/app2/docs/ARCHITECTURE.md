@@ -34,8 +34,9 @@
 - Chat: avatares, balões assimétricos, chips/confirmação fora do balão; filtro `chat_md` (`app/chat_format.py`) para `*negrito*` e listas
 - Sidebar: Dashboard, Contas, Cartões, Movimentos, Orçamentos, Admin (root)
 - **CRUD** nas entidades: lista + páginas `/new` e `/{id}/edit` (movimentos, contas, cartões, orçamentos)
-- **Movimentos** (`/transactions`): filtro de período (padrão mês); **A realizar** / **Extrato**; sem formulário lateral
-- **Cartões** (`/accounts/cards`): cartão expansível → faturas → movimentos; **Importar OFX** com tela de revisão
+- **Movimentos** (`/transactions`): filtros de período + conta/cartão/categoria/tipo (memória de sessão até Limpar); **A realizar** / **Extrato**; sem formulário lateral
+- **Cartões** (`/accounts/cards`): cartão expansível → faturas → movimentos; **Importar extrato** (OFX/CSV/PDF) com tela de revisão
+- Contas bancárias: **Importar extrato** em `/accounts/{id}/ofx` (OFX/CSV/PDF/Flash)
 
 ### API / rotas
 
@@ -47,7 +48,9 @@
 
 - `services/finance.py` — única fonte de verdade para cálculos
 - `services/credit_cards.py` — ciclo de faturas, limite, pagamento
-- `services/ofx_card_import.py` — importação OFX (parse, matching, revisão, apply)
+- `services/statement_parse.py` — parse OFX/QFX, CSV (incl. Flash) e PDF → estrutura comum
+- `services/ofx_card_import.py` — importação de extrato no cartão (matching, revisão, apply)
+- `services/ofx_account_import.py` — importação de extrato na conta bancária
 - `services/recurrence.py` — regras fixas e horizonte de previstos
 - `services/installments.py` — planos parcelados (`split_cents` / `repeat_cents`)
 - `schemas.py` — validação Pydantic, `ToolCall`, formatação BRL
@@ -87,8 +90,9 @@ mensagem do usuário
 | `CardInvoice` | card_id, cycle_start, cycle_end, due_date, status (`open`/`closed`/`paid`) |
 | `Category` | name, type (expense/income), keywords |
 | `Transaction` | type, amount_cents, account_id?, card_id?, invoice_id?, ofx_fitid?, category_id?, status (`planned`/`actual`), competence_date, due_date, payment_date, transaction_date, transfer_group_id?, counterparty_account_id?, source_planned_id?, recurrence_id?, installment_plan_id?, installment_index? |
-| `OfxImportBatch` | user_id, card_id, filename, status (`pending`/`applied`/`cancelled`) — staging da revisão OFX |
+| `OfxImportBatch` | user_id, card_id?, account_id?, filename, status (`pending`/`applied`/`cancelled`) — staging da revisão de extrato |
 | `OfxImportLine` | batch_id, fitid, posted_date, amount_cents, direction, memo, suggested_*/chosen_* actions |
+| `OfxCategoryMemory` | user_id, description_key, category_id — sugestão de categoria na revisão |
 | `RecurringRule` | user_id, account_id, category_id, type, amount_cents, description, frequency (`daily`/`weekly`/`monthly`), start_date, end_date?, is_active, anchor_day, anchor_weekday |
 | `InstallmentPlan` | user_id, account_id, category_id?, type, total_cents, installment_count, interval (`monthly`/`weekly`/`biweekly`), start_date, description, is_active |
 | `Budget` | category_id, year, month, limit_cents |
@@ -129,7 +133,7 @@ transaction_date → espelho de caixa (= due ou payment)
 - Realizar previsão: `realize_planned()` cria `actual` com `source_planned_id`; o previsto permanece no banco para o dashboard. Se a conta informada difere, atualiza `planned.account_id`. Com `recurrence_id`, reabastece o horizonte após a realização.
 - Saldos: só `status = actual` e `transaction_date <= as_of`.
 - Orçamentos: despesas somadas por `competence_date`.
-- `list_transactions()` aceita filtro opcional `status` (`actual` | `planned` | `all`, default `all`) em `ListTransactionsInput`.
+- `list_transactions()` aceita filtros opcionais `status`, `account_id`, `card_id`, `category_id`, `type`, `start_date`/`end_date` em `ListTransactionsInput`.
 
 ### Página Movimentos vs dashboard
 
@@ -154,7 +158,7 @@ Consultas da página usam duas chamadas: `ListTransactionsInput(status="planned"
 - **Editar** (`/{id}/edit`): tipo Despesa/Receita alterável; se parcelado com parcelas seguintes, radio de escopo obrigatório.
 - **Encerrar série** / **Cancelar parcelas**: na lista **A realizar**.
 - **Transferência**: sempre realizada; uma data de realização.
-- Lista `/transactions`: filtro de período (padrão mês); extrato omite `transfer_in`.
+- Lista `/transactions`: filtros de período (padrão mês) + conta/cartão/categoria/tipo; estado na sessão até `?clear=1`; extrato omite `transfer_in` (e compras de cartão até filtrar por cartão).
 
 ### Wizard de transação (slots)
 
@@ -237,27 +241,28 @@ pay_invoice  --despesa na conta de débito-->  card_invoices.status = paid
 - Assistente: `create_card` (wizard `card_wizard.py`), `update_card`, `delete_card`, `list_invoices`, `pay_invoice` (wizard `pay_invoice_slots.py`).
 - Compras no cartão **não** alteram saldo bancário; pagamento da fatura não duplica despesa da compra.
 
-### Importação OFX (cartão)
+### Importação de extrato (cartão e conta)
 
-Migração `017`: `transactions.ofx_fitid` + staging `ofx_import_batches` / `ofx_import_lines`.
+Migração `017` (+ `018` memória de categoria, `019` `account_id` no lote): `transactions.ofx_fitid` + staging `ofx_import_batches` / `ofx_import_lines`.
 
 ```mermaid
 flowchart LR
-  upload[Upload OFX] --> parse[parse_ofx]
+  upload[Upload OFX/CSV/PDF/Flash] --> parse[statement_parse]
   parse --> batch[ofx_import_batches]
   batch --> review[Revisao UI]
   review --> apply[apply_batch]
-  apply --> createTx[create expense planned]
+  apply --> createTx[criar / conciliar]
   apply --> matchTx[grava ofx_fitid]
-  apply --> payInv[pay_invoice]
+  apply --> payInv[pay_invoice se cartao]
 ```
 
-- Serviço: `services/ofx_card_import.py` (parser SGML/XML leve, sem lib externa).
-- UI: `/accounts/cards/{id}/ofx` → revisão → aplicar/cancelar (CSRF).
-- Débito: `create` ou `match` (mesmo cartão, valor igual, data ±3 dias, similaridade de memo).
-- Crédito: `pay_invoice` / `link_invoice_payment` se valor ≈ fatura; senão `skip`.
+- Parser: `services/statement_parse.py` (OFX SGML leve; CSV inteligente; PDF via `pdfplumber`; Flash TSV).
+- UI cartão: `/accounts/cards/{id}/ofx` → revisão → aplicar/cancelar (CSRF).
+- UI conta: `/accounts/{id}/ofx` → débitos=despesas `actual`, créditos=receitas `actual`.
+- Débito cartão: `create` ou `match` (valor, data ±3 dias, similaridade de memo).
+- Crédito cartão: `pay_invoice` / vínculo se valor ≈ fatura.
 - Idempotência: FITID já presente → `already_imported`. Lotes `pending` expiram em 24h.
-- Fora de escopo v1: OFX de conta corrente, agente/chat, estornos parciais automáticos.
+- Fora de escopo: agente/chat para importação; PDF escaneado (OCR); estornos parciais automáticos.
 
 ### Corrigir transferência
 

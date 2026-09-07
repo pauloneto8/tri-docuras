@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Revisar OFX — AssistFin{% endblock %}
+{% block title %}Revisar extrato — AssistFin{% endblock %}
 {% block content %}
 <div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
   <div>
-    <h1 class="text-lg font-semibold text-slate-100">Revisar importação OFX</h1>
+    <h1 class="text-lg font-semibold text-slate-100">Revisar importação</h1>
     <p class="text-sm text-slate-400">
       {{ account.name }} · {{ review.filename }}
       · {{ review.counts.total }} linha{% if review.counts.total != 1 %}s{% endif %}
@@ -21,7 +21,7 @@
 
 {% if review.status != 'pending' %}
 <p class="mb-4 rounded-lg border border-amber-800 bg-amber-950/40 px-4 py-2 text-amber-200 text-sm">
-  Este lote já foi {{ review.status }}. Envie o OFX novamente se precisar.
+  Este lote já foi {{ review.status }}. Envie o extrato novamente se precisar.
 </p>
 {% else %}
 

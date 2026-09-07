@@ -146,6 +146,139 @@ def _parse_transactions_period(
     return period, current_ref, period_start, period_end, period_label
 
 
+def _parse_optional_int(raw: str | None) -> int | None:
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        return int(str(raw).strip())
+    except ValueError:
+        return None
+
+
+_TX_FILTER_SESSION_KEY = "transactions_list_filter"
+
+
+def _tx_filter_defaults() -> dict:
+    return {
+        "period": "month",
+        "ref_date": None,
+        "account_id": None,
+        "card_id": None,
+        "category_id": None,
+        "type": "all",
+    }
+
+
+def _normalize_tx_filter_type(raw: str | None) -> str:
+    value = (raw or "all").strip().lower()
+    if value not in {"expense", "income", "transfer", "all"}:
+        return "all"
+    return value
+
+
+def _read_saved_tx_filters(session: dict) -> dict:
+    saved = session.get(_TX_FILTER_SESSION_KEY)
+    if not isinstance(saved, dict):
+        return _tx_filter_defaults()
+    defaults = _tx_filter_defaults()
+    return {
+        "period": saved.get("period") or defaults["period"],
+        "ref_date": saved.get("ref_date"),
+        "account_id": saved.get("account_id"),
+        "card_id": saved.get("card_id"),
+        "category_id": saved.get("category_id"),
+        "type": _normalize_tx_filter_type(saved.get("type")),
+    }
+
+
+def _write_tx_filters(session: dict, filters: dict) -> None:
+    session[_TX_FILTER_SESSION_KEY] = {
+        "period": filters.get("period") or "month",
+        "ref_date": filters.get("ref_date"),
+        "account_id": filters.get("account_id"),
+        "card_id": filters.get("card_id"),
+        "category_id": filters.get("category_id"),
+        "type": _normalize_tx_filter_type(filters.get("type")),
+    }
+
+
+def _resolve_transactions_filters(request: Request) -> dict:
+    """Resolve filtros da query + sessão. Sem query → restaura sessão; clear=1 → padrão."""
+    qp = request.query_params
+    clear = (qp.get("clear") or "").strip().lower() in {"1", "true", "yes"}
+    if clear:
+        request.session.pop(_TX_FILTER_SESSION_KEY, None)
+        return _tx_filter_defaults()
+
+    saved = _read_saved_tx_filters(request.session)
+    if len(qp) == 0:
+        return saved
+
+    resolved = dict(saved)
+    if "period" in qp:
+        resolved["period"] = (qp.get("period") or "month").strip().lower() or "month"
+    if "ref_date" in qp:
+        raw_ref = (qp.get("ref_date") or "").strip()
+        resolved["ref_date"] = raw_ref or None
+    if "account_id" in qp:
+        resolved["account_id"] = _parse_optional_int(qp.get("account_id"))
+    if "card_id" in qp:
+        resolved["card_id"] = _parse_optional_int(qp.get("card_id"))
+    if "category_id" in qp:
+        resolved["category_id"] = _parse_optional_int(qp.get("category_id"))
+    if "type" in qp:
+        resolved["type"] = _normalize_tx_filter_type(qp.get("type"))
+
+    _write_tx_filters(request.session, resolved)
+    return resolved
+
+
+def _transactions_filter_suffix(
+    *,
+    account_id: int | None = None,
+    card_id: int | None = None,
+    category_id: int | None = None,
+    tx_type: str = "all",
+) -> str:
+    from urllib.parse import urlencode
+
+    params: dict[str, str] = {}
+    if account_id is not None:
+        params["account_id"] = str(account_id)
+    if card_id is not None:
+        params["card_id"] = str(card_id)
+    if category_id is not None:
+        params["category_id"] = str(category_id)
+    if tx_type and tx_type != "all":
+        params["type"] = tx_type
+    if not params:
+        return ""
+    return "&" + urlencode(params)
+
+
+def _transactions_filter_query(
+    *,
+    period: str,
+    ref_date: str,
+    account_id: int | None = None,
+    card_id: int | None = None,
+    category_id: int | None = None,
+    tx_type: str = "all",
+) -> str:
+    from urllib.parse import urlencode
+
+    params: dict[str, str] = {"period": period, "ref_date": ref_date}
+    if account_id is not None:
+        params["account_id"] = str(account_id)
+    if card_id is not None:
+        params["card_id"] = str(card_id)
+    if category_id is not None:
+        params["category_id"] = str(category_id)
+    if tx_type and tx_type != "all":
+        params["type"] = tx_type
+    return urlencode(params)
+
+
 def _transactions_page_context(
     request: Request,
     user: User,
@@ -155,37 +288,105 @@ def _transactions_page_context(
     error: str | None = None,
     period: str | None = None,
     ref_date: str | None = None,
+    account_id: int | None = None,
+    card_id: int | None = None,
+    category_id: int | None = None,
+    tx_type: str | None = None,
 ) -> dict:
     scope = read_scope_id(user)
     finance.seed_defaults(db, user.id)
     from app.services.recurrence import ensure_recurring_horizon
+    from app.services.credit_cards import list_credit_cards
 
     ensure_recurring_horizon(db, scope)
 
-    period_param = period if period is not None else request.query_params.get("period")
-    ref_param = ref_date if ref_date is not None else request.query_params.get("ref_date")
+    filters = _resolve_transactions_filters(request)
+    # Argumentos explícitos (ex.: após POST com erro) sobrescrevem a resolução
+    if period is not None:
+        filters["period"] = period
+    if ref_date is not None:
+        filters["ref_date"] = ref_date
+    if account_id is not None:
+        filters["account_id"] = account_id
+    if card_id is not None:
+        filters["card_id"] = card_id
+    if category_id is not None:
+        filters["category_id"] = category_id
+    if tx_type is not None:
+        filters["type"] = _normalize_tx_filter_type(tx_type)
+
     period, current_ref, period_start, period_end, period_label = (
-        _parse_transactions_period(period_param, ref_param)
+        _parse_transactions_period(filters.get("period"), filters.get("ref_date"))
     )
     prev_ref = finance.shift_ref_date(period, current_ref, -1)
     next_ref = finance.shift_ref_date(period, current_ref, 1)
 
-    list_filter = dict(
+    account_id = filters.get("account_id")
+    card_id = filters.get("card_id")
+    category_id = filters.get("category_id")
+    tx_type = _normalize_tx_filter_type(filters.get("type"))
+
+    # Validar filtros contra o usuário
+    if account_id is not None:
+        account = finance.find_account(db, user.id, account_id=account_id)
+        if account is None:
+            account_id = None
+    if card_id is not None:
+        card = finance.find_card(db, user.id, card_id=card_id)
+        if card is None:
+            card_id = None
+    if category_id is not None:
+        category = db.get(Category, category_id)
+        if category is None or category.user_id != user.id:
+            category_id = None
+
+    # Persistir período resolvido (ref_date canônica) junto com filtros válidos
+    if (request.query_params.get("clear") or "").strip().lower() not in {
+        "1",
+        "true",
+        "yes",
+    }:
+        _write_tx_filters(
+            request.session,
+            {
+                "period": period,
+                "ref_date": current_ref.isoformat(),
+                "account_id": account_id,
+                "card_id": card_id,
+                "category_id": category_id,
+                "type": tx_type,
+            },
+        )
+
+    list_filter: dict = dict(
         limit=100,
         start_date=period_start,
         end_date=period_end,
+        type=tx_type,
     )
+    if account_id is not None:
+        list_filter["account_id"] = account_id
+    if card_id is not None:
+        list_filter["card_id"] = card_id
+    if category_id is not None:
+        list_filter["category_id"] = category_id
+
     planned = finance.list_transactions(
         db, scope, ListTransactionsInput(status="planned", **list_filter)
     )
     pending_transactions = [tx for tx in planned if not tx["is_realized"]]
-    actual_transactions = [
-        tx
-        for tx in finance.list_transactions(
-            db, scope, ListTransactionsInput(status="actual", **list_filter)
-        )
-        if not tx.get("card") and tx.get("type") != "transfer_in"
-    ]
+    actual_raw = finance.list_transactions(
+        db, scope, ListTransactionsInput(status="actual", **list_filter)
+    )
+    actual_transactions = []
+    for tx in actual_raw:
+        if tx.get("type") == "transfer_in":
+            continue
+        # Extrato padrão omite compras de cartão; com filtro de cartão, mostra.
+        if card_id is None and tx.get("card"):
+            continue
+        actual_transactions.append(tx)
+
     flash_success = request.session.pop("flash_success", None)
     flash_error = request.session.pop("flash_error", None)
     accounts = (
@@ -198,6 +399,30 @@ def _transactions_page_context(
         .order_by(Account.name)
         .all()
     )
+    credit_cards = list_credit_cards(db, user.id)
+    categories = finance.list_user_categories(db, user.id)
+    filter_qs = _transactions_filter_query(
+        period=period,
+        ref_date=current_ref.isoformat(),
+        account_id=account_id,
+        card_id=card_id,
+        category_id=category_id,
+        tx_type=tx_type,
+    )
+    filter_suffix = _transactions_filter_suffix(
+        account_id=account_id,
+        card_id=card_id,
+        category_id=category_id,
+        tx_type=tx_type,
+    )
+    filter_active = any(
+        [
+            account_id is not None,
+            card_id is not None,
+            category_id is not None,
+            tx_type != "all",
+        ]
+    )
     return {
         "request": request,
         "user": user,
@@ -205,6 +430,15 @@ def _transactions_page_context(
         "pending_transactions": pending_transactions,
         "actual_transactions": actual_transactions,
         "accounts": accounts,
+        "credit_cards": credit_cards,
+        "categories": categories,
+        "filter_account_id": account_id,
+        "filter_card_id": card_id,
+        "filter_category_id": category_id,
+        "filter_type": tx_type,
+        "filter_qs": filter_qs,
+        "filter_suffix": filter_suffix,
+        "filter_active": filter_active,
         "success": success or flash_success,
         "error": error or flash_error,
         "today": local_today().isoformat(),
@@ -289,17 +523,22 @@ def _consume_flash(request: Request, *, success: str | None = None, error: str |
 @router.get("/transactions", response_class=HTMLResponse)
 async def transactions_page(
     request: Request,
-    period: str = "month",
-    ref_date: str | None = None,
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    # Limpar filtros → padrão (mês atual) e remove da sessão
+    if (request.query_params.get("clear") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        request.session.pop(_TX_FILTER_SESSION_KEY, None)
+        return RedirectResponse(url="/transactions", status_code=303)
+
     templates = get_templates(request)
     return templates.TemplateResponse(
         "transactions.html",
-        _transactions_page_context(
-            request, user, db, period=period, ref_date=ref_date
-        ),
+        _transactions_page_context(request, user, db),
     )
 
 
@@ -624,9 +863,9 @@ async def account_ofx_upload(
     try:
         raw = await file.read()
         if not raw:
-            raise ValueError("Arquivo OFX vazio.")
-        if len(raw) > 5 * 1024 * 1024:
-            raise ValueError("Arquivo OFX muito grande (máx. 5 MB).")
+            raise ValueError("Arquivo de extrato vazio.")
+        if len(raw) > 10 * 1024 * 1024:
+            raise ValueError("Arquivo muito grande (máx. 10 MB).")
         batch = ofx_account_import.create_batch(
             db,
             user.id,
@@ -914,9 +1153,9 @@ async def card_ofx_upload(
     try:
         raw = await file.read()
         if not raw:
-            raise ValueError("Arquivo OFX vazio.")
-        if len(raw) > 5 * 1024 * 1024:
-            raise ValueError("Arquivo OFX muito grande (máx. 5 MB).")
+            raise ValueError("Arquivo de extrato vazio.")
+        if len(raw) > 10 * 1024 * 1024:
+            raise ValueError("Arquivo muito grande (máx. 10 MB).")
         batch = ofx_card_import.create_batch(
             db,
             user.id,

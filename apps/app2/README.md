@@ -81,12 +81,14 @@ No assistente, ao lançar movimento o wizard pergunta **realizado ou previsto**,
 
 Na página **Movimentos** (`/transactions`):
 - Filtro de período (**diária / semanal / mensal**; padrão = **mês atual**; navegação ← / Hoje / →)
+- Filtros opcionais: **conta**, **cartão**, **categoria**, **tipo** (despesa/receita/transferência)
+- O filtro aplicado (com o período) fica **memorizado na sessão** até **Limpar** (`?clear=1` → padrão)
 - **A realizar** — previstos pendentes do período (vencimento; selo `Fixo · …` / `3/12 · mensal`; **Realizar**, **Editar**, **Excluir**, **Encerrar série**, **Cancelar parcelas**)
-- **Extrato** — realizados do período (sem `transfer_in` duplicado; **Editar** / **Excluir**)
+- **Extrato** — realizados do período (sem `transfer_in` duplicado; compras de cartão só se filtrar cartão; **Editar** / **Excluir**)
 - **Novo lançamento** → `/transactions/new` (página CRUD; não há formulário lateral)
 - Previstos já liquidados não aparecem na lista (o par previsto/realizado fica no dashboard)
 
-**Contas / Cartões / Orçamentos** também seguem CRUD em páginas dedicadas (`/accounts/new`, `/accounts/{id}/edit`, `/accounts/cards/new`, `/budgets/new`, etc.). Em **Cartões**, a lista é hierárquica: expandir cartão → faturas → movimentos; pagar fatura fica dentro da fatura expandida. **Importar OFX** no cartão abre revisão para criar compras novas, conciliar existentes (`ofx_fitid`) e pagar/vincular fatura a partir de créditos.
+**Contas / Cartões / Orçamentos** também seguem CRUD em páginas dedicadas (`/accounts/new`, `/accounts/{id}/edit`, `/accounts/cards/new`, `/budgets/new`, etc.). Em **Cartões**, a lista é hierárquica: expandir cartão → faturas → movimentos; pagar fatura fica dentro da fatura expandida. **Importar extrato** (OFX/CSV/PDF) no cartão ou na conta abre revisão para criar, conciliar (`ofx_fitid`) e, no cartão, pagar/vincular fatura. Conta Flash: CSV `flash_extrato_*.csv` suportado.
 
 **Realizar previsto:** na UI, escolha mesma conta ou outra conta; no assistente, wizard pergunta pagamento → mesma conta? → conta (se diferente).
 
@@ -157,9 +159,10 @@ No wizard, datas isoladas (`10/08/2026`, `hoje`, etc.) preenchem o slot em andam
 | `/accounts/new`, `/accounts/{id}/edit` | Criar / editar conta |
 | `/accounts/cards` | Cartões (lista hierárquica: cartão → faturas → movimentos) |
 | `/accounts/cards/new`, `/accounts/cards/{id}/edit` | Criar / editar cartão |
-| `/accounts/cards/{id}/ofx` | Importar OFX (upload → revisão → criar/conciliar/pagar fatura) |
+| `/accounts/cards/{id}/ofx` | Importar extrato do cartão (OFX/CSV/PDF → revisão → criar/conciliar/pagar) |
+| `/accounts/{id}/ofx` | Importar extrato da conta (OFX/CSV/PDF/Flash → revisão → criar/conciliar) |
 | `/accounts/invoices/{id}/pay` | Pagar fatura |
-| `/transactions` | Movimentos filtrados por período (padrão: mês) |
+| `/transactions` | Movimentos (período + conta/cartão/categoria/tipo; filtro na sessão até Limpar) |
 | `/transactions/new`, `/transactions/{id}/edit` | Criar / editar lançamento |
 | `/budgets` | Orçamentos (filtro mês/ano) |
 | `/budgets/new`, `/budgets/{id}/edit` | Criar / editar orçamento |
@@ -236,13 +239,13 @@ Operações (reset de dados, migrações, debug): [docs/OPERATIONS.md](docs/OPER
 
 ## Testes
 
-Suite completa no container (**315** testes):
+Suite completa no container (**343** testes):
 
 ```bash
 docker compose exec -T app2 python -m pytest -q
 ```
 
-Áreas cobertas: finanças, transferências (incluindo `update_transfer`), previstos/realizados, recorrência, parcelas, cartões de crédito (incluindo importação OFX), dashboard por período, agente (LLM-first + wizards), formatação do chat (`chat_md`), wizards (transação, cartão, realizar previsto, fatura), multi-lançamentos vs datas, intents, segurança, onboarding, isolamento multiusuário.
+Áreas cobertas: finanças, transferências (incluindo `update_transfer`), previstos/realizados, recorrência, parcelas, cartões (importação OFX/CSV/PDF), contas (OFX/CSV/PDF/Flash), parser de extrato (`test_statement_parse.py`), filtros de movimentos, dashboard por período, agente (LLM-first + wizards), formatação do chat (`chat_md`), wizards, multi-lançamentos, intents, segurança, onboarding, isolamento multiusuário.
 
 ## Migrações (Alembic)
 
@@ -265,6 +268,8 @@ docker compose exec -T app2 python -m pytest -q
 | 015 | Faturas de cartão (`card_invoices`, `transactions.invoice_id`) |
 | 016 | Entidade `credit_cards` separada de contas; `transactions.card_id`; migração de contas `cartao` legadas |
 | 017 | Importação OFX (`transactions.ofx_fitid`, `ofx_import_batches`, `ofx_import_lines`) |
+| 018 | Memória de categoria OFX (`ofx_category_memory`) |
+| 019 | Importação OFX/CSV de conta (`ofx_import_batches.account_id`; `card_id` nullable) |
 
 ## Documentação para o Cursor
 
@@ -287,10 +292,10 @@ app/
   models.py         # SQLAlchemy
   schemas.py        # Pydantic, ToolCall, formatação BRL
   routers/          # pages (HTML), api (JSON), auth
-  services/         # finance, recurrence, installments, credit_cards, ofx_card_import, wizards, tools, intents
+  services/         # finance, recurrence, installments, credit_cards, statement_parse, ofx_*_import, wizards, tools, intents
   agent/            # runner, llm, groq, prompt
   security/         # csrf, rate_limit
-  templates/        # Jinja2 + partials HTMX (agent_*.html, card_ofx_*.html)
+  templates/        # Jinja2 + partials HTMX (agent_*.html, card_ofx_*.html, account_ofx_*.html)
 tests/
 alembic/
 ```
