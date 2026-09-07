@@ -288,6 +288,8 @@ Future<Map<String, Object?>> getOrderByPublicId(String publicId) async {
   final result = await connection.execute(
     '''
     SELECT public_id, status, customer_name, whatsapp, delivery_mode,
+           delivery_street, delivery_number, delivery_complement,
+           delivery_neighborhood, delivery_reference,
            subtotal, delivery_fee, total, mp_payment_id, pix_copy_code,
            pix_qr_base64, pix_expires_at, paid_at, created_at
     FROM orders
@@ -398,15 +400,20 @@ Map<String, Object?> _rowToOrderMap(ResultRow row) {
     'customer_name': row[2],
     'whatsapp': row[3],
     'delivery_mode': row[4],
-    'subtotal': _toDouble(row[5]),
-    'delivery_fee': _toDouble(row[6]),
-    'total': _toDouble(row[7]),
-    'mp_payment_id': row[8] == null ? null : (row[8] as num).toInt(),
-    'pix_copy_code': row[9],
-    'pix_qr_base64': row[10],
-    'pix_expires_at': row[11],
-    'paid_at': row[12],
-    'created_at': row[13],
+    'delivery_street': row[5],
+    'delivery_number': row[6],
+    'delivery_complement': row[7],
+    'delivery_neighborhood': row[8],
+    'delivery_reference': row[9],
+    'subtotal': _toDouble(row[10]),
+    'delivery_fee': _toDouble(row[11]),
+    'total': _toDouble(row[12]),
+    'mp_payment_id': row[13] == null ? null : (row[13] as num).toInt(),
+    'pix_copy_code': row[14],
+    'pix_qr_base64': row[15],
+    'pix_expires_at': row[16],
+    'paid_at': row[17],
+    'created_at': row[18],
   };
 }
 

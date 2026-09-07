@@ -23,6 +23,17 @@ paths: lib/**,web/**,pubspec.yaml,android/**,ios/**
 - `mp_mode: test` na resposta → banner no app (Pix sandbox não paga em banco real)
 - Credenciais em `/opt/hosting/.env`: `APP1_MP_ACCESS_TOKEN`, `APP1_MP_USE_TEST`, etc.
 
+## Painel da loja
+
+- URL: https://tridocuras.com.br/admin
+- Senha: `APP1_ADMIN_PASSWORD` no `.env`
+- Status: `paid` → `preparing` → `ready` → `completed`
+
+## Rastreamento (cliente)
+
+- `GET /api/orders/{id}/tracking` — timeline
+- Aba **Pedidos** no app ou botão na confirmação
+
 ## Design system (v1)
 
 ### Paleta (`lib/theme/app_colors.dart`)
@@ -86,4 +97,4 @@ flutter test
 
 ## Pendente
 
-Rastreamento de pedidos (UI “em breve”).
+Notificação WhatsApp; fotos e CRUD de produtos.

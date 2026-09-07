@@ -14,6 +14,11 @@ O frontend Flutter consome estes endpoints no checkout e na tela de pagamento.
 | GET | `/api/orders/{id}` | Consulta status (`pending_payment` / `paid`) |
 | POST | `/api/orders/{id}/pix` | Regenera cobrança Pix (se expirada) |
 | POST | `/api/webhooks/mercadopago` | Webhook de confirmação de pagamento |
+| GET | `/api/orders/{id}/tracking` | Timeline de rastreamento para o cliente |
+| POST | `/api/admin/session` | Login do painel (senha → token) |
+| GET | `/api/admin/orders` | Lista pedidos para a loja (autenticado) |
+| POST | `/api/admin/orders/{id}/status` | Atualiza status do pedido |
+| GET | `/admin` | Painel web de pedidos |
 
 ### Exemplo — health
 
@@ -156,6 +161,21 @@ Credenciais via variáveis de ambiente (`docker-compose.yml` → `APP1_DB_*` em 
 
 O `entrypoint.sh` aguarda o Postgres, aplica schema/seed e inicia o servidor.
 
+## Painel admin (`/admin`)
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/admin` | Interface web (HTML) |
+| POST | `/api/admin/session` | `{ "password": "..." }` → `{ "token": "..." }` |
+| GET | `/api/admin/orders?status=active` | Lista pedidos (`Authorization: Bearer <token>`) |
+| POST | `/api/admin/orders/{id}/status` | `{ "status": "preparing" }` etc. |
+
+Filtros `status`: `active` (fila), `paid`, `preparing`, `ready`, `pending_payment`, `completed`.
+
+Fluxo de status após pagamento: `paid` → `preparing` → `ready` → `completed`.
+
+Variável: `APP1_ADMIN_PASSWORD` no `.env`.
+
 ## Mercado Pago (Pix)
 
 Variáveis no `/opt/hosting/.env` (repassadas ao container `app1`):
@@ -167,6 +187,7 @@ Variáveis no `/opt/hosting/.env` (repassadas ao container `app1`):
 | `APP1_MP_TEST_PUBLIC_KEY` | `MP_TEST_PUBLIC_KEY` | Public Key de teste |
 | `APP1_MP_USE_TEST` | `MP_USE_TEST` | `true` = sandbox; `false` = produção |
 | `APP1_DOMAIN` | `APP1_DOMAIN` | Domínio público (monta URL do webhook) |
+| `APP1_ADMIN_PASSWORD` | Senha do painel `/admin` |
 
 Webhook no painel MP: `https://tridocuras.com.br/api/webhooks/mercadopago`
 
@@ -216,4 +237,4 @@ Liberado para desenvolvimento (`Access-Control-Allow-Origin: *` no middleware).
 
 | Endpoint / recurso | Descrição |
 |--------------------|-----------|
-| `GET /api/orders/{id}/tracking` | Rastreamento de entrega (futuro) |
+| Notificação WhatsApp | Aviso à loja/cliente ao confirmar pagamento (futuro) |

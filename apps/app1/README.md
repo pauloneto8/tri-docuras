@@ -103,7 +103,26 @@ docker compose build app1 app1-web && docker compose up -d app1 app1-web
 
 | Item | Estado |
 |------|--------|
-| Rastreamento de pedidos | UI “em breve” (`GET /api/orders/{id}/tracking` — futuro) |
+| Notificação WhatsApp ao confirmar pagamento | Futuro |
+| Fotos e CRUD de produtos | Futuro |
+
+### Painel da loja
+
+**URL:** https://tridocuras.com.br/admin
+
+Senha em `APP1_ADMIN_PASSWORD` no `.env`. O painel lista pedidos, mostra itens/endereço/WhatsApp e permite avançar o status:
+
+`paid` → `preparing` → `ready` → `completed`
+
+Abas: Fila (pagos + preparo + prontos), filtros por status, atualização automática a cada 30 s.
+
+### Rastreamento (cliente)
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/orders/{id}/tracking` | Timeline do pedido para o cliente |
+
+No app: aba **Pedidos** (consulta por `TD-0001`) ou botão **Acompanhar pedido** na confirmação.
 
 ## Operações
 

@@ -90,7 +90,7 @@ Expor apenas `80`, `443` e SSH conforme a política do provedor.
 | `hosting-app1` | API Dart Frog (`/api/*`) |
 | `hosting-app1-db` | PostgreSQL 16 |
 
-Fluxo de compra completo (6 telas): catálogo → produto → carrinho → checkout → Pix → confirmação. Pedidos e pagamento Pix integrados ao backend (Mercado Pago). Credenciais em `APP1_MP_*` no `.env`.
+Fluxo de compra completo (6 telas): catálogo → produto → carrinho → checkout → Pix → confirmação. Pedidos e pagamento Pix integrados ao backend (Mercado Pago). **Painel da loja:** https://tridocuras.com.br/admin (`APP1_ADMIN_PASSWORD` no `.env`).
 
 ```bash
 docker compose build app1-web && docker compose up -d app1-web   # só frontend

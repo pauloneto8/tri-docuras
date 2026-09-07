@@ -6,6 +6,7 @@ import 'package:tri_docuras/checkout/checkout_draft.dart';
 import 'package:tri_docuras/checkout/order_payload.dart';
 import 'package:tri_docuras/config.dart';
 import 'package:tri_docuras/models/created_order.dart';
+import 'package:tri_docuras/models/order_tracking.dart';
 import 'package:tri_docuras/models/product.dart';
 
 class ApiService {
@@ -68,6 +69,26 @@ class ApiService {
 
     if (response.statusCode == 200) {
       return OrderStatus.fromJson(body);
+    }
+
+    final message = body['error'] as String? ??
+        'Não foi possível consultar o pedido (${response.statusCode}).';
+    throw ApiException(message);
+  }
+
+  Future<OrderTracking> fetchOrderTracking(String orderId) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/orders/$orderId/tracking');
+    final response = await _client.get(uri);
+
+    Map<String, dynamic> body;
+    try {
+      body = jsonDecode(response.body) as Map<String, dynamic>;
+    } on FormatException {
+      throw ApiException('Resposta inválida do servidor (${response.statusCode}).');
+    }
+
+    if (response.statusCode == 200) {
+      return OrderTracking.fromJson(body);
     }
 
     final message = body['error'] as String? ??

@@ -43,6 +43,7 @@ services:
       MP_TEST_PUBLIC_KEY: ${APP1_MP_TEST_PUBLIC_KEY:-}
       MP_USE_TEST: ${APP1_MP_USE_TEST:-false}
       APP1_DOMAIN: ${APP1_DOMAIN:-tridocuras.com.br}
+      APP1_ADMIN_PASSWORD: ${APP1_ADMIN_PASSWORD:-}
     networks:
       - proxy
       - app1_internal

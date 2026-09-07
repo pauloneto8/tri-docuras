@@ -39,7 +39,7 @@ void main() {
       cart.add(CartItem(product: product, quantity: 2));
       expect(cart.itemCount, 2);
       cart.removeAt(0);
-      expect(cart.items.isEmpty);
+      expect(cart.items.isEmpty, isTrue);
       expect(cart.itemCount, 0);
     });
   });

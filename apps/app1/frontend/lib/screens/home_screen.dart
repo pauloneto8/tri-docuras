@@ -5,6 +5,7 @@ import 'package:tri_docuras/cart/cart_scope.dart';
 import 'package:tri_docuras/config.dart';
 import 'package:tri_docuras/models/product.dart';
 import 'package:tri_docuras/screens/cart_screen.dart';
+import 'package:tri_docuras/screens/order_tracking_screen.dart';
 import 'package:tri_docuras/screens/product_screen.dart';
 import 'package:tri_docuras/services/api_service.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
@@ -134,7 +135,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           height: constraints.maxHeight,
                           child: _navIndex == 0
                               ? _buildCatalog()
-                              : _buildPlaceholderTab(),
+                              : _navIndex == 1
+                                  ? OrderLookupScreen(api: _api)
+                                  : _buildPlaceholderTab(),
                         ),
                       );
                     },
@@ -163,7 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPlaceholderTab() {
-    const labels = ['', 'Pedidos', 'Favoritos', 'Perfil'];
+    const labels = ['', '', 'Favoritos', 'Perfil'];
     return ColoredBox(
       color: AppColors.cream,
       child: Center(

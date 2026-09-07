@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tri_docuras/checkout/delivery_address.dart';
 import 'package:tri_docuras/checkout/order_summary.dart';
+import 'package:tri_docuras/screens/order_tracking_screen.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
 import 'package:tri_docuras/widgets/td_button.dart';
@@ -131,14 +132,11 @@ class ConfirmationScreen extends StatelessWidget {
                       child: TdButton(
                         label: 'Acompanhar pedido',
                         onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Rastreamento de pedidos em breve.',
-                                style: GoogleFonts.poppins(fontSize: 13),
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => OrderTrackingScreen(
+                                orderId: summary.orderId,
                               ),
-                              behavior: SnackBarBehavior.floating,
-                              backgroundColor: AppColors.dark,
                             ),
                           );
                         },
