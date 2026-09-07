@@ -9,6 +9,7 @@ import 'package:tri_docuras/checkout/delivery_address.dart';
 import 'package:tri_docuras/checkout/delivery_address_validators.dart';
 import 'package:tri_docuras/checkout/whatsapp_input_formatter.dart';
 import 'package:tri_docuras/screens/pix_screen.dart';
+import 'package:tri_docuras/services/api_service.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
 import 'package:tri_docuras/widgets/td_button.dart';
@@ -33,6 +34,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _referenceController = TextEditingController();
 
   bool _submitted = false;
+  bool _submitting = false;
+
+  final ApiService _api = ApiService();
 
   @override
   void dispose() {
@@ -102,7 +106,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   void _onFieldChanged(String _) => setState(() {});
 
-  void _generatePix() {
+  Future<void> _generatePix() async {
     setState(() => _submitted = true);
     final cart = CartScope.of(context);
     if (cart.items.isEmpty) {
@@ -129,11 +133,42 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       deliveryAddress: deliveryAddress,
     );
 
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => PixScreen(draft: draft),
-      ),
-    );
+    setState(() => _submitting = true);
+    try {
+      final order = await _api.createOrder(
+        draft: draft,
+        items: cart.items,
+      );
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => PixScreen(
+            draft: draft.copyWithTotal(order.total),
+            order: order,
+          ),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.dark,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível registrar o pedido. Tente novamente.'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.dark,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -364,12 +399,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                       child: TdButton(
-                        label: 'Gerar Pix',
+                        label: _submitting ? 'Registrando pedido…' : 'Gerar Pix',
                         trailing: Text(cart.formattedTotal),
-                        variant: formValid && cart.items.isNotEmpty
+                        variant: formValid && cart.items.isNotEmpty && !_submitting
                             ? TdButtonVariant.primary
                             : TdButtonVariant.disabled,
-                        onPressed: formValid && cart.items.isNotEmpty
+                        onPressed: formValid && cart.items.isNotEmpty && !_submitting
                             ? _generatePix
                             : null,
                       ),

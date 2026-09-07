@@ -66,6 +66,66 @@ Future<void> ensureSchema(Connection connection) async {
   await connection.execute('''
     ALTER TABLE products ADD COLUMN IF NOT EXISTS available BOOLEAN NOT NULL DEFAULT TRUE;
   ''');
+
+  await connection.execute('''
+    CREATE TABLE IF NOT EXISTS orders (
+      id SERIAL PRIMARY KEY,
+      public_id VARCHAR(20) NOT NULL UNIQUE,
+      status VARCHAR(30) NOT NULL DEFAULT 'pending_payment',
+      customer_name VARCHAR(200) NOT NULL,
+      whatsapp VARCHAR(20) NOT NULL,
+      delivery_mode VARCHAR(20) NOT NULL,
+      delivery_street VARCHAR(200),
+      delivery_number VARCHAR(50),
+      delivery_complement VARCHAR(100),
+      delivery_neighborhood VARCHAR(100),
+      delivery_reference VARCHAR(200),
+      subtotal NUMERIC(10, 2) NOT NULL,
+      delivery_fee NUMERIC(10, 2) NOT NULL DEFAULT 0,
+      total NUMERIC(10, 2) NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  ''');
+
+  await connection.execute('''
+    CREATE TABLE IF NOT EXISTS order_items (
+      id SERIAL PRIMARY KEY,
+      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      product_id INTEGER NOT NULL REFERENCES products(id),
+      product_name VARCHAR(255) NOT NULL,
+      quantity INTEGER NOT NULL,
+      unit_price NUMERIC(10, 2) NOT NULL,
+      size VARCHAR(50),
+      lactose_free BOOLEAN NOT NULL DEFAULT FALSE,
+      line_total NUMERIC(10, 2) NOT NULL
+    );
+  ''');
+
+  await connection.execute('''
+    CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders (created_at DESC);
+  ''');
+  await connection.execute('''
+    CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items (order_id);
+  ''');
+
+  await connection.execute('''
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS mp_payment_id BIGINT;
+  ''');
+  await connection.execute('''
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS pix_copy_code TEXT;
+  ''');
+  await connection.execute('''
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS pix_qr_base64 TEXT;
+  ''');
+  await connection.execute('''
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS pix_expires_at TIMESTAMP;
+  ''');
+  await connection.execute('''
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP;
+  ''');
+  await connection.execute('''
+    CREATE INDEX IF NOT EXISTS idx_orders_mp_payment_id ON orders (mp_payment_id);
+  ''');
 }
 
 Future<void> seedProducts(Connection connection) async {

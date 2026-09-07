@@ -9,6 +9,7 @@ App multiplataforma da doceria Tri Doçuras (Android, iOS e web).
 - Flutter 3.x / Dart 3.12+
 - `http` — consumo da API
 - `google_fonts` — Lora + Poppins (design system)
+- `qr_flutter` — QR Code Pix a partir do `copy_code`
 
 ## Estrutura
 
@@ -25,7 +26,9 @@ lib/
 ├── theme/
 │   ├── app_colors.dart    # paleta do design system
 │   └── app_theme.dart     # ThemeData + tipografia
-├── models/product.dart
+├── models/
+│   ├── product.dart
+│   └── created_order.dart   # CreatedOrder, PixPayment, OrderStatus
 ├── services/api_service.dart
 ├── screens/
 │   ├── home_screen.dart      # catálogo (tela 1)
@@ -143,19 +146,22 @@ Implementada conforme página 5 do PDF (lado direito), com validação no client
 - **NOME COMPLETO** / **WHATSAPP** — `TdTextField` + validadores (`checkout_validators.dart`); máscara `(11) 91234-5678`
 - Label `ENTREGA` — Nazaré da Mata - PE, CEP 55.800-000, taxa R$ 6,00
 - **ENDEREÇO DE ENTREGA** (se receber em casa): rua, número, complemento, bairro, ponto de referência
-- **PAGAMENTO** — card visual "Pix via Mercado Pago" (sem integração)
+- **PAGAMENTO** — card visual "Pix via Mercado Pago"
 - **Resumo:** Subtotal e Total a pagar via `CartController`
-- **Rodapé:** `Gerar Pix` + total — desabilitado até formulário válido; abre tela 5
-- PII só em memória (`CheckoutDraft` por construtor); sem persistência, URL ou logs
+- **Rodapé:** `Gerar Pix` + total — desabilitado até formulário válido; chama `POST /api/orders` e abre tela 5
+- PII só em memória (`CheckoutDraft` por construtor); sem persistência local
 
 ### Tela 5 — Pagamento Pix (`pix_screen.dart`)
 
-Implementada conforme página 6 do PDF (lado esquerdo):
+Integrada com Mercado Pago (produção ou teste):
 
-- QR visual (placeholder até API Mercado Pago — sem código escaneável falso)
-- Total, timer de expiração (10 min), preview do código + COPIAR (integração pendente)
-- Status “Aguardando pagamento”, passos 1–3, texto Mercado Pago
-- **Já realizei o pagamento** → confirmação (até webhook automático existir)
+- QR escaneável gerado com `qr_flutter` a partir do `copy_code` da API
+- Preview do código + **COPIAR** (clipboard)
+- Total, timer de expiração (10 min), status “Aguardando pagamento”
+- Polling a cada 3 s em `GET /api/orders/{id}` até `status = paid`
+- Banner de aviso quando `mp_mode = test` (Pix sandbox não funciona em bancos reais)
+- **Tentar novamente** chama `POST /api/orders/{id}/pix` se a cobrança expirar
+- Confirmação automática → `ConfirmationScreen` (limpa carrinho)
 
 ### Tela 6 — Confirmação (`confirmation_screen.dart`)
 
@@ -169,15 +175,33 @@ Implementada conforme página 6 do PDF (lado direito):
 ```
 HomeScreen ──► ProductScreen ──(Adicionar)──► catálogo + balão (5 s, Ver carrinho)
 HomeScreen ──(ícone carrinho / Ver carrinho)──► CartScreen ──(Finalizar)──► CheckoutScreen
-CheckoutScreen ──(Gerar Pix)──► PixScreen ──(Já realizei o pagamento)──► ConfirmationScreen
+CheckoutScreen ──(Gerar Pix → POST /api/orders)──► PixScreen ──(paid / polling)──► ConfirmationScreen
 ConfirmationScreen ──(Voltar à loja)──► HomeScreen (carrinho limpo)
 ```
 
 Estado do carrinho: `CartController` em memória (`add`, `updateQuantity`, `removeAt`, `deliveryFeeAmount = 6`). Badge do header = `itemCount`.
 
-### Pendente (integração)
+Pedidos são persistidos na API; pagamento confirmado via webhook Mercado Pago + polling no cliente.
 
-Pix Mercado Pago real (QR + copia-e-cola via API), webhook automático, `POST /api/orders`, rastreamento de pedidos.
+### Pendente
+
+Rastreamento de pedidos (UI “em breve”).
+
+## Testes
+
+```bash
+cd /opt/hosting/apps/app1/frontend
+flutter test
+```
+
+| Arquivo | Foco |
+|---------|------|
+| `test/cart/cart_controller_test.dart` | Itens, quantidade, taxa R$ 6,00, remoção |
+| `test/checkout/checkout_validators_test.dart` | Nome e WhatsApp |
+| `test/checkout/delivery_address_validators_test.dart` | Endereço (entrega) |
+| `test/checkout/order_payload_test.dart` | Payload do POST /orders |
+| `test/models/created_order_test.dart` | Parse da resposta (pedido + Pix) |
+| `test/widget_test.dart` | Smoke |
 
 ## Desenvolvimento
 

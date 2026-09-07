@@ -36,4 +36,12 @@ class CheckoutDraft {
         deliveryMode: deliveryMode,
         deliveryAddress: deliveryAddress,
       );
+
+  CheckoutDraft copyWithTotal(double newTotal) => CheckoutDraft(
+        customerName: customerName,
+        whatsappDigits: whatsappDigits,
+        total: newTotal,
+        deliveryMode: deliveryMode,
+        deliveryAddress: deliveryAddress,
+      );
 }
