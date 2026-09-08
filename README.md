@@ -10,7 +10,7 @@ Internet :80/:443
             ├── tridocuras.com.br
             │     ├── /        → app1-web (Flutter)
             │     ├── /api/*   → app1 (Dart Frog)
-            │     └── /admin   → app1 (painel de pedidos)
+            │     └── /admin   → app1 (painel: pedidos + produtos)
             └── assistfin.com.br → app2 (AssistFin + agente IA)
 ```
 
@@ -100,7 +100,7 @@ Fluxo completo: catálogo → checkout → Pix (Mercado Pago) → confirmação 
 | URL | Função |
 |-----|--------|
 | https://tridocuras.com.br | Loja (Flutter web) |
-| https://tridocuras.com.br/admin | Painel de pedidos da loja |
+| https://tridocuras.com.br/admin | Painel da loja (pedidos + catálogo) |
 | https://tridocuras.com.br/api/health | Health da API |
 
 Credenciais em `/opt/hosting/.env`: `APP1_MP_*` (Pix), `APP1_ADMIN_PASSWORD` (painel). WhatsApp da loja no app: `apps/app1/frontend/lib/config.dart` (`storeWhatsApp`). **Não commitar** o `.env`.

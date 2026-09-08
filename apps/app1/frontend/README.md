@@ -214,11 +214,11 @@ ConfirmationScreen ──(Voltar à loja)──► HomeScreen (carrinho limpo)
 
 Estado do carrinho: `CartController` em memória. Favoritos: `FavoritesController` + `shared_preferences`.
 
-Pedidos persistidos na API; pagamento via webhook MP + polling; status operacional atualizado no painel `/admin` e refletido na timeline do cliente.
+Pedidos persistidos na API; pagamento via webhook MP + polling; status operacional atualizado no painel `/admin` e refletido na timeline do cliente. Catálogo gerenciado no painel (**Produtos**) — alterações de preço/disponibilidade refletem em `GET /api/products` sem rebuild.
 
 ### Pendente
 
-Notificação WhatsApp; fotos e CRUD de produtos no catálogo.
+Notificação WhatsApp; fotos dos produtos no catálogo.
 
 ## Testes
 

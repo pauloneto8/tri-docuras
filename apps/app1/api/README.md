@@ -170,6 +170,49 @@ curl -s -X POST https://tridocuras.com.br/api/admin/orders/TD-0001/status \
   -d '{"status":"preparing"}'
 ```
 
+### Exemplo — listar produtos (admin)
+
+```bash
+curl -s https://tridocuras.com.br/api/admin/products \
+  -H "Authorization: Bearer SEU_TOKEN"
+```
+
+Resposta inclui todos os produtos (`available: true` e `false`) e `categories: ["brownies", "combos"]`.
+
+### Exemplo — criar produto (admin)
+
+```bash
+curl -s -X POST https://tridocuras.com.br/api/admin/products \
+  -H "Authorization: Bearer SEU_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Brownie Especial",
+    "description": "Edição limitada",
+    "price": 18.00,
+    "category": "brownies",
+    "featured": false,
+    "available": true
+  }'
+```
+
+### Exemplo — editar produto (admin)
+
+```bash
+curl -s -X PUT https://tridocuras.com.br/api/admin/products/4 \
+  -H "Authorization: Bearer SEU_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "Brownie Tradicional",
+    "description": "Brownie amanteigado clássico.",
+    "price": 13.00,
+    "category": "brownies",
+    "featured": true,
+    "available": true
+  }'
+```
+
+Para ocultar do catálogo público, envie `"available": false` (soft-delete; pedidos antigos mantêm snapshot em `order_items`).
+
 ## Ciclo de vida do status
 
 | Status | Descrição |
@@ -199,6 +242,7 @@ api/
 │   ├── orders.dart                # Validação, criação, Pix, webhook sync
 │   ├── order_tracking.dart        # Timeline para o cliente
 │   ├── admin_orders.dart          # Listagem e status (painel)
+│   ├── admin_products.dart        # CRUD de produtos (painel)
 │   ├── admin_auth.dart            # Autenticação do painel
 │   ├── admin_panel_html.dart      # UI HTML do /admin
 │   ├── mercado_pago_client.dart   # Cliente API MP v1 payments
@@ -212,7 +256,8 @@ api/
 │       ├── products.dart
 │       ├── admin/
 │       │   ├── session.dart         # POST login
-│       │   └── orders/              # GET lista, POST status
+│       │   ├── orders/              # GET lista, POST status
+│       │   └── products/            # GET/POST lista e criar; PUT por id
 │       ├── orders/
 │       │   ├── index.dart           # POST create
 │       │   └── [id]/
@@ -224,6 +269,7 @@ api/
 ├── test/
 │   ├── mercado_pago_client_test.dart
 │   ├── admin_orders_test.dart
+│   ├── admin_products_test.dart
 │   └── order_tracking_test.dart
 ├── bin/
 │   ├── wait_for_db.dart
@@ -242,14 +288,21 @@ O `entrypoint.sh` aguarda o Postgres, aplica schema/seed e inicia o servidor.
 
 ## Painel admin (`/admin`)
 
+Interface HTML com duas seções: **Pedidos** e **Produtos** (`admin_panel_html.dart`).
+
 | Método | Rota | Descrição |
 |--------|------|-----------|
 | GET | `/admin` | Interface web (HTML) |
 | POST | `/api/admin/session` | `{ "password": "..." }` → `{ "token": "..." }` |
 | GET | `/api/admin/orders?status=active` | Lista pedidos (`Authorization: Bearer <token>`) |
 | POST | `/api/admin/orders/{id}/status` | `{ "status": "preparing" }` etc. |
+| GET | `/api/admin/products` | Lista produtos (inclui ocultos) + categorias |
+| POST | `/api/admin/products` | Cria produto |
+| PUT | `/api/admin/products/{id}` | Atualiza produto (inclui `available`) |
 
-Filtros `status`: `active` (fila), `paid`, `preparing`, `ready`, `pending_payment`, `completed`.
+**Pedidos** — filtros `status`: `active` (fila), `paid`, `preparing`, `ready`, `pending_payment`, `completed`.
+
+**Produtos** — categorias: `brownies`, `combos`. Campo `available: false` oculta do `GET /api/products` sem apagar o registro.
 
 Fluxo de status após pagamento: `paid` → `preparing` → `ready` → `completed`.
 
@@ -268,6 +321,7 @@ Variáveis no `/opt/hosting/.env` (repassadas ao container `app1`):
 | Variável no `.env` | Variável no container | Uso |
 |--------------------|----------------------|-----|
 | `APP1_MP_ACCESS_TOKEN` | `MP_ACCESS_TOKEN` | Access Token de produção |
+| `APP1_MP_PUBLIC_KEY` | `MP_PUBLIC_KEY` | Public Key de produção |
 | `APP1_MP_TEST_ACCESS_TOKEN` | `MP_TEST_ACCESS_TOKEN` | Access Token de teste |
 | `APP1_MP_TEST_PUBLIC_KEY` | `MP_TEST_PUBLIC_KEY` | Public Key de teste |
 | `APP1_MP_USE_TEST` | `MP_USE_TEST` | `true` = sandbox; `false` = produção |
@@ -322,4 +376,5 @@ Liberado para desenvolvimento (`Access-Control-Allow-Origin: *` no middleware).
 
 | Endpoint / recurso | Descrição |
 |--------------------|-----------|
+| Fotos de produtos | Upload e exibição no catálogo (futuro) |
 | Notificação WhatsApp | Aviso à loja/cliente ao confirmar pagamento (futuro) |

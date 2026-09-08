@@ -18,7 +18,7 @@ Doceria online especializada em brownies. Cliente multiplataforma (Android, iOS,
 |---------|---------|
 | `/` | Flutter web (`app1-web`) |
 | `/api/*` | Dart Frog (`app1:8080`) |
-| `/admin` | Painel de pedidos da loja (`app1:8080`) |
+| `/admin` | Painel da loja — pedidos e catálogo (`app1:8080`) |
 
 Domínio em `/opt/hosting/.env` → `APP1_DOMAIN` (`tridocuras.com.br`). HTTPS via Let's Encrypt (`/opt/hosting/certs`).
 
@@ -89,6 +89,15 @@ Categorias: `brownies`, `combos`.
 
 Carrinho e checkout no Flutter; **Gerar Pix** grava o pedido (`POST /api/orders`), gera cobrança Pix no Mercado Pago e exibe QR + copia-e-cola. A confirmação é automática via webhook + polling (`GET /api/orders/{id}`).
 
+### Implementado (painel `/admin`)
+
+| Seção | Função |
+|-------|--------|
+| **Pedidos** | Fila operacional, filtros por status, WhatsApp do cliente, avanço de status |
+| **Produtos** | Criar, editar preço/descrição, destaque, ocultar do catálogo (`available`) |
+
+Pix em **produção** (`APP1_MP_USE_TEST=false`); webhook MP configurado em `https://tridocuras.com.br/api/webhooks/mercadopago`.
+
 ### Ciclo de vida do pedido
 
 | Status | Quem define | Significado |
@@ -106,7 +115,9 @@ Transições no painel: `paid` → `preparing` → `ready` → `completed` (com 
 | Variável | Obrigatória | Uso |
 |----------|-------------|-----|
 | `APP1_DB_*` | Sim | PostgreSQL |
-| `APP1_MP_ACCESS_TOKEN` | Para Pix real | Access Token de produção |
+| `APP1_MP_ACCESS_TOKEN` | Para Pix real | Access Token de produção (`APP_USR-...`) |
+| `APP1_MP_PUBLIC_KEY` | Recomendado | Public Key de produção |
+| `APP1_MP_CLIENT_ID` / `APP1_MP_CLIENT_SECRET` | Opcional | OAuth / integrações legadas (não usados no Pix atual) |
 | `APP1_MP_TEST_*` / `APP1_MP_USE_TEST` | Não | Sandbox Mercado Pago |
 | `APP1_ADMIN_PASSWORD` | Para painel | Senha de https://tridocuras.com.br/admin |
 | `APP1_DOMAIN` | Sim | Domínio público + webhook MP |
@@ -121,7 +132,10 @@ Credenciais em `/opt/hosting/.env` (não versionar):
 
 ```env
 # Produção — pagamentos reais (apps bancários)
+APP1_MP_PUBLIC_KEY=APP_USR-...
 APP1_MP_ACCESS_TOKEN=APP_USR-...
+APP1_MP_CLIENT_ID=...
+APP1_MP_CLIENT_SECRET=...
 
 # Teste — sandbox (não funciona em bancos reais)
 APP1_MP_TEST_ACCESS_TOKEN=TEST-...
@@ -132,6 +146,8 @@ APP1_MP_USE_TEST=false
 | Variável | Uso |
 |----------|-----|
 | `APP1_MP_ACCESS_TOKEN` | Access Token de **produção** (`APP_USR-...`) |
+| `APP1_MP_PUBLIC_KEY` | Public Key de **produção** |
+| `APP1_MP_CLIENT_ID` / `APP1_MP_CLIENT_SECRET` | Par OAuth (reservado; Pix usa só o token) |
 | `APP1_MP_TEST_ACCESS_TOKEN` | Access Token de **teste** (`TEST-...`) |
 | `APP1_MP_TEST_PUBLIC_KEY` | Public Key de teste (reservado para uso futuro no cliente) |
 | `APP1_MP_USE_TEST` | `true` = sandbox; `false` = produção (padrão em produção) |
@@ -155,7 +171,6 @@ docker compose build app1 app1-web && docker compose up -d app1 app1-web
 
 | Item | Estado |
 |------|--------|
-| CRUD de produtos no `/admin` | Implementado |
 | Fotos no catálogo | Futuro |
 | Notificação WhatsApp ao confirmar pagamento | Futuro |
 
@@ -165,11 +180,29 @@ docker compose build app1 app1-web && docker compose up -d app1 app1-web
 
 1. Defina `APP1_ADMIN_PASSWORD` no `/opt/hosting/.env` (senha forte; não versionar).
 2. Reinicie a API: `docker compose up -d app1`.
-3. Acesse `/admin`, informe a senha e gerencie a fila.
+3. Acesse `/admin`, informe a senha e gerencie pedidos e produtos.
 
-O painel lista pedidos com itens, endereço, total e link para WhatsApp do cliente. Atualização automática a cada 30 s.
+#### Aba Pedidos
 
-**Abas:** Fila (`active` = pagos + preparo + prontos), Pagos, Em preparo, Prontos, Aguardando Pix, Concluídos.
+Lista pedidos com itens, endereço, total e link para WhatsApp do cliente. Atualização automática a cada 30 s.
+
+**Filtros:** Fila (`active` = pagos + preparo + prontos), Pagos, Em preparo, Prontos, Aguardando Pix, Concluídos.
+
+#### Aba Produtos
+
+CRUD do catálogo sem rebuild do app:
+
+| Campo | Descrição |
+|-------|-----------|
+| Nome / descrição | Exibidos no app |
+| Preço | Em reais (ex.: `12.00`) |
+| Categoria | `brownies` ou `combos` |
+| Destaque | Aparece primeiro no catálogo |
+| Visível no app | `available` — desmarque para ocultar sem excluir |
+
+Alterações refletem em `GET /api/products` na próxima consulta do app.
+
+**Código:** `api/lib/admin_products.dart`, rotas `/api/admin/products`, UI em `admin_panel_html.dart`.
 
 ```bash
 # Trocar senha: edite APP1_ADMIN_PASSWORD no .env e reinicie app1
@@ -240,6 +273,7 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 | Carrinho (memória) | `frontend/lib/cart/` |
 | Favoritos (local) | `frontend/lib/favorites/` |
 | Checkout / endereço | `frontend/lib/checkout/` |
+| Admin produtos | `api/lib/admin_products.dart` |
 
 ## Testes
 
@@ -253,6 +287,7 @@ docker run --rm -v /opt/hosting/apps/app1/api:/app -w /app dart:stable sh -c "da
 |---------|-----------|
 | `test/mercado_pago_client_test.dart` | Status de pagamento MP |
 | `test/admin_orders_test.dart` | Labels e transições de status |
+| `test/admin_products_test.dart` | Validação do CRUD de produtos |
 | `test/order_tracking_test.dart` | Timeline do cliente |
 
 ### Frontend

@@ -25,7 +25,7 @@ paths: lib/**,web/**,pubspec.yaml,android/**,ios/**
 | POST | `/api/orders/{id}/pix` | Regenerar Pix expirado |
 | GET | `/api/orders/{id}/tracking` | Timeline de rastreamento |
 
-Admin (fora do Flutter): `POST /api/admin/session`, `GET /api/admin/orders`, `POST /api/admin/orders/{id}/status`.
+Admin (fora do Flutter): `POST /api/admin/session`, pedidos (`GET/POST /api/admin/orders*`), produtos (`GET/POST /api/admin/products`, `PUT /api/admin/products/{id}`). Painel: https://tridocuras.com.br/admin
 
 ## Integração Pix (Mercado Pago)
 
@@ -33,13 +33,16 @@ Admin (fora do Flutter): `POST /api/admin/session`, `GET /api/admin/orders`, `PO
 - Tela 5 renderiza QR com `qr_flutter` a partir do `copy_code`
 - Polling `GET /api/orders/{id}` até `status = paid`; webhook MP na API
 - `mp_mode: test` na resposta → banner no app (Pix sandbox não paga em banco real)
-- Credenciais: `APP1_MP_ACCESS_TOKEN`, `APP1_MP_USE_TEST` no `.env`
+- Credenciais: `APP1_MP_ACCESS_TOKEN`, `APP1_MP_PUBLIC_KEY`, `APP1_MP_USE_TEST` no `.env`
+- Webhook produção: `https://tridocuras.com.br/api/webhooks/mercadopago` (evento **pagamentos**)
 
 ## Painel da loja
 
 - URL: https://tridocuras.com.br/admin
 - Senha: `APP1_ADMIN_PASSWORD` no `/opt/hosting/.env` (reiniciar `app1` após alterar)
-- Status: `paid` → `preparing` → `ready` → `completed`
+- **Pedidos:** status `paid` → `preparing` → `ready` → `completed`
+- **Produtos:** CRUD em `/api/admin/products` — nome, preço, categoria, destaque, visível (`available`)
+- Código API: `admin_products.dart`, `admin_orders.dart`, `admin_panel_html.dart`
 
 ## Rastreamento (cliente)
 
@@ -122,4 +125,4 @@ cd /opt/hosting/apps/app1/frontend && flutter test
 
 ## Pendente
 
-Notificação WhatsApp; fotos e CRUD de produtos.
+Notificação WhatsApp; fotos dos produtos no catálogo.
