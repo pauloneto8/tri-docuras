@@ -66,6 +66,9 @@ Future<void> ensureSchema(Connection connection) async {
   await connection.execute('''
     ALTER TABLE products ADD COLUMN IF NOT EXISTS available BOOLEAN NOT NULL DEFAULT TRUE;
   ''');
+  await connection.execute('''
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
+  ''');
 
   await connection.execute('''
     CREATE TABLE IF NOT EXISTS orders (
@@ -247,7 +250,7 @@ Future<List<Map<String, Object?>>> fetchProducts() async {
   final connection = await getConnection();
   final result = await connection.execute(
     '''
-    SELECT id, name, description, price, featured, category, available
+    SELECT id, name, description, price, featured, category, available, image_url
     FROM products
     WHERE available = TRUE
     ORDER BY featured DESC, name ASC;
@@ -268,6 +271,7 @@ Future<List<Map<String, Object?>>> fetchProducts() async {
           'featured': row[4],
           'category': row[5],
           'available': row[6],
+          'image_url': row[7],
         },
       )
       .toList();

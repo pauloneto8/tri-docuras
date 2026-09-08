@@ -45,6 +45,9 @@ services:
       MP_USE_TEST: ${APP1_MP_USE_TEST:-false}
       APP1_DOMAIN: ${APP1_DOMAIN:-tridocuras.com.br}
       APP1_ADMIN_PASSWORD: ${APP1_ADMIN_PASSWORD:-}
+      APP1_UPLOADS_DIR: /app/uploads/products
+    volumes:
+      - app1_uploads:/app/uploads
     networks:
       - proxy
       - app1_internal
@@ -153,6 +156,8 @@ networks:
 volumes:
   app1_db_data:
     name: app1_db_data
+  app1_uploads:
+    name: app1_uploads
   app2_db_data:
     name: app2_db_data
   app2_backups:

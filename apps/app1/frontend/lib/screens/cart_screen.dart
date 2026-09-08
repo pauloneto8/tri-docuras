@@ -205,7 +205,7 @@ class _CartLineCard extends StatelessWidget {
             SizedBox(
               width: 64,
               height: 64,
-              child: TdPhotoFrame(),
+              child: TdPhotoFrame(imageUrl: item.product.imageUrl),
             ),
             const SizedBox(width: 12),
             Expanded(

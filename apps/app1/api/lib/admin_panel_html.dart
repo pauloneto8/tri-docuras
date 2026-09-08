@@ -99,6 +99,24 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     .checks label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.9rem; letter-spacing: 0; }
     .checks input { width: auto; }
     .section-view[hidden] { display: none !important; }
+    .product-thumb {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid var(--peach);
+      background: var(--peach);
+    }
+    .product-row { display: flex; gap: 12px; align-items: flex-start; }
+    .image-preview {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid var(--peach);
+      background: var(--peach);
+      display: none;
+    }
     @media (max-width: 600px) {
       .wrap { padding: 12px; }
       .form-row { grid-template-columns: 1fr; }
@@ -182,6 +200,12 @@ const adminPanelHtml = r'''<!DOCTYPE html>
               <label><input id="productFeatured" type="checkbox"> Destaque no catálogo</label>
               <label><input id="productAvailable" type="checkbox" checked> Visível no app</label>
             </div>
+            <div>
+              <label for="productImage">FOTO DO PRODUTO</label>
+              <input id="productImage" type="file" accept="image/jpeg,image/png,image/webp">
+              <div style="height:8px"></div>
+              <img id="productImagePreview" class="image-preview" alt="Prévia da foto">
+            </div>
             <div class="actions">
               <button id="saveProductBtn" type="submit">Salvar</button>
               <button id="cancelProductBtn" type="button" class="secondary">Cancelar</button>
@@ -226,6 +250,8 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     const productCategoryInput = document.getElementById("productCategory");
     const productFeaturedInput = document.getElementById("productFeatured");
     const productAvailableInput = document.getElementById("productAvailable");
+    const productImageInput = document.getElementById("productImage");
+    const productImagePreview = document.getElementById("productImagePreview");
 
     function token() { return sessionStorage.getItem(TOKEN_KEY); }
     function setToken(value) {
@@ -301,8 +327,13 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       const description = product.description
         ? '<div class="meta">' + product.description + '</div>'
         : '';
+      const thumb = product.image_url
+        ? '<img class="product-thumb" src="' + product.image_url + '" alt="">'
+        : '<div class="product-thumb"></div>';
 
-      return '<article class="card">' +
+      return '<article class="card product-row">' +
+        thumb +
+        '<div style="flex:1">' +
         '<div class="product-head">' +
           '<div class="product-name">' + product.name + '</div>' +
           badge +
@@ -313,6 +344,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         '</div>' +
         '<div class="actions">' +
           '<button type="button" class="secondary" data-edit-product="' + product.id + '">Editar</button>' +
+        '</div>' +
         '</div>' +
       '</article>';
     }
@@ -386,6 +418,16 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       }
     }
 
+    function setProductImagePreview(url) {
+      if (url) {
+        productImagePreview.src = url;
+        productImagePreview.style.display = "block";
+      } else {
+        productImagePreview.removeAttribute("src");
+        productImagePreview.style.display = "none";
+      }
+    }
+
     function resetProductForm() {
       productIdInput.value = "";
       productNameInput.value = "";
@@ -394,6 +436,8 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       productCategoryInput.value = "brownies";
       productFeaturedInput.checked = false;
       productAvailableInput.checked = true;
+      productImageInput.value = "";
+      setProductImagePreview(null);
       productFormError.textContent = "";
       productFormTitle.textContent = "Novo produto";
     }
@@ -401,6 +445,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     function showProductForm(product) {
       productFormCard.hidden = false;
       productFormError.textContent = "";
+      productImageInput.value = "";
       if (product) {
         productFormTitle.textContent = "Editar produto";
         productIdInput.value = product.id;
@@ -410,6 +455,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         productCategoryInput.value = product.category;
         productFeaturedInput.checked = !!product.featured;
         productAvailableInput.checked = !!product.available;
+        setProductImagePreview(product.image_url || null);
       } else {
         resetProductForm();
       }
@@ -455,6 +501,24 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       }
     }
 
+    async function uploadProductImage(id, file) {
+      const form = new FormData();
+      form.append("image", file);
+      const response = await fetch("/api/admin/products/" + encodeURIComponent(id) + "/image", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token() },
+        body: form
+      });
+      const data = await response.json().catch(function() { return {}; });
+      if (response.status === 401) {
+        setToken(null);
+        showLogin();
+        throw new Error("Sessão expirada.");
+      }
+      if (!response.ok) throw new Error(data.error || "Erro ao enviar imagem.");
+      return data.product;
+    }
+
     async function saveProduct(event) {
       event.preventDefault();
       productFormError.textContent = "";
@@ -463,16 +527,23 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       try {
         const payload = productPayload();
         const editingId = productIdInput.value;
+        let product;
         if (editingId) {
-          await api("/api/admin/products/" + encodeURIComponent(editingId), {
+          const data = await api("/api/admin/products/" + encodeURIComponent(editingId), {
             method: "PUT",
             body: JSON.stringify(payload)
           });
+          product = data.product;
         } else {
-          await api("/api/admin/products", {
+          const data = await api("/api/admin/products", {
             method: "POST",
             body: JSON.stringify(payload)
           });
+          product = data.product;
+        }
+        const file = productImageInput.files[0];
+        if (file) {
+          product = await uploadProductImage(product.id, file);
         }
         hideProductForm();
         await loadProducts();
@@ -560,6 +631,18 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     });
     document.getElementById("cancelProductBtn").addEventListener("click", hideProductForm);
     productForm.addEventListener("submit", saveProduct);
+    productImageInput.addEventListener("change", function() {
+      const file = productImageInput.files[0];
+      if (!file) {
+        setProductImagePreview(null);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        setProductImagePreview(event.target.result);
+      };
+      reader.readAsDataURL(file);
+    });
 
     if (token()) {
       showPanel();

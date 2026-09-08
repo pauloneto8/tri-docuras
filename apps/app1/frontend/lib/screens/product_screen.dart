@@ -110,7 +110,7 @@ class _ProductScreenState extends State<ProductScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 24),
                               child: SizedBox(
                                 height: 220,
-                                child: TdPhotoFrame(),
+                                child: TdPhotoFrame(imageUrl: widget.product.imageUrl),
                               ),
                             ),
                             const SizedBox(height: 20),

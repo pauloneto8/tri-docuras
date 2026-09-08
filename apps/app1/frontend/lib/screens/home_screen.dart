@@ -367,8 +367,8 @@ class _ProductGridCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
             child: Column(
               children: [
-                const Expanded(
-                  child: TdPhotoFrame(),
+                Expanded(
+                  child: TdPhotoFrame(imageUrl: product.imageUrl),
                 ),
                 const SizedBox(height: 8),
                 Text(

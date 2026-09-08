@@ -17,4 +17,18 @@ class AppConfig {
     }
     return 'https://tridocuras.com.br/api';
   }
+
+  /// Resolve caminho relativo da API (ex.: `/api/uploads/...`) para URL absoluta no mobile.
+  static String? resolveMediaUrl(String? path) {
+    if (path == null || path.trim().isEmpty) return null;
+    final value = path.trim();
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+    if (kIsWeb) {
+      return value.startsWith('/') ? value : '/$value';
+    }
+    const origin = 'https://tridocuras.com.br';
+    return value.startsWith('/') ? '$origin$value' : '$origin/$value';
+  }
 }

@@ -1,5 +1,6 @@
 import 'package:postgres/postgres.dart';
 import 'package:tri_docuras_api/db.dart';
+import 'package:tri_docuras_api/product_images.dart';
 
 const adminProductCategories = ['brownies', 'combos'];
 
@@ -86,7 +87,7 @@ Future<List<Map<String, Object?>>> listProductsForAdmin() async {
   final connection = await getConnection();
   final result = await connection.execute(
     '''
-    SELECT id, name, description, price, featured, category, available
+    SELECT id, name, description, price, featured, category, available, image_url
     FROM products
     ORDER BY available DESC, featured DESC, name ASC;
     ''',
@@ -100,7 +101,7 @@ Future<Map<String, Object?>> createProduct(ProductInput input) async {
     '''
     INSERT INTO products (name, description, price, featured, category, available)
     VALUES (\$1, \$2, \$3, \$4, \$5, \$6)
-    RETURNING id, name, description, price, featured, category, available;
+    RETURNING id, name, description, price, featured, category, available, image_url;
     ''',
     parameters: [
       input.name,
@@ -135,7 +136,7 @@ Future<Map<String, Object?>> updateProduct(int id, ProductInput input) async {
         category = \$6,
         available = \$7
     WHERE id = \$1
-    RETURNING id, name, description, price, featured, category, available;
+    RETURNING id, name, description, price, featured, category, available, image_url;
     ''',
     parameters: [
       id,
@@ -164,7 +165,51 @@ Map<String, Object?> _rowToProductMap(ResultRow row) {
     'featured': row[4] == true,
     'category': row[5],
     'available': row[6] == true,
+    'image_url': row[7],
   };
+}
+
+Future<Map<String, Object?>> updateProductImage(int id, String imageUrl) async {
+  if (id <= 0) {
+    throw AdminProductException('Produto inválido.');
+  }
+
+  final connection = await getConnection();
+  final result = await connection.execute(
+    '''
+    UPDATE products
+    SET image_url = \$2
+    WHERE id = \$1
+    RETURNING id, name, description, price, featured, category, available, image_url;
+    ''',
+    parameters: [id, imageUrl],
+  );
+
+  if (result.isEmpty) {
+    throw AdminProductException('Produto não encontrado.');
+  }
+
+  return productToAdminJson(_rowToProductMap(result.first));
+}
+
+Future<Map<String, Object?>> uploadProductImage({
+  required int productId,
+  required List<int> bytes,
+  required String contentType,
+  String? filename,
+}) async {
+  final extension = extensionForContentType(contentType) ??
+      extensionForFilename(filename);
+  if (extension == null) {
+    throw AdminProductException('Formato de imagem inválido. Use JPG, PNG ou WebP.');
+  }
+
+  final imageUrl = await saveProductImage(
+    productId: productId,
+    bytes: bytes,
+    extension: extension,
+  );
+  return updateProductImage(productId, imageUrl);
 }
 
 Map<String, Object?> productToAdminJson(Map<String, Object?> product) {
@@ -179,6 +224,7 @@ Map<String, Object?> productToAdminJson(Map<String, Object?> product) {
     'category_label': categoryLabel(product['category'] as String),
     'available': available,
     'availability_label': available ? 'No catálogo' : 'Oculto',
+    'image_url': product['image_url'],
   };
 }
 

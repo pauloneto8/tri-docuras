@@ -191,10 +191,10 @@ class _FavoriteCard extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 72,
                   height: 72,
-                  child: TdPhotoFrame(),
+                  child: TdPhotoFrame(imageUrl: product.imageUrl),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

@@ -7,6 +7,7 @@ class Product {
     required this.featured,
     required this.category,
     this.available = true,
+    this.imageUrl,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -18,6 +19,7 @@ class Product {
       featured: json['featured'] == true,
       category: json['category'] as String? ?? 'brownies',
       available: json['available'] != false,
+      imageUrl: json['image_url'] as String?,
     );
   }
 
@@ -28,6 +30,7 @@ class Product {
   final bool featured;
   final String category;
   final bool available;
+  final String? imageUrl;
 
   String get formattedPrice => 'R\$ ${price.toStringAsFixed(2).replaceAll('.', ',')}';
 

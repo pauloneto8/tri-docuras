@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:tri_docuras/config.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 
 /// Moldura circular assinatura — dois anéis concêntricos e coração rosa,
@@ -13,6 +14,8 @@ class TdPhotoFrame extends StatelessWidget {
 
   final String? imageUrl;
 
+  String? get _resolvedImageUrl => AppConfig.resolveMediaUrl(imageUrl);
+
   @override
   Widget build(BuildContext context) {
     return AspectRatio(
@@ -22,29 +25,39 @@ class TdPhotoFrame extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(10),
           child: ClipOval(
-            child: imageUrl != null
+            child: _resolvedImageUrl != null
                 ? Image.network(
-                    imageUrl!,
+                    _resolvedImageUrl!,
                     fit: BoxFit.cover,
                     width: double.infinity,
                     height: double.infinity,
+                    errorBuilder: (_, __, ___) => const _PhotoPlaceholder(),
                   )
-                : ColoredBox(
-                    color: AppColors.peach,
-                    child: Center(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final size = math.min(constraints.maxWidth, constraints.maxHeight) * 0.28;
-                          return Icon(
-                            Icons.favorite,
-                            size: size.clamp(14, 36),
-                            color: AppColors.pink,
-                          );
-                        },
-                      ),
-                    ),
-                  ),
+                : const _PhotoPlaceholder(),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoPlaceholder extends StatelessWidget {
+  const _PhotoPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.peach,
+      child: Center(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final size = math.min(constraints.maxWidth, constraints.maxHeight) * 0.28;
+            return Icon(
+              Icons.favorite,
+              size: size.clamp(14, 36),
+              color: AppColors.pink,
+            );
+          },
         ),
       ),
     );
