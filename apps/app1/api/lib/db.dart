@@ -127,6 +127,9 @@ Future<void> ensureSchema(Connection connection) async {
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP;
   ''');
   await connection.execute('''
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS whatsapp_notified_at TIMESTAMP;
+  ''');
+  await connection.execute('''
     CREATE INDEX IF NOT EXISTS idx_orders_mp_payment_id ON orders (mp_payment_id);
   ''');
 }

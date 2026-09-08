@@ -2,6 +2,7 @@ import 'package:postgres/postgres.dart';
 import 'package:tri_docuras_api/db.dart';
 import 'package:tri_docuras_api/mercado_pago_client.dart';
 import 'package:tri_docuras_api/mercado_pago_config.dart';
+import 'package:tri_docuras_api/whatsapp_notify.dart';
 
 const lactoseExtraPrice = 3.0;
 const deliveryFeeAmount = 6.0;
@@ -390,7 +391,15 @@ Future<bool> markOrderPaid(String publicId, {int? paymentId}) async {
     ''',
     parameters: [publicId, paymentId],
   );
-  return result.isNotEmpty;
+  final updated = result.isNotEmpty;
+  if (updated) {
+    try {
+      await notifyStoreOrderPaid(publicId);
+    } catch (_) {
+      // Notificação não deve bloquear confirmação do pagamento.
+    }
+  }
+  return updated;
 }
 
 Map<String, Object?> _rowToOrderMap(ResultRow row) {

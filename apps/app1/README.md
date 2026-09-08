@@ -98,6 +98,8 @@ Carrinho e checkout no Flutter; **Gerar Pix** grava o pedido (`POST /api/orders`
 
 Pix em **produção** (`APP1_MP_USE_TEST=false`); webhook MP configurado em `https://tridocuras.com.br/api/webhooks/mercadopago`.
 
+**Fotos:** upload no painel **Produtos**; exibidas no app via `image_url`.
+
 ### Ciclo de vida do pedido
 
 | Status | Quem define | Significado |
@@ -171,8 +173,37 @@ docker compose build app1 app1-web && docker compose up -d app1 app1-web
 
 | Item | Estado |
 |------|--------|
-| Fotos no catálogo | Futuro |
-| Notificação WhatsApp ao confirmar pagamento | Futuro |
+| Notificação WhatsApp ao cliente (confirmação de pagamento) | Futuro |
+
+### Notificação WhatsApp (loja)
+
+Quando um Pix é confirmado, a API pode avisar automaticamente o WhatsApp da loja.
+
+**CallMeBot** (mais simples — recomendado para começar):
+
+1. Adicione o contato CallMeBot no WhatsApp e obtenha sua API key em [callmebot.com](https://www.callmebot.com/)
+2. Configure no `/opt/hosting/.env`:
+
+```env
+APP1_WHATSAPP_NOTIFY_ENABLED=true
+APP1_WHATSAPP_PROVIDER=callmebot
+APP1_STORE_WHATSAPP=5581999999999   # WhatsApp da loja (DDI 55 + DDD)
+APP1_CALLMEBOT_API_KEY=sua-chave
+```
+
+3. `docker compose up -d app1`
+
+**Meta WhatsApp Cloud API** (alternativa):
+
+```env
+APP1_WHATSAPP_NOTIFY_ENABLED=true
+APP1_WHATSAPP_PROVIDER=meta
+APP1_STORE_WHATSAPP=5581999999999
+APP1_WHATSAPP_ACCESS_TOKEN=...
+APP1_WHATSAPP_PHONE_NUMBER_ID=...
+```
+
+A mensagem inclui pedido, cliente, itens, total e link do painel. Idempotente (`whatsapp_notified_at` no banco).
 
 ### Painel da loja
 
