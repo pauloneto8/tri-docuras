@@ -8,6 +8,7 @@ import 'package:tri_docuras/checkout/checkout_validators.dart';
 import 'package:tri_docuras/checkout/delivery_address.dart';
 import 'package:tri_docuras/checkout/delivery_address_validators.dart';
 import 'package:tri_docuras/checkout/whatsapp_input_formatter.dart';
+import 'package:tri_docuras/orders/order_history_scope.dart';
 import 'package:tri_docuras/screens/pix_screen.dart';
 import 'package:tri_docuras/services/api_service.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
@@ -16,7 +17,7 @@ import 'package:tri_docuras/widgets/td_button.dart';
 import 'package:tri_docuras/widgets/td_icon_button.dart';
 import 'package:tri_docuras/widgets/td_text_field.dart';
 
-/// Checkout (tela 4) — formulário + resumo; Gerar Pix abre placeholder da tela 5.
+/// Checkout (tela 4) — formulário + resumo; Gerar Pix abre tela de pagamento.
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
 
@@ -138,6 +139,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final order = await _api.createOrder(
         draft: draft,
         items: cart.items,
+      );
+      await OrderHistoryScope.of(context).remember(
+        id: order.id,
+        total: order.total,
+        deliveryMode: cart.deliveryMode == DeliveryMode.delivery
+            ? 'delivery'
+            : 'pickup',
       );
       if (!mounted) return;
       Navigator.of(context).push(

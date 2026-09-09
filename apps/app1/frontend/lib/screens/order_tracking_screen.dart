@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tri_docuras/models/order_tracking.dart';
+import 'package:tri_docuras/orders/order_history_entry.dart';
+import 'package:tri_docuras/orders/order_history_scope.dart';
 import 'package:tri_docuras/services/api_service.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
@@ -212,6 +214,18 @@ class OrderLookupScreen extends StatefulWidget {
 class _OrderLookupScreenState extends State<OrderLookupScreen> {
   final _controller = TextEditingController();
   String? _error;
+  late final ApiService _api;
+  final Map<String, String> _statusLabels = {};
+  bool _loadingStatuses = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = widget.api ?? ApiService();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      OrderHistoryScope.of(context).load().then((_) => _refreshStatuses());
+    });
+  }
 
   @override
   void dispose() {
@@ -219,43 +233,133 @@ class _OrderLookupScreenState extends State<OrderLookupScreen> {
     super.dispose();
   }
 
-  void _openTracking() {
+  Future<void> _refreshStatuses() async {
+    final history = OrderHistoryScope.of(context);
+    if (history.isEmpty) return;
+
+    setState(() => _loadingStatuses = true);
+    final labels = <String, String>{};
+    await Future.wait(
+      history.entries.map((entry) async {
+        try {
+          final tracking = await _api.fetchOrderTracking(entry.id);
+          labels[entry.id] = tracking.statusLabel;
+        } catch (_) {
+          labels[entry.id] = '—';
+        }
+      }),
+    );
+    if (!mounted) return;
+    setState(() {
+      _statusLabels
+        ..clear()
+        ..addAll(labels);
+      _loadingStatuses = false;
+    });
+  }
+
+  void _openTracking(String id) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OrderTrackingScreen(
+          orderId: id,
+          api: _api,
+        ),
+      ),
+    );
+  }
+
+  void _openTrackingFromField() {
     final id = _controller.text.trim().toUpperCase();
     if (!RegExp(r'^TD-\d{4}$').hasMatch(id)) {
       setState(() => _error = 'Informe o número do pedido (ex.: TD-0009).');
       return;
     }
     setState(() => _error = null);
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => OrderTrackingScreen(
-          orderId: id,
-          api: widget.api,
-        ),
-      ),
-    );
+    _openTracking(id);
+  }
+
+  Future<void> _removeEntry(String id) async {
+    await OrderHistoryScope.of(context).remove(id);
+    if (!mounted) return;
+    setState(() => _statusLabels.remove(id));
+  }
+
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$day/$month/${date.year} · $hour:$minute';
   }
 
   @override
   Widget build(BuildContext context) {
+    final history = OrderHistoryScope.of(context);
+
     return ColoredBox(
       color: AppColors.cream,
       child: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Acompanhar pedido',
+                'Meus pedidos',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 8),
               Text(
-                'Digite o número do pedido que você recebeu após o pagamento.',
+                'Seus pedidos recentes ficam salvos neste aparelho.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              const SizedBox(height: 20),
+              if (!history.isLoaded)
+                const Padding(
+                  padding: EdgeInsets.only(top: 32),
+                  child: Center(
+                    child: CircularProgressIndicator(color: AppColors.pinkDeep),
+                  ),
+                )
+              else if (history.isEmpty) ...[
+                const SizedBox(height: 24),
+                _EmptyHistoryHint(),
+              ] else ...[
+                const SizedBox(height: 16),
+                if (_loadingStatuses)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: LinearProgressIndicator(
+                      color: AppColors.pinkDeep,
+                      backgroundColor: AppColors.peach,
+                    ),
+                  ),
+                for (final entry in history.entries)
+                  _OrderHistoryCard(
+                    entry: entry,
+                    statusLabel: _statusLabels[entry.id],
+                    formattedDate: _formatDate(entry.createdAt),
+                    onTap: () => _openTracking(entry.id),
+                    onRemove: () => _removeEntry(entry.id),
+                  ),
+                const SizedBox(height: 8),
+                TdButton(
+                  label: 'Atualizar status',
+                  variant: TdButtonVariant.soft,
+                  onPressed: _refreshStatuses,
+                ),
+              ],
+              const SizedBox(height: 28),
+              Text(
+                'Consultar outro pedido',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Digite o número do pedido (ex.: TD-0009).',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
               Text(
                 'NÚMERO DO PEDIDO',
                 style: Theme.of(context).textTheme.labelSmall,
@@ -268,8 +372,159 @@ class _OrderLookupScreenState extends State<OrderLookupScreen> {
                 textInputAction: TextInputAction.done,
               ),
               const SizedBox(height: 20),
-              TdButton(label: 'Consultar', onPressed: _openTracking),
+              TdButton(label: 'Consultar', onPressed: _openTrackingFromField),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyHistoryHint extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.brown.withValues(alpha: 0.12)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 40,
+              color: AppColors.tan.withValues(alpha: 0.8),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Nenhum pedido salvo ainda',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.dark,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Após finalizar uma compra, o pedido aparecerá aqui automaticamente.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                color: AppColors.brown,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OrderHistoryCard extends StatelessWidget {
+  const _OrderHistoryCard({
+    required this.entry,
+    required this.formattedDate,
+    required this.onTap,
+    required this.onRemove,
+    this.statusLabel,
+  });
+
+  final OrderHistoryEntry entry;
+  final String formattedDate;
+  final String? statusLabel;
+  final VoidCallback onTap;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.brown.withValues(alpha: 0.12)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          entry.id,
+                          style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.dark,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${entry.formattedTotal} · ${entry.deliveryLabel}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: AppColors.brown,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          formattedDate,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: AppColors.brown.withValues(alpha: 0.75),
+                          ),
+                        ),
+                        if (statusLabel != null && statusLabel!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.peach.withValues(alpha: 0.55),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              statusLabel!,
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Remover da lista',
+                    onPressed: onRemove,
+                    icon: const Icon(Icons.close, size: 20),
+                    color: AppColors.brown.withValues(alpha: 0.6),
+                  ),
+                  const Icon(
+                    Icons.chevron_right,
+                    color: AppColors.pinkDeep,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
