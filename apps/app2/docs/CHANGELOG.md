@@ -4,6 +4,7 @@ Registro das principais evoluções do projeto (App 2).
 
 ## Unreleased
 
+- **Wizard cartão vs conta** — slot `payment_source` quando ambíguo; inferência `card_name` em “lançado no cartão”; confirmação mostra **Cartão:**; `resolve_movement_accounts` usa conta de liquidação quando apelido do cartão = nome da conta
 - **Filtros em Movimentos** — conta, cartão, **categoria** e tipo; período diária/semanal/mensal; estado memorizado na sessão HTTP até `?clear=1` (Limpar → padrão mês atual sem restrições)
 - **Importação de extrato** — OFX/QFX, CSV e PDF (texto) no mesmo fluxo de revisão (cartão e conta); parser compartilhado `statement_parse.py`; upload até **10 MB**
 - **PDF** — `pdfplumber`; ignora coluna/saldo final da linha; sinal negativo (Unicode, `75,50-`, célula separada); PDFs escaneados não suportados

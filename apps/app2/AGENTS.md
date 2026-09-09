@@ -47,11 +47,11 @@ Wizard de transação (`transaction_slots.py`):
 
 | Status | Ordem resumida |
 |--------|----------------|
-| **Previsto** | tipo → status → competência + vencimento (se **não** parcelado) → modo → … |
-| **Realizado** | tipo → status → modo (se ainda indefinido) → pagamento (se **não** parcelado) → … |
-| **Parcelado** | … → N parcelas → intervalo → **parcela atual** (`installment_start_index`) → **competência** + **vencimento** da parcela → pagamento (se realizado) → valor → total vs parcela → descrição → conta → categoria |
+| **Previsto** | tipo → **forma de pagamento** (cartão/conta, se ambíguo) → status → competência + vencimento (se **não** parcelado) → modo → … |
+| **Realizado** | tipo → **forma de pagamento** (se ambíguo) → status → modo (se ainda indefinido) → pagamento (se **não** parcelado) → … |
+| **Parcelado** | … → N parcelas → intervalo → **parcela atual** (`installment_start_index`) → **competência** + **vencimento** da parcela → pagamento (se realizado) → valor → total vs parcela → descrição → **cartão** (`card_name`) ou **conta** (`account_name`) → categoria |
 
-**Só pergunta o que faltar:** se a mensagem já trouxe cartão/conta, status (`gastei`/`previsto`), datas, modo etc., a inferência preenche e **não** reperguntar. Compra no cartão → `payment_source=card` + status `planned`. Mensagem ambígua com cartões cadastrados ainda pergunta cartão vs conta.
+**Só pergunta o que faltar:** se a mensagem já trouxe cartão/conta, status (`gastei`/`previsto`), datas, modo etc., a inferência preenche e **não** reperguntar. Frases com “no cartão” → `payment_source=card` + `card_name` (confirmação exibe **Cartão:**, não conta de liquidação). Compra no cartão prevista → status `planned` por inferência. Mensagem ambígua com cartões cadastrados pergunta `payment_source` antes de status. Parcelamento no cartão usa conta de liquidação do cartão internamente (`resolve_movement_accounts`).
 
 Regras de datas no parcelamento: `apply_inferred_dates` não copia `ontem`/`hoje` da mensagem; `payment_date` não altera competência/vencimento já informados; `create_installment_plan` usa `due_date` como âncora do cronograma.
 

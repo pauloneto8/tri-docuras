@@ -49,7 +49,7 @@ mensagem
 | Groq | Intenção ambígua (`call_intent_llm`) — extrai todos os campos presentes na mensagem |
 | `try_rule_based_parse` | Fallback se o Groq falhar ("gastei 45", "transferir 100 da X para Y") |
 
-Wizard de lançamento: **só pergunta slots vazios** após inferência (`_apply_inference` / `_wizard_from_tool_call`). Ex.: "gastei no cartão X ontem" não reperguntar cartão vs conta nem status.
+Wizard de lançamento: **só pergunta slots vazios** após inferência (`_apply_inference` / `_wizard_from_tool_call`). Ex.: “lançado no cartão do Mercado Pago” → `card_name` sem reperguntar conta de liquidação; confirmação exibe **Cartão:**. Com cartão e conta cadastrados e mensagem ambígua, pergunta `payment_source` antes de status.
 
 ## WRITE_TOOLS (confirmação obrigatória)
 
@@ -67,7 +67,7 @@ Wizard de lançamento: **só pergunta slots vazios** após inferência (`_apply_
 
 | Wizard | Arquivo | Campos |
 |--------|---------|--------|
-| Transação | `transaction_wizard.py` + `transaction_slots.py` | tipo, status, modo, parcelas (N, intervalo, índice, basis), datas, valor, descrição, conta, categoria |
+| Transação | `transaction_wizard.py` + `transaction_slots.py` | tipo, **payment_source** (cartão/conta), status, modo, parcelas (N, intervalo, índice, basis), datas, valor, descrição, **card_name** ou **account_name**, categoria |
 | Realizar previsto | `realize_planned_slots.py` | previsto, pagamento, mesma conta?, conta |
 | Transferência | `transfer_slots.py` | valor, origem, destino |
 | Conta | `account_wizard.py` | apelido, tipo, instituição, saldo, data do saldo inicial |
@@ -91,6 +91,18 @@ Ordem depende de **status** e **modo**:
 - Parcelado: `payment_date` **não** altera competência/vencimento já informados
 - `is_date_only_message()` evita que datas isoladas sejam interpretadas como múltiplos valores
 - LLM **não** envia `status`, `installment_amount_basis`, `installment_start_index` nem inventa datas de parcelamento
+
+### Forma de pagamento (cartão vs conta)
+
+Quando o usuário tem cartões cadastrados e a mensagem não deixa claro:
+
+| Slot | Pergunta | Inferência |
+|------|----------|------------|
+| `payment_source` | Cartão ou conta? | “no cartão”, “lançado no cartão do X” → `card` sem perguntar |
+| `card_name` | Qual cartão? | `infer_card_name()` + chips dos cartões ativos |
+| `account_name` | Qual conta? | `infer_account_name()` — não usado quando `payment_source=card` |
+
+Confirmação (`format_pending_confirmation`): exibe **Cartão:** ou **Conta:** conforme `card_name`.
 
 ### Slots de parcelamento
 
