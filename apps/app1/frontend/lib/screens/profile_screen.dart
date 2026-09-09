@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tri_docuras/checkout/delivery_address.dart';
 import 'package:tri_docuras/config.dart';
+import 'package:tri_docuras/store_config_holder.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/widgets/td_button.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -25,7 +26,7 @@ class ProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Bem-vindo à ${AppConfig.appName}',
+              'Bem-vindo à ${StoreConfigHolder.instance.config.appName}',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),
@@ -87,7 +88,9 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Future<void> _openWhatsApp(BuildContext context) async {
-    final uri = Uri.parse('https://wa.me/${AppConfig.storeWhatsApp}');
+    final phone = StoreConfigHolder.instance.storeWhatsApp;
+    if (phone == null || phone.isEmpty) return;
+    final uri = Uri.parse('https://wa.me/$phone');
     final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

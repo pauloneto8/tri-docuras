@@ -3,15 +3,37 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:tri_docuras/checkout/delivery_address.dart';
 import 'package:tri_docuras/checkout/order_summary.dart';
 import 'package:tri_docuras/screens/order_tracking_screen.dart';
+import 'package:tri_docuras/store_config_holder.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
 import 'package:tri_docuras/widgets/td_button.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Confirmação do pedido (tela 6) — após pagamento Pix confirmado.
 class ConfirmationScreen extends StatelessWidget {
   const ConfirmationScreen({super.key, required this.summary});
 
   final OrderSummary summary;
+
+  String get _whatsappUrl => StoreConfigHolder.instance.buildOrderWhatsAppUrl(
+        orderId: summary.orderId,
+        customerName: summary.customerName,
+        formattedTotal: summary.formattedTotal,
+      );
+
+  Future<void> _openWhatsApp(BuildContext context) async {
+    final url = _whatsappUrl;
+    if (url.isEmpty) return;
+    final launched = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível abrir o WhatsApp.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,6 +164,15 @@ class ConfirmationScreen extends StatelessWidget {
                         },
                       ),
                     ),
+                    if (_whatsappUrl.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: TdButton(
+                          label: 'Enviar comprovante no WhatsApp',
+                          variant: TdButtonVariant.soft,
+                          onPressed: () => _openWhatsApp(context),
+                        ),
+                      ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                       child: TdButton(
