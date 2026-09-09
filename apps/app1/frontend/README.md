@@ -255,6 +255,15 @@ flutter run -d android
 flutter run -d ios   # requer Mac
 ```
 
+Build de release (assinado com `android/key.properties` + keystore `tridocuras-release.jks`):
+
+```bash
+flutter build apk --release
+flutter build appbundle --release   # AAB exigido pela Play Store
+```
+
+> A keystore e o `key.properties` são ignorados pelo git e **não podem ser perdidos** — mantenha backup fora do servidor. O app ainda **não está publicado** na Play Store (faltam conta de desenvolvedor, AAB, fichas e revisão).
+
 Altere `lib/config.dart` para API de dev e o WhatsApp da loja (`storeWhatsApp`).
 
 ## Deploy web (VPS)

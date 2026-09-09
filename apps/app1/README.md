@@ -353,10 +353,17 @@ docker run --rm -v /opt/hosting/apps/app1/api:/app -w /app dart:stable sh -c "da
 
 ## Mobile
 
-- **Android:** abrir `frontend/` no Android Studio e build APK/AAB
+- **Android:** build de release assinado com a keystore própria (`android/app/tridocuras-release.jks`, alias `tridocuras`; senha em `android/key.properties` — ambos **ignorados** pelo git).
+  ```bash
+  cd /opt/hosting/apps/app1/frontend
+  flutter build apk --release          # APK assinado
+  flutter build appbundle --release    # AAB para a Play Store
+  ```
+- **Backup obrigatório:** a keystore **não pode ser perdida** (sem ela não há atualização do app publicado). Guarde `tridocuras-release.jks` + `key.properties` fora do servidor.
+- **Play Store:** o app **ainda não está publicado**. Pendentes: conta de desenvolvedor Google Play (US$ 25), AAB, Play App Signing, ficha (ícones, screenshots, descrição, política de privacidade) e revisão.
 - **iOS:** requer Mac + Xcode (projeto em `frontend/ios/`)
-- API mobile: `https://tridocuras.com.br/api` em `frontend/lib/config.dart` (web usa `/api` relativo)
-- WhatsApp da loja: ajustar `storeWhatsApp` no mesmo `config.dart`
+- **API mobile:** `https://tridocuras.com.br/api` em `frontend/lib/config.dart` (web usa `/api` relativo)
+- **WhatsApp da loja:** ajustar `storeWhatsApp` no mesmo `config.dart`
 
 ## Documentação
 
