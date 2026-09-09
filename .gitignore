@@ -35,6 +35,21 @@ www/certbot/
 # Dart Frog / API build
 apps/app1/api/build/
 
+# Python / FastAPI
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.venv/
+venv/
+
+# Bancos de dados / dumps (podem conter dados sensíveis)
+**/*.sql
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+**/*.dump
+**/*.bak
+
 # OS
 .DS_Store
 Thumbs.db
