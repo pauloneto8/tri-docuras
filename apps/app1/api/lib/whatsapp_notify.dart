@@ -64,6 +64,34 @@ class WhatsappNotifyConfig {
         return false;
     }
   }
+
+  static bool get customerNotifyEnabled {
+    final value = Platform.environment['APP1_WHATSAPP_NOTIFY_CUSTOMER'] ??
+        Platform.environment['WHATSAPP_NOTIFY_CUSTOMER'];
+    if (value == null) return false;
+    final normalized = value.trim().toLowerCase();
+    return normalized == 'true' || normalized == '1' || normalized == 'yes';
+  }
+
+  static String get customerTemplateName {
+    final value = Platform.environment['APP1_WHATSAPP_CUSTOMER_TEMPLATE'] ??
+        Platform.environment['WHATSAPP_CUSTOMER_TEMPLATE'];
+    return (value == null || value.trim().isEmpty) ? 'order_paid' : value.trim();
+  }
+
+  static String get customerTemplateLanguage {
+    final value =
+        Platform.environment['APP1_WHATSAPP_CUSTOMER_TEMPLATE_LANG'] ??
+            Platform.environment['WHATSAPP_CUSTOMER_TEMPLATE_LANG'];
+    return (value == null || value.trim().isEmpty) ? 'pt_BR' : value.trim();
+  }
+
+  static bool get isCustomerNotifyConfigured {
+    return customerNotifyEnabled &&
+        provider == 'meta' &&
+        metaAccessToken != null &&
+        metaPhoneNumberId != null;
+  }
 }
 
 String buildStorePaidOrderMessage({
@@ -102,6 +130,26 @@ String _normalizePhone(String raw) {
   return digits;
 }
 
+String buildCustomerPaidOrderMessage({
+  required String customerName,
+  required String publicId,
+  required double total,
+}) {
+  return [
+    'Olá, $customerName! 💛',
+    '',
+    'Recebemos o pagamento do seu pedido $publicId (${formatMoneyBrl(total)}).',
+    'Em breve começamos o preparo. Acompanhe em tridocuras.com.br',
+    '',
+    'Tri Doçuras',
+  ].join('\n');
+}
+
+Future<void> notifyOrderPaid(String publicId) async {
+  await notifyStoreOrderPaid(publicId);
+  await notifyCustomerOrderPaid(publicId);
+}
+
 Future<void> notifyStoreOrderPaid(String publicId) async {
   if (!WhatsappNotifyConfig.isConfigured) return;
 
@@ -137,6 +185,58 @@ Future<void> notifyStoreOrderPaid(String publicId) async {
   await connection.execute(
     '''
     UPDATE orders SET whatsapp_notified_at = NOW() WHERE public_id = \$1;
+    ''',
+    parameters: [publicId],
+  );
+}
+
+Future<void> notifyCustomerOrderPaid(String publicId) async {
+  if (!WhatsappNotifyConfig.isCustomerNotifyConfigured) return;
+
+  final connection = await getConnection();
+  final orderResult = await connection.execute(
+    '''
+    SELECT public_id, customer_name, whatsapp, total, customer_whatsapp_notified_at
+    FROM orders
+    WHERE public_id = \$1 AND status = 'paid'
+    LIMIT 1;
+    ''',
+    parameters: [publicId],
+  );
+  if (orderResult.isEmpty) return;
+
+  final row = orderResult.first;
+  if (row[4] != null) return;
+
+  final customerPhone = _normalizePhone(row[2] as String);
+  final customerName = row[1] as String;
+  final orderTotal = _toDouble(row[3]);
+  final orderPublicId = row[0] as String;
+
+  final sent = await _sendMetaTemplate(
+    phone: customerPhone,
+    templateName: WhatsappNotifyConfig.customerTemplateName,
+    templateLanguage: WhatsappNotifyConfig.customerTemplateLanguage,
+    bodyParameters: [
+      customerName,
+      orderPublicId,
+      formatMoneyBrl(orderTotal),
+    ],
+  );
+
+  if (!sent) {
+    final fallback = buildCustomerPaidOrderMessage(
+      customerName: customerName,
+      publicId: orderPublicId,
+      total: orderTotal,
+    );
+    final textSent = await _sendMetaCloud(phone: customerPhone, message: fallback);
+    if (!textSent) return;
+  }
+
+  await connection.execute(
+    '''
+    UPDATE orders SET customer_whatsapp_notified_at = NOW() WHERE public_id = \$1;
     ''',
     parameters: [publicId],
   );
@@ -193,6 +293,52 @@ Future<bool> _sendCallMeBot({
     });
     final response = await httpClient.get(uri);
     return response.statusCode == 200;
+  } finally {
+    if (client == null) {
+      httpClient.close();
+    }
+  }
+}
+
+Future<bool> _sendMetaTemplate({
+  required String phone,
+  required String templateName,
+  required String templateLanguage,
+  required List<String> bodyParameters,
+  http.Client? client,
+}) async {
+  final token = WhatsappNotifyConfig.metaAccessToken;
+  final phoneId = WhatsappNotifyConfig.metaPhoneNumberId;
+  if (token == null || phoneId == null) return false;
+
+  final httpClient = client ?? http.Client();
+  try {
+    final uri = Uri.parse('https://graph.facebook.com/v22.0/$phoneId/messages');
+    final response = await httpClient.post(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'messaging_product': 'whatsapp',
+        'to': phone,
+        'type': 'template',
+        'template': {
+          'name': templateName,
+          'language': {'code': templateLanguage},
+          'components': [
+            {
+              'type': 'body',
+              'parameters': bodyParameters
+                  .map((text) => {'type': 'text', 'text': text})
+                  .toList(),
+            },
+          ],
+        },
+      }),
+    );
+    return response.statusCode >= 200 && response.statusCode < 300;
   } finally {
     if (client == null) {
       httpClient.close();

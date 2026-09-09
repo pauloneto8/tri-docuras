@@ -22,6 +22,19 @@ void main() {
     });
   });
 
+  group('buildCustomerPaidOrderMessage', () {
+    test('inclui pedido e valor', () {
+      final message = buildCustomerPaidOrderMessage(
+        customerName: 'João',
+        publicId: 'TD-0007',
+        total: 48,
+      );
+      expect(message, contains('João'));
+      expect(message, contains('TD-0007'));
+      expect(message, contains('R\$ 48,00'));
+    });
+  });
+
   group('formatMoneyBrl', () {
     test('formata com vírgula', () {
       expect(formatMoneyBrl(12.5), 'R\$ 12,50');

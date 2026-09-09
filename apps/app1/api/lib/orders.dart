@@ -394,7 +394,7 @@ Future<bool> markOrderPaid(String publicId, {int? paymentId}) async {
   final updated = result.isNotEmpty;
   if (updated) {
     try {
-      await notifyStoreOrderPaid(publicId);
+      await notifyOrderPaid(publicId);
     } catch (_) {
       // Notificação não deve bloquear confirmação do pagamento.
     }

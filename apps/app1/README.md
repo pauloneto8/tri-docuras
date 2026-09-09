@@ -171,9 +171,11 @@ docker compose build app1 app1-web && docker compose up -d app1 app1-web
 
 ### Pendente
 
-| Item | Estado |
-|------|--------|
-| Notificação WhatsApp ao cliente (confirmação de pagamento) | Futuro |
+Nenhum item crítico no roadmap imediato. Melhorias futuras: templates WhatsApp adicionais, PWA, app mobile nativo.
+
+### Contato da loja no app
+
+O número do WhatsApp vem de `GET /api/config` (variável `APP1_STORE_WHATSAPP` no `.env`). O app usa fallback em `config.dart` se a API falhar.
 
 ### Notificação WhatsApp (loja)
 
@@ -204,6 +206,21 @@ APP1_WHATSAPP_PHONE_NUMBER_ID=...
 ```
 
 A mensagem inclui pedido, cliente, itens, total e link do painel. Idempotente (`whatsapp_notified_at` no banco).
+
+### Notificação WhatsApp (cliente)
+
+**No app:** após pagar, botão **Enviar comprovante no WhatsApp** na tela de confirmação (abre conversa com a loja).
+
+**Automática (opcional, Meta Cloud API):**
+
+```env
+APP1_WHATSAPP_NOTIFY_CUSTOMER=true
+APP1_WHATSAPP_PROVIDER=meta
+APP1_WHATSAPP_CUSTOMER_TEMPLATE=order_paid   # template aprovado na Meta
+APP1_WHATSAPP_CUSTOMER_TEMPLATE_LANG=pt_BR
+```
+
+Template com 3 parâmetros no corpo: nome do cliente, ID do pedido, total formatado.
 
 ### Painel da loja
 
