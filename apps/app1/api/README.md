@@ -10,6 +10,7 @@ O frontend Flutter consome estes endpoints no checkout e na tela de pagamento.
 |--------|------|-----------|
 | GET | `/api/health` | Status + ping PostgreSQL |
 | GET | `/api/products` | Lista de produtos ativos |
+| GET | `/api/config` | Config pública da loja (nome, WhatsApp) |
 | POST | `/api/orders` | Cria pedido (`pending_payment`) + gera Pix |
 | GET | `/api/orders/{id}` | Consulta status (`pending_payment` / `paid`) |
 | POST | `/api/orders/{id}/pix` | Regenera cobrança Pix (se expirada) |
@@ -21,6 +22,8 @@ O frontend Flutter consome estes endpoints no checkout e na tela de pagamento.
 | GET | `/api/admin/products` | Lista produtos (inclui ocultos) |
 | POST | `/api/admin/products` | Cria produto |
 | PUT | `/api/admin/products/{id}` | Atualiza produto |
+| POST | `/api/admin/products/{id}/image` | Upload da foto do produto |
+| GET | `/api/uploads/products/{filename}` | Foto do produto |
 | GET | `/admin` | Painel web (pedidos + produtos) |
 
 ### Exemplo — health
@@ -370,11 +373,14 @@ docker compose exec app1-db psql -U "$APP1_DB_USER" -d "$APP1_DB_NAME" -c "SELEC
 
 ## CORS
 
-Liberado para desenvolvimento (`Access-Control-Allow-Origin: *` no middleware).
+Restrito em produção: apenas `https://<APP1_DOMAIN>` (e `www.`) e origens de dev local (`localhost`, `127.0.0.1`). Sem header `Origin` (curl, apps nativos) não há CORS aplicado.
 
 ## Roadmap (API)
 
 | Endpoint / recurso | Descrição |
 |--------------------|-----------|
-| Fotos de produtos | Upload e exibição no catálogo (futuro) |
-| Notificação WhatsApp | Aviso à loja/cliente ao confirmar pagamento (futuro) |
+| Fotos de produtos | Implementado — upload no painel + exibição no catálogo |
+| Notificação WhatsApp | Implementado — loja e cliente ao confirmar pagamento |
+| Templates WhatsApp adicionais | Novos templates além de `order_paid` |
+| PWA | Web instalável com notificação push |
+| App mobile nativo | Build Android/iOS com assinatura de release |
