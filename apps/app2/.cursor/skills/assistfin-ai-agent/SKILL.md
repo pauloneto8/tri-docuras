@@ -178,8 +178,24 @@ resposta sim/não tratada no topo de `process_message`
 (`try_process_pending_description_preference`); `agent_state.py` evita que
 "não" vire cancelamento global enquanto essa pergunta está pendente.
 
-Próxima fase (orquestrador multi-etapas):
-`.cursor/plans/agente-inteligencia-proativa.md`.
+Fase 5 (orquestrador multi-etapas) implementada — `app/agent/orchestrator.py`.
+Única parte do agente que usa o SDK oficial `anthropic` (Tool Runner,
+`client.beta.messages.tool_runner`) em vez de httpx puro — o resto (Fases 1-3)
+continua em `app/agent/claude.py`. `looks_like_broad_request()` detecta no
+`runner.py`, **antes** do roteamento de intenção única, um pedido amplo
+(verbo de revisão/análise + mensagem longa + sem valor monetário explícito) e
+chama `run_orchestrator`: Claude Sonnet (`ANTHROPIC_MODEL_REASONING`) com
+`effort: medium`, até 5 iterações, só as ferramentas de LEITURA já existentes
+(`list_transactions`, `get_summary`, `get_budget_status`, `list_categories`,
+`list_invoices`) — sem acesso a nenhuma ferramenta de escrita. Mesma validação
+anti-alucinação da Fase 2 (todo `R$ x,xx` citado precisa ter vindo de uma
+ferramenta chamada na execução; se não, descarta). Ação sugerida fica só no
+texto — sem escrita direta; se o usuário topar, a mensagem seguinte dele volta
+ao `process_message` normal, que já enxerga o histórico recente via
+`build_intent_context` e passa pela confirmação de escrita de sempre.
+Desligado por padrão (`ENABLE_AI_ORCHESTRATOR`/`ANTHROPIC_API_KEY`).
+
+Plano completo: `.cursor/plans/agente-inteligencia-proativa.md`.
 
 ## Chat UI (HTMX)
 

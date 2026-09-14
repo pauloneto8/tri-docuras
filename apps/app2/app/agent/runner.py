@@ -4,6 +4,11 @@ import re
 from app.agent.context import build_intent_context
 from app.agent.tool_parse import DEFAULT_UNSUPPORTED_MESSAGE
 from app.agent.llm import call_claude_intent_llm, call_intent_llm
+from app.agent.orchestrator import (
+    looks_like_broad_request,
+    orchestrator_configured,
+    run_orchestrator,
+)
 from app.schemas import AgentResponse, ToolCall
 from app.services.account_wizard import (
     begin_account_wizard,
@@ -345,6 +350,16 @@ async def process_message(
     )
     if scope_result:
         return scope_result
+
+    # Fase 5 do plano de inteligencia proativa: pedido amplo demais para uma
+    # unica ferramenta ("revise meus gastos e sugira cortes") vai direto ao
+    # orquestrador (Claude Sonnet + ferramentas de leitura), sem passar pelo
+    # roteamento de intencao unica abaixo. No-op (None) quando a flag/chave
+    # nao estao configuradas ou a chamada falha — cai no fluxo normal.
+    if await orchestrator_configured() and looks_like_broad_request(message):
+        orchestrator_reply = await run_orchestrator(db, user_id, message)
+        if orchestrator_reply:
+            return AgentResponse(message=orchestrator_reply, source="claude-orchestrator")
 
     intent_context = build_intent_context(db, user_id, session)
     tool_call, source = await _resolve_intent(message, context=intent_context)

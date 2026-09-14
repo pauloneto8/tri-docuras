@@ -13,8 +13,10 @@ class Settings(BaseSettings):
     groq_model: str = "openai/gpt-oss-120b"
     anthropic_api_key: str = ""
     anthropic_model_fast: str = "claude-haiku-4-5"
+    anthropic_model_reasoning: str = "claude-sonnet-5"
     enable_ai_insights: bool = False
     enable_ai_nlu_fallback: bool = False
+    enable_ai_orchestrator: bool = False
     port: int = 8000
     secret_key: str = _INSECURE_SECRET
     allow_registration: bool = True

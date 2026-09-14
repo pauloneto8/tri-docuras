@@ -1,6 +1,6 @@
 # Plano: dar inteligência proativa ao agente do AssistFin
 
-**Status:** Fase 1 (fundação), Fase 2 (insight proativo), Fase 3 (fallback de NLU) e Fase 4 (memória de personalização) implementadas em 2026-09-14. Fases 2-3 atrás de feature flags (`ENABLE_AI_INSIGHTS`/`ENABLE_AI_NLU_FALLBACK`) desligadas até validar em conta de teste; Fase 4 não usa LLM (100% Python/SQL determinístico) e está sempre ativa, sem flag. Fase 5 segue proposta.
+**Status:** Fases 1-5 implementadas em 2026-09-14. Fases 2, 3 e 5 atrás de feature flags (`ENABLE_AI_INSIGHTS`/`ENABLE_AI_NLU_FALLBACK`/`ENABLE_AI_ORCHESTRATOR`) desligadas até validar em conta de teste; Fase 4 não usa LLM (100% Python/SQL determinístico) e está sempre ativa, sem flag. Plano completo.
 **Workspace:** `/opt/hosting/apps/app2`
 **Origem:** pedido do usuário — evoluir o assistente de "executor de CRUD financeiro via Groq" para um agente com (1) entendimento de linguagem mais livre, (2) memória de longo prazo/personalização, (3) insights e conselhos financeiros proativos, (4) raciocínio multi-etapas.
 
@@ -84,11 +84,42 @@ só **pergunta antes de salvar** (nunca aprendizado silencioso).
   guardrail "feature flag por fase" (pensado para custo/risco de API externa)
   não se aplica aqui.
 
-### Fase 5 — Orquestrador multi-etapas (maior risco/custo, só sob demanda explícita)
+### Fase 5 — Orquestrador multi-etapas (maior risco/custo, só sob demanda explícita) — implementada
 
-- Detectar no runner pedidos amplos que não mapeiam a nenhuma ferramenta única (heurística: mensagem longa + verbos como "revise", "organize", "analise" sem valor/conta claros).
-- Rodar um Tool Runner do Claude (`client.beta.messages.tool_runner`, ver skill `claude-api`) com Sonnet, `effort: medium`, limite de turnos (ex.: 5), expondo **somente** as ferramentas de leitura já existentes (`list_transactions`, `get_summary`, `get_budget_status`, `list_categories`, `list_invoices`) como tools do Claude.
-- Qualquer ação de escrita que o orquestrador queira sugerir vira uma proposta em texto ("quer que eu categorize essas 12 transações como Lazer?") que, se o usuário aceitar, é traduzida para os `ToolCall` de escrita já existentes e passa pela confirmação normal — o orquestrador nunca escreve direto.
+`app/agent/orchestrator.py` (novo) + gancho em `app/agent/runner.py` (antes do
+roteamento de intenção única) + `anthropic==1.5.0` (novo em
+`requirements.txt` — única parte do agente que usa o SDK oficial em vez de
+httpx puro, porque só o SDK tem o Tool Runner beta).
+
+- `looks_like_broad_request()` detecta pedidos amplos que não mapeiam a
+  nenhuma ferramenta única (heurística implementada: mensagem com pelo menos
+  40 caracteres + verbo de análise/revisão ampla — "revise", "organize",
+  "analise", "avalie", "planeje", "otimize", "onde posso cortar/gastar" —
+  **sem** um valor monetário explícito reconhecido por `parse_amount`, que
+  indicaria uma ação única de registro/edição em vez de análise).
+- `run_orchestrator()` roda `client.beta.messages.tool_runner` com
+  `ANTHROPIC_MODEL_REASONING` (`claude-sonnet-5` por padrão), `effort:
+  medium`, `max_iterations=5`, expondo **somente** as ferramentas de leitura
+  já existentes (`list_transactions`, `get_summary`, `get_budget_status`,
+  `list_categories`, `list_invoices`) como `@beta_async_tool` presos a
+  `db`/`user_id` via closure — nenhuma ferramenta de escrita é passada ao
+  Claude.
+- Validação anti-alucinação igual à Fase 2: todo valor `R$ x,xx` citado na
+  resposta final precisa ser um dos valores que alguma ferramenta de leitura
+  realmente devolveu nesta execução (coletados via closure enquanto as
+  ferramentas rodam); se não bater, descarta e devolve mensagem genérica
+  pedindo pergunta mais específica em vez de arriscar número inventado.
+- Qualquer ação de escrita que o orquestrador queira sugerir vira uma
+  proposta em texto ("quer que eu categorize essas 12 transações como
+  Lazer?") — ele não tem ferramenta de escrita para executar. Se o usuário
+  aceitar na mensagem seguinte, ela volta ao `process_message` normal
+  (Groq/regra), que já enxerga o histórico recente da conversa
+  (`build_intent_context` → `get_recent_messages`, últimas 4 mensagens,
+  incluindo a proposta do orquestrador) e passa pela confirmação de escrita
+  de sempre — sem plumbing extra de sessão para "aceitar proposta".
+- Desligado por padrão (`ENABLE_AI_ORCHESTRATOR`/`ANTHROPIC_API_KEY`).
+  Testes: `tests/test_orchestrator.py` (heurística + validação) e
+  `tests/test_runner_orchestrator.py` (roteamento no runner).
 
 ## Guardrails (valem para todas as fases)
 
@@ -116,8 +147,8 @@ só **pergunta antes de salvar** (nunca aprendizado silencioso).
 
 ## Próximo passo
 
-Fases 1-4 implementadas (fundação + insight proativo + fallback de NLU +
-memória de personalização); Fases 2-3 atrás de feature flag desligada até
-validar em conta de teste, Fase 4 sempre ativa (sem LLM). Próxima da fila, se
-o usuário quiser seguir: **Fase 5** (orquestrador multi-etapas) — maior
-risco/custo, só sob demanda explícita do usuário.
+Fases 1-5 implementadas (fundação + insight proativo + fallback de NLU +
+memória de personalização + orquestrador multi-etapas). Fases 2, 3 e 5 atrás
+de feature flag desligada até validar em conta de teste; Fase 4 sempre ativa
+(sem LLM). Plano concluído — próximo passo é validar as Fases 2/3/5 em conta
+de teste (ligar as flags) antes de considerar ligar em produção.

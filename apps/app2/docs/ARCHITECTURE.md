@@ -127,7 +127,28 @@ nunca para tool-calling nem para escrever dados. Controlado por
   topo de `process_message` (`try_process_pending_description_preference`);
   `agent_state._session_accepts_nao_answer` evita que um "não" de resposta
   seja capturado como cancelamento global do chat.
-- Plano completo e próxima fase (orquestrador multi-etapas):
+- **Fase 5 — orquestrador multi-etapas** (`app/agent/orchestrator.py`,
+  `ENABLE_AI_ORCHESTRATOR`, desligado por padrão): única parte do agente que
+  usa o SDK oficial `anthropic` (novo em `requirements.txt`) em vez de httpx
+  puro — é o SDK que oferece o Tool Runner
+  (`client.beta.messages.tool_runner`), necessário para o loop agentico
+  multi-turno. `looks_like_broad_request()` detecta no runner um pedido amplo
+  que não mapeia a uma única ferramenta (verbo de análise/revisão + mensagem
+  longa + sem valor monetário explícito) e desvia **antes** do roteamento de
+  intenção única (Groq/regra). O orquestrador roda `ANTHROPIC_MODEL_REASONING`
+  (`claude-sonnet-5` por padrão) com `effort: medium` e até 5 iterações,
+  expondo **só** as ferramentas de leitura já existentes (`list_transactions`,
+  `get_summary`, `get_budget_status`, `list_categories`, `list_invoices`) —
+  nunca uma ferramenta de escrita. Mesma validação anti-alucinação da Fase 2:
+  todo valor `R$ x,xx` citado na resposta final precisa ser um dos valores
+  que alguma ferramenta de leitura realmente devolveu na execução; se não
+  bater, descarta e devolve uma mensagem genérica. Qualquer ação sugerida
+  fica só no texto — o orquestrador não tem ferramenta de escrita para
+  executar; se o usuário topar, a mensagem seguinte dele volta ao roteamento
+  normal, que já enxerga o histórico recente da conversa
+  (`build_intent_context`) e passa pela confirmação de escrita de sempre.
+  `source="claude-orchestrator"` gravado em `conversation_messages`.
+- Plano completo:
   [`.cursor/plans/agente-inteligencia-proativa.md`](../.cursor/plans/agente-inteligencia-proativa.md)
 
 ## Modelo de dados (resumo)

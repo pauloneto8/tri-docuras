@@ -58,6 +58,19 @@ Agendar 1x/dia via cron do host (ex.: 06:00):
 0 6 * * * cd /opt/hosting && docker compose exec -T app2 python -m app.scripts.generate_insights >> /var/log/assistfin-insights.log 2>&1
 ```
 
+## Orquestrador multi-etapas do agente (opcional, desligado por padrão)
+
+Requer `APP2_ANTHROPIC_API_KEY` e `APP2_ENABLE_AI_ORCHESTRATOR=true` no `.env`
+do host, depois recriar o serviço (`docker compose up -d app2`). Sem isso,
+pedidos amplos ("revise meus gastos e sugira cortes") continuam caindo no
+roteamento normal (Groq → regra → "não consegui entender") como hoje. Não tem
+comando de cron — roda dentro do chat quando a mensagem parece um pedido
+amplo (heurística em `looks_like_broad_request`). Usa `ANTHROPIC_MODEL_REASONING`
+(padrão `claude-sonnet-5`) em vez do modelo rápido das Fases 2-3, e o SDK
+oficial `anthropic` (Tool Runner) — única parte do agente que depende dele,
+o resto continua em `httpx` puro. Ver `docs/ARCHITECTURE.md` §Inteligência
+proativa e `.cursor/plans/agente-inteligencia-proativa.md` (Fase 5).
+
 ## Backup e restauração (admin)
 
 Na tela `/admin` (usuário root):
