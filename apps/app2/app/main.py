@@ -110,7 +110,7 @@ app.add_middleware(
     secret_key=settings.secret_key,
     session_cookie="financas_session",
     max_age=60 * 60 * 24 * 7,
-    https_only=False,
+    https_only=True,
     same_site="lax",
 )
 
