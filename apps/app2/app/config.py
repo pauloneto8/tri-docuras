@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://app2:app2@app2-db:5432/app2"
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
+    anthropic_api_key: str = ""
+    anthropic_model_fast: str = "claude-haiku-4-5"
+    enable_ai_insights: bool = False
     port: int = 8000
     secret_key: str = _INSECURE_SECRET
     allow_registration: bool = True

@@ -30,6 +30,25 @@ Nova revisão:
 docker compose exec -T app2 alembic revision -m "descricao" --autogenerate
 ```
 
+## Insight financeiro proativo (opcional, desligado por padrão)
+
+Requer `APP2_ANTHROPIC_API_KEY` e `APP2_ENABLE_AI_INSIGHTS=true` no `.env` do
+host, depois recriar o serviço (`docker compose up -d app2`) — sem isso o
+comando abaixo não faz nada. Ver `docs/ARCHITECTURE.md` §Inteligência
+proativa e `.cursor/plans/agente-inteligencia-proativa.md`.
+
+Gerar/atualizar o insight do mês de todos os usuários ativos:
+
+```bash
+docker compose exec -T app2 python -m app.scripts.generate_insights
+```
+
+Agendar 1x/dia via cron do host (ex.: 06:00):
+
+```
+0 6 * * * cd /opt/hosting && docker compose exec -T app2 python -m app.scripts.generate_insights >> /var/log/assistfin-insights.log 2>&1
+```
+
 ## Backup e restauração (admin)
 
 Na tela `/admin` (usuário root):

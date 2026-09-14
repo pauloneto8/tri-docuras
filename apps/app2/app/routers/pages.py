@@ -31,6 +31,7 @@ from app.schemas import (
 from app.services import admin, finance
 from app.services import ofx_card_import
 from app.services import ofx_account_import
+from app.services.insights import get_latest_insight
 from app.timezone import local_today
 from app.services.conversations import get_or_create_conversation, log_message
 from app.services.transaction_wizard import (
@@ -2183,12 +2184,17 @@ async def agent_welcome(
         return HTMLResponse("")
     templates = get_templates(request)
     result = begin_login_prompt(request.session)
+    agent_message = result.message
+    today = local_today()
+    insight = get_latest_insight(db, user.id)
+    if insight and insight.year == today.year and insight.month == today.month:
+        agent_message = f"{insight.text}\n\n{agent_message}"
     _log_chat_exchange(
         db,
         user.id,
         request.session,
         "[login]",
-        result.message,
+        agent_message,
         source=result.source,
     )
     return templates.TemplateResponse(
@@ -2196,7 +2202,7 @@ async def agent_welcome(
         {
             "request": request,
             "user": user,
-            "agent_message": result.message,
+            "agent_message": agent_message,
             "suggestions": result.suggestions,
         },
     )

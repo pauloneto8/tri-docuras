@@ -449,3 +449,26 @@ class Budget(Base):
 
     category: Mapped["Category"] = relationship(back_populates="budgets")
     user: Mapped["User"] = relationship()
+
+
+class AgentInsight(Base):
+    """Insight financeiro proativo gerado pelo agente (Claude) a partir de
+    números já calculados por finance.get_summary/get_budget_status — nunca
+    calculado pelo próprio LLM. Um por usuário/mês; regenerar substitui."""
+
+    __tablename__ = "agent_insights"
+    __table_args__ = (
+        UniqueConstraint("user_id", "year", "month", name="uq_agent_insight_user_period"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(String(30), nullable=False, default="claude-insight")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship()

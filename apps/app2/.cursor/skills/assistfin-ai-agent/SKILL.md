@@ -5,7 +5,7 @@ description: >-
   ferramentas, chips e chat HTMX. Use ao alterar assistente, chat, LLM,
   prompt, confirmação, transferências, wizards ou quando o agente não entender
   intenção do usuário.
-paths: app/agent/**, app/chat_format.py, app/services/account_wizard.py, app/services/category_wizard.py, app/services/card_wizard.py, app/services/transaction_wizard.py, app/services/transaction_slots.py, app/services/realize_planned_slots.py, app/services/pay_invoice_slots.py, app/services/recurrence.py, app/services/transfer_slots.py, app/services/multi_movements.py, app/services/multi_movement_flow.py, app/services/intents.py, app/services/tools.py, app/services/agent_suggestions.py, app/services/agent_state.py, app/templates/partials/agent_*.html, app/routers/pages.py
+paths: app/agent/**, app/chat_format.py, app/services/account_wizard.py, app/services/category_wizard.py, app/services/card_wizard.py, app/services/transaction_wizard.py, app/services/transaction_slots.py, app/services/realize_planned_slots.py, app/services/pay_invoice_slots.py, app/services/recurrence.py, app/services/transfer_slots.py, app/services/multi_movements.py, app/services/multi_movement_flow.py, app/services/intents.py, app/services/tools.py, app/services/agent_suggestions.py, app/services/agent_state.py, app/services/insights.py, app/scripts/generate_insights.py, app/templates/partials/agent_*.html, app/routers/pages.py
 ---
 
 # AssistFin — Agente de IA
@@ -146,6 +146,18 @@ Escape: intenção diferente → `clear_wizard` + `None` (delega ao runner).
 ## Resumo após lançamento
 
 `finance.enrich_register_result()` anexa `context_summary` ao resultado de `register_expense` / `register_income` / `realize_planned` (e multi-movimento). `format_tool_result` concatena ao texto: fatura do cartão (`invoice_context_summary`) ou saldo da conta (`account_context_summary`).
+
+## Inteligência proativa (Claude, opcional)
+
+Segundo modelo, **só leitura/explicação** — nunca tool-calling nem escrita.
+`app/agent/claude.py` (mesmo padrão httpx de `groq.py`) + `app/services/insights.py`
+(`generate_monthly_insight`): monta prompt só com números já calculados por
+`get_summary`/`get_budget_status`, chama Claude Haiku, valida que todo valor
+monetário no texto gerado bate com um dos valores enviados (descarta se não
+bater) e salva em `agent_insights`. Exibido nas boas-vindas do chat
+(`agent_welcome` em `pages.py`) quando há insight do mês corrente. Desligado
+por padrão (`ENABLE_AI_INSIGHTS`/`ANTHROPIC_API_KEY`). Próximas fases
+(fallback de NLU, memória, orquestrador multi-etapas): `.cursor/plans/agente-inteligencia-proativa.md`.
 
 ## Chat UI (HTMX)
 

@@ -80,6 +80,28 @@ mensagem do usuário
 - Estado em `session` Starlette (wizards, flags)
 - Histórico em `conversation_messages`
 
+### Inteligência proativa (Claude, opcional — desligada por padrão)
+
+Segundo modelo (`app/agent/claude.py`, mesmo padrão httpx de `groq.py`) usado
+**só** para tarefas de raciocínio/explicação sobre números já calculados —
+nunca para tool-calling nem para escrever dados. Controlado por
+`ENABLE_AI_INSIGHTS` + `ANTHROPIC_API_KEY` (ambos vazios/false por padrão).
+
+- `app/services/insights.py` — `generate_monthly_insight()` chama
+  `finance.get_summary`/`get_budget_status`, monta um prompt só com os
+  números formatados, chama Claude Haiku e **valida** que todo valor
+  monetário citado no texto gerado é um dos valores enviados antes de
+  salvar em `agent_insights` (descarta se não bater — evaluator simples,
+  sem segunda chamada de LLM)
+- `app/scripts/generate_insights.py` — CLI (`python -m
+  app.scripts.generate_insights`) pensado para cron diário do host; no-op se
+  a feature estiver desligada
+- Exibido no `agent_welcome` (mensagem de boas-vindas do chat) quando há
+  insight do mês corrente
+- Plano completo e próximas fases (fallback de NLU, memória de
+  personalização, orquestrador multi-etapas):
+  [`.cursor/plans/agente-inteligencia-proativa.md`](../.cursor/plans/agente-inteligencia-proativa.md)
+
 ## Modelo de dados (resumo)
 
 | Entidade | Campos relevantes |

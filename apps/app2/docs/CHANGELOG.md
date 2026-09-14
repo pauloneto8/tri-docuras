@@ -4,6 +4,7 @@ Registro das principais evoluções do projeto (App 2).
 
 ## Unreleased
 
+- **Inteligência proativa (opcional, desligada por padrão)** — `app/agent/claude.py` (2º modelo, Claude Haiku, só leitura/explicação); `app/services/insights.py` gera e valida insight mensal a partir de `get_summary`/`get_budget_status`; tabela `agent_insights` (migração `020`); `python -m app.scripts.generate_insights` para cron diário; exibido nas boas-vindas do chat. `ENABLE_AI_INSIGHTS`/`ANTHROPIC_API_KEY`. Ver `.cursor/plans/agente-inteligencia-proativa.md`
 - **Wizard cartão vs conta** — slot `payment_source` quando ambíguo; inferência `card_name` em “lançado no cartão”; confirmação mostra **Cartão:**; `resolve_movement_accounts` usa conta de liquidação quando apelido do cartão = nome da conta
 - **Filtros em Movimentos** — conta, cartão, **categoria** e tipo; período diária/semanal/mensal; estado memorizado na sessão HTTP até `?clear=1` (Limpar → padrão mês atual sem restrições)
 - **Importação de extrato** — OFX/QFX, CSV e PDF (texto) no mesmo fluxo de revisão (cartão e conta); parser compartilhado `statement_parse.py`; upload até **10 MB**
