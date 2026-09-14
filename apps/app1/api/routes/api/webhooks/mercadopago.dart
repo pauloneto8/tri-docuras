@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_frog/dart_frog.dart';
+import 'package:tri_docuras_api/mercado_pago_webhook.dart';
 import 'package:tri_docuras_api/orders.dart';
 
 Future<Response> onRequest(RequestContext context) async {
@@ -14,16 +15,24 @@ Future<Response> onRequest(RequestContext context) async {
   return Response(statusCode: HttpStatus.methodNotAllowed);
 }
 
+Response _invalidSignature() => Response.json(
+      statusCode: HttpStatus.unauthorized,
+      body: {'error': 'Assinatura inválida.'},
+    );
+
 Future<Response> _handleLegacyIpn(RequestContext context) async {
-  final paymentId = _parsePaymentId(
-    context.request.uri.queryParameters['id'] ??
-        context.request.uri.queryParameters['data.id'],
-  );
+  final rawId = context.request.uri.queryParameters['id'] ??
+      context.request.uri.queryParameters['data.id'];
+  final paymentId = _parsePaymentId(rawId);
   if (paymentId == null) {
     return Response.json(
       statusCode: HttpStatus.badRequest,
       body: {'error': 'Notificação inválida.'},
     );
+  }
+
+  if (!MercadoPagoWebhookSignature.verify(context, dataId: rawId)) {
+    return _invalidSignature();
   }
 
   try {
@@ -48,6 +57,14 @@ Future<Response> _handleWebhook(RequestContext context) async {
     final paymentId = _extractPaymentIdFromBody(body);
     if (paymentId == null) {
       return Response.json(body: {'processed': false});
+    }
+
+    // A assinatura é calculada sobre o `data.id` da query string (padrão
+    // Mercado Pago), com fallback pro id extraído do corpo quando ausente.
+    final dataId =
+        context.request.uri.queryParameters['data.id'] ?? paymentId.toString();
+    if (!MercadoPagoWebhookSignature.verify(context, dataId: dataId)) {
+      return _invalidSignature();
     }
 
     final updated = await syncOrderPaymentFromMercadoPago(paymentId);
