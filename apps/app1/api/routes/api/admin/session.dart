@@ -18,7 +18,7 @@ Future<Response> onRequest(RequestContext context) async {
   try {
     final body = await context.request.json() as Map<String, dynamic>;
     final password = body['password']?.toString() ?? '';
-    if (password != AdminAuth.password) {
+    if (!AdminAuth.verifyPassword(password)) {
       return Response.json(
         statusCode: HttpStatus.unauthorized,
         body: {'error': 'Senha incorreta.'},
