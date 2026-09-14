@@ -2333,6 +2333,13 @@ async def agent_chat(
                 },
             )
         response = format_tool_result(outcome["action"], outcome["result"])
+        from app.services.agent_preferences import offer_description_preference_from_result
+
+        preference_offer = offer_description_preference_from_result(
+            db, request.session, user.id, tool_call.tool, outcome.get("result")
+        )
+        if preference_offer:
+            response += preference_offer
         if tool_call.tool == "create_card":
             from app.services.card_wizard import clear_wizard as clear_card_wizard
 

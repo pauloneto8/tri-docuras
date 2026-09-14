@@ -55,6 +55,10 @@ from app.services.multi_movement_flow import (
     try_begin_from_message,
     try_process_multi_movement_flow,
 )
+from app.services.agent_preferences import (
+    offer_description_preference_from_result,
+    try_process_pending_description_preference,
+)
 from app.services.agent_state import clear_agent_flow_state
 from app.services.tools import (
     execute_tool,
@@ -232,6 +236,12 @@ async def process_message(
     confirmed: bool = False,
 ) -> AgentResponse:
     session = session if session is not None else {}
+
+    pref_result = try_process_pending_description_preference(
+        session, message, db, user_id
+    )
+    if pref_result:
+        return pref_result
 
     if get_pending_movements(session):
         result = try_process_multi_movement_flow(session, message, db, user_id)
@@ -513,8 +523,14 @@ async def process_message(
             clear_pay_invoice_wizard(session)
         if tool_call.tool == "delete_transaction":
             clear_pending_delete(session)
+        result_message = format_tool_result(outcome["action"], outcome["result"])
+        offer = offer_description_preference_from_result(
+            db, session, user_id, tool_call.tool, outcome.get("result")
+        )
+        if offer:
+            result_message += offer
         return AgentResponse(
-            message=format_tool_result(outcome["action"], outcome["result"]),
+            message=result_message,
             tool_used=tool_call.tool,
             data=outcome,
             clear_wizard=tool_call.tool

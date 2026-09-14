@@ -451,6 +451,47 @@ class Budget(Base):
     user: Mapped["User"] = relationship()
 
 
+class AgentDescriptionPreference(Base):
+    """Fase 4 do plano de inteligência proativa: memória de personalização.
+
+    Guarda categoria e/ou forma de pagamento que o usuário confirmou repetidas
+    vezes para uma descrição (normalizada) de lançamento manual via chat —
+    nunca decidido pelo LLM. Só é gravada com resposta explícita "sim" do
+    usuário (ver `app/services/agent_preferences.py`), e só lida de volta para
+    pré-preencher slots (nunca pula a confirmação de escrita)."""
+
+    __tablename__ = "agent_description_preferences"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "description_key", name="uq_agent_description_pref_user_key"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    description_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    category_id: Mapped[int | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
+    payment_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    card_id: Mapped[int | None] = mapped_column(
+        ForeignKey("credit_cards.id", ondelete="SET NULL"), nullable=True
+    )
+    account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship()
+    category: Mapped["Category | None"] = relationship()
+    card: Mapped["CreditCard | None"] = relationship()
+    account: Mapped["Account | None"] = relationship()
+
+
 class AgentInsight(Base):
     """Insight financeiro proativo gerado pelo agente (Claude) a partir de
     números já calculados por finance.get_summary/get_budget_status — nunca

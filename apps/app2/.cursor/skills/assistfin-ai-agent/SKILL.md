@@ -5,7 +5,7 @@ description: >-
   ferramentas, chips e chat HTMX. Use ao alterar assistente, chat, LLM,
   prompt, confirmação, transferências, wizards ou quando o agente não entender
   intenção do usuário.
-paths: app/agent/**, app/chat_format.py, app/services/account_wizard.py, app/services/category_wizard.py, app/services/card_wizard.py, app/services/transaction_wizard.py, app/services/transaction_slots.py, app/services/realize_planned_slots.py, app/services/pay_invoice_slots.py, app/services/recurrence.py, app/services/transfer_slots.py, app/services/multi_movements.py, app/services/multi_movement_flow.py, app/services/intents.py, app/services/tools.py, app/services/agent_suggestions.py, app/services/agent_state.py, app/services/insights.py, app/scripts/generate_insights.py, app/templates/partials/agent_*.html, app/routers/pages.py
+paths: app/agent/**, app/chat_format.py, app/services/account_wizard.py, app/services/category_wizard.py, app/services/card_wizard.py, app/services/transaction_wizard.py, app/services/transaction_slots.py, app/services/realize_planned_slots.py, app/services/pay_invoice_slots.py, app/services/recurrence.py, app/services/transfer_slots.py, app/services/multi_movements.py, app/services/multi_movement_flow.py, app/services/intents.py, app/services/tools.py, app/services/agent_suggestions.py, app/services/agent_state.py, app/services/agent_preferences.py, app/services/insights.py, app/scripts/generate_insights.py, app/templates/partials/agent_*.html, app/routers/pages.py
 ---
 
 # AssistFin — Agente de IA
@@ -162,7 +162,23 @@ Fase 3 (fallback de NLU) também implementada: `_resolve_intent` (`runner.py`)
 tenta Claude Haiku (`call_claude_tool_call`) com o mesmo `SYSTEM_PROMPT` de
 tool-calling só depois que Groq **e** `try_rule_based_parse` falharem — nunca
 substitui o caminho comum. Desligado por padrão (`ENABLE_AI_NLU_FALLBACK`).
-Próximas fases (memória, orquestrador multi-etapas):
+
+Fase 4 (memória de personalização) implementada — **sem LLM**, sempre ativa:
+`app/services/agent_preferences.py`. Depois de um `register_expense`/
+`register_income` confirmado (lançamento único, não recorrente, não
+parcelado), se a mesma descrição normalizada já se repetiu **exatamente 3
+vezes seguidas** com a mesma categoria e/ou forma de pagamento, o agente
+pergunta ("quer que eu lembre?"); só grava em `agent_description_preferences`
+(migração `021`) com "sim" explícito. Leitura pré-preenche categoria/cartão/
+conta em `transaction_slots.py` (`infer_category_name`,
+`_infer_and_apply_payment_source`) — mesmo princípio das outras inferências
+(`card_name`), confirmação de escrita continua obrigatória. Oferta duplicada
+em `runner.py` e `pages.py` (`offer_description_preference_from_result`);
+resposta sim/não tratada no topo de `process_message`
+(`try_process_pending_description_preference`); `agent_state.py` evita que
+"não" vire cancelamento global enquanto essa pergunta está pendente.
+
+Próxima fase (orquestrador multi-etapas):
 `.cursor/plans/agente-inteligencia-proativa.md`.
 
 ## Chat UI (HTMX)

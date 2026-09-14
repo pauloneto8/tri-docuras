@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.models import Account, Category, CreditCard
 from app.schemas import ToolCall, decimal_to_cents, format_brl
 from app.services import finance
+from app.services.agent_preferences import lookup_description_preference
 from app.services.agent_suggestions import for_transaction_wizard_field
 from app.services.tools import (
     correct_tool_call_descriptions,
@@ -481,6 +482,14 @@ def infer_category_name(
     category = finance.suggest_category_by_keywords(db, user_id, description, tx_type)
     if category and category.name != "Outros":
         return category.name
+
+    # Fase 4 (memória de personalização): sem keyword configurada, tenta a
+    # preferência aprendida por repetição para esta descrição.
+    pref = lookup_description_preference(db, user_id, description)
+    if pref and pref.category_id:
+        learned = db.get(Category, pref.category_id)
+        if learned and learned.type == tx_type:
+            return learned.name
     return None
 
 
@@ -1078,6 +1087,26 @@ def _infer_and_apply_payment_source(
             if not wizard.get("has_credit_cards") or wants_account_payment(message):
                 wizard["payment_source"] = "account"
                 wizard["payment_on_card"] = False
+
+    # Fase 4 (memória de personalização): ainda ambíguo — tenta a forma de
+    # pagamento aprendida por repetição para esta descrição.
+    if not wizard.get("payment_source") and wizard.get("description"):
+        pref = lookup_description_preference(db, user_id, wizard["description"])
+        if pref and pref.payment_source == "card" and pref.card_id:
+            card = db.get(CreditCard, pref.card_id)
+            if card and card.is_active:
+                wizard["payment_source"] = "card"
+                wizard["payment_on_card"] = True
+                wizard["card_name"] = card.name
+                wizard.pop("account_name", None)
+                _ensure_card_settlement_account(db, user_id, wizard)
+                _apply_card_planned_defaults(wizard)
+        elif pref and pref.payment_source == "account" and pref.account_id:
+            account = db.get(Account, pref.account_id)
+            if account and account.is_active:
+                wizard["payment_source"] = "account"
+                wizard["payment_on_card"] = False
+                wizard["account_name"] = account.name
 
 
 def parse_installment_amount_basis(message: str) -> str | None:

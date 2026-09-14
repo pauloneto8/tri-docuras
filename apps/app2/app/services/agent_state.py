@@ -7,6 +7,11 @@ CANCEL_WORDS = {"cancelar", "desistir", "abortar", "sair", "não", "nao"}
 
 def _session_accepts_nao_answer(session: dict) -> bool:
     """Slots em que 'não' é resposta válida, não cancelamento global."""
+    from app.services.agent_preferences import PENDING_KEY as PENDING_PREFERENCE_KEY
+
+    if session.get(PENDING_PREFERENCE_KEY):
+        return True
+
     from app.services.realize_planned_slots import (
         _next_field as realize_next_field,
         get_wizard as get_realize_wizard,
@@ -66,3 +71,6 @@ def clear_agent_flow_state(session: dict) -> None:
     from app.services.installment_scope_flow import clear_pending_installment_scope
 
     clear_pending_installment_scope(session)
+    from app.services.agent_preferences import PENDING_KEY as PENDING_PREFERENCE_KEY
+
+    session.pop(PENDING_PREFERENCE_KEY, None)

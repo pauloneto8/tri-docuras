@@ -107,8 +107,27 @@ nunca para tool-calling nem para escrever dados. Controlado por
   valores. Desligado por padrão junto com o insight.
 - Exibido no `agent_welcome` (mensagem de boas-vindas do chat) quando há
   insight do mês corrente
-- Plano completo e próximas fases (fallback de NLU, memória de
-  personalização, orquestrador multi-etapas):
+- **Fase 4 — memória de personalização** (`app/services/agent_preferences.py`,
+  sem LLM — 100% Python/SQL determinístico, sempre ativa, sem feature flag):
+  depois de um `register_expense`/`register_income` confirmado (lançamento
+  único, não recorrente, não parcelado), se a mesma descrição normalizada
+  (`normalize_memo`, reaproveitado de `statement_parse.py`) já apareceu
+  **exatamente 3 vezes seguidas** com a mesma categoria e/ou forma de
+  pagamento, o agente **pergunta** ("Quer que eu lembre disso? sim/não") —
+  nunca salva sozinho. "sim" grava em `agent_description_preferences`
+  (migração `021`); "não" só fecha a pergunta (não repergunta, pois a
+  checagem exige contagem `== 3`, não `>= 3`). Leitura
+  (`lookup_description_preference`) usada em `transaction_slots.py` para
+  pré-preencher categoria/forma de pagamento nas próximas vezes — mesmo
+  princípio de inferência já usado para `card_name`; a confirmação de
+  escrita continua obrigatória como qualquer outro lançamento. Gancho de
+  oferta duplicado nos dois pontos onde `register_expense`/`register_income`
+  são de fato executados (`app/agent/runner.py` e `app/routers/pages.py`, via
+  `offer_description_preference_from_result`); resposta sim/não tratada no
+  topo de `process_message` (`try_process_pending_description_preference`);
+  `agent_state._session_accepts_nao_answer` evita que um "não" de resposta
+  seja capturado como cancelamento global do chat.
+- Plano completo e próxima fase (orquestrador multi-etapas):
   [`.cursor/plans/agente-inteligencia-proativa.md`](../.cursor/plans/agente-inteligencia-proativa.md)
 
 ## Modelo de dados (resumo)
@@ -124,6 +143,7 @@ nunca para tool-calling nem para escrever dados. Controlado por
 | `OfxImportBatch` | user_id, card_id?, account_id?, filename, status (`pending`/`applied`/`cancelled`) — staging da revisão de extrato |
 | `OfxImportLine` | batch_id, fitid, posted_date, amount_cents, direction, memo, suggested_*/chosen_* actions |
 | `OfxCategoryMemory` | user_id, description_key, category_id — sugestão de categoria na revisão |
+| `AgentDescriptionPreference` | user_id, description_key, category_id?, payment_source? (`card`/`account`), card_id?, account_id? — memória de personalização do chat (Fase 4), só gravada com "sim" explícito |
 | `RecurringRule` | user_id, account_id, category_id, type, amount_cents, description, frequency (`daily`/`weekly`/`monthly`), start_date, end_date?, is_active, anchor_day, anchor_weekday |
 | `InstallmentPlan` | user_id, account_id, category_id?, type, total_cents, installment_count, interval (`monthly`/`weekly`/`biweekly`), start_date, description, is_active |
 | `Budget` | category_id, year, month, limit_cents |

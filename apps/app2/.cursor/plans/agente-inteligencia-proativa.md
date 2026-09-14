@@ -1,6 +1,6 @@
 # Plano: dar inteligência proativa ao agente do AssistFin
 
-**Status:** Fase 1 (fundação), Fase 2 (insight proativo) e Fase 3 (fallback de NLU) implementadas em 2026-09-14, feature flags `ENABLE_AI_INSIGHTS`/`ENABLE_AI_NLU_FALLBACK` desligadas até validar em conta de teste. Fases 4-5 seguem propostas.
+**Status:** Fase 1 (fundação), Fase 2 (insight proativo), Fase 3 (fallback de NLU) e Fase 4 (memória de personalização) implementadas em 2026-09-14. Fases 2-3 atrás de feature flags (`ENABLE_AI_INSIGHTS`/`ENABLE_AI_NLU_FALLBACK`) desligadas até validar em conta de teste; Fase 4 não usa LLM (100% Python/SQL determinístico) e está sempre ativa, sem flag. Fase 5 segue proposta.
 **Workspace:** `/opt/hosting/apps/app2`
 **Origem:** pedido do usuário — evoluir o assistente de "executor de CRUD financeiro via Groq" para um agente com (1) entendimento de linguagem mais livre, (2) memória de longo prazo/personalização, (3) insights e conselhos financeiros proativos, (4) raciocínio multi-etapas.
 
@@ -56,11 +56,33 @@ Custo estimado (Haiku 4.5, US$1/US$5 por MTok): 1 insight diário por usuário �
 
 - Em `runner.py`, quando Groq **e** `try_rule_based_parse` falham (hoje cai direto em `unsupported_action`), tentar uma vez o Claude Haiku com o mesmo `SYSTEM_PROMPT` de ferramentas antes de desistir. Mantém o formato `ToolCall` único — é só mais um nível na cadeia barato→caro já documentada em `ai-agent-design-patterns`.
 
-### Fase 4 — Memória de personalização (médio risco, precisa de design)
+### Fase 4 — Memória de personalização — implementada
 
-- Tabela `user_agent_preferences` (chave/valor estruturado — ex.: `categoria_favorita_supermercado`, `meta_orcamento_lazer`), **não** texto livre.
-- Escrita só por caminhos determinísticos já existentes (ex.: se o usuário confirma uma categorização repetida 3x, salvar preferência) ou confirmação explícita — nunca o LLM decidindo sozinho o que "lembrar".
-- Leitura: injetar só os poucos pares relevantes no prompt (Groq e Claude), como contexto curto — mesmo princípio de "memória de working state fora do prompt, injeção curta" já na skill.
+Decisão de escopo tomada com o usuário em 2026-09-14: **categoria + forma de
+pagamento** (não meta de orçamento — já coberta pela tabela explícita
+`budgets`, que não é aprendizado, é configuração direta do usuário); escrita
+só **pergunta antes de salvar** (nunca aprendizado silencioso).
+
+- Tabela dedicada `agent_description_preferences` (migração `021`, mesmo
+  estilo tipado de `OfxCategoryMemory` — FKs de verdade para `categories`/
+  `credit_cards`/`accounts`, não um KV genérico) em vez de
+  `user_agent_preferences` chave/valor livre do rascunho original: campos
+  `description_key`, `category_id?`, `payment_source?`
+  (`card`/`account`), `card_id?`, `account_id?`.
+- Escrita: `app/services/agent_preferences.py::maybe_offer_description_preference`
+  — só dispara quando a contagem de lançamentos manuais (não recorrentes, não
+  parcelados) com a mesma descrição normalizada é **exatamente 3** (contagem
+  derivada de `Transaction` já gravada, sem contador próprio) e ainda não há
+  preferência salva; **pergunta** ("sim"/"não") em vez de salvar sozinho —
+  "não" não repergunta (a checagem é `== 3`, não `>= 3`).
+- Leitura: `lookup_description_preference` injetada em
+  `infer_category_name`/`_infer_and_apply_payment_source`
+  (`transaction_slots.py`) — mesmo princípio de pré-preencher sem perguntar de
+  novo já usado para `card_name`; a confirmação de escrita continua
+  obrigatória.
+- Sem feature flag: diferente das Fases 2-3, não chama nenhum LLM, então o
+  guardrail "feature flag por fase" (pensado para custo/risco de API externa)
+  não se aplica aqui.
 
 ### Fase 5 — Orquestrador multi-etapas (maior risco/custo, só sob demanda explícita)
 
@@ -84,7 +106,9 @@ Custo estimado (Haiku 4.5, US$1/US$5 por MTok): 1 insight diário por usuário �
 | `app/agent/claude.py` (novo) | Cliente Claude, paralelo a `groq.py` |
 | `app/agent/runner.py` | Fallback de 3º nível (Fase 3); detecção de pedido amplo → orquestrador (Fase 5) |
 | `alembic/versions/020_agent_insights.py` (novo) | Tabela `agent_insights` |
-| `alembic/versions/021_user_agent_preferences.py` (novo) | Tabela `user_agent_preferences` |
+| `alembic/versions/021_agent_description_preferences.py` (novo) | Tabela `agent_description_preferences` (Fase 4) |
+| `app/services/agent_preferences.py` (novo) | Oferta/gravação/leitura da preferência (Fase 4) |
+| `app/services/transaction_slots.py`, `app/services/agent_state.py`, `app/agent/runner.py`, `app/routers/pages.py` | Ganchos de leitura/oferta/resposta da Fase 4 |
 | `app/services/insights.py` (novo) | Geração + validação de insight diário/mensal (Fase 2) |
 | `app/templates/partials/agent_assistant_message.html` | Exibir insight proativo |
 | `docs/ARCHITECTURE.md`, `docs/OPERATIONS.md`, `docs/CHANGELOG.md`, `.cursor/skills/assistfin-ai-agent/SKILL.md` | Documentar o novo cliente Claude, a tabela de insights e o job de cron |
@@ -92,4 +116,8 @@ Custo estimado (Haiku 4.5, US$1/US$5 por MTok): 1 insight diário por usuário �
 
 ## Próximo passo
 
-Fases 1-3 implementadas (fundação + insight proativo + fallback de NLU), ambas as feature flags desligadas até validar em conta de teste. Próxima da fila, se o usuário quiser seguir: **Fase 4** (memória de personalização) — precisa de mais design antes de implementar (tabela chave/valor, regras de quando escrever).
+Fases 1-4 implementadas (fundação + insight proativo + fallback de NLU +
+memória de personalização); Fases 2-3 atrás de feature flag desligada até
+validar em conta de teste, Fase 4 sempre ativa (sem LLM). Próxima da fila, se
+o usuário quiser seguir: **Fase 5** (orquestrador multi-etapas) — maior
+risco/custo, só sob demanda explícita do usuário.
