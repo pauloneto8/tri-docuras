@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model_fast: str = "claude-haiku-4-5"
     enable_ai_insights: bool = False
+    enable_ai_nlu_fallback: bool = False
     port: int = 8000
     secret_key: str = _INSECURE_SECRET
     allow_registration: bool = True

@@ -43,6 +43,15 @@ Gerar/atualizar o insight do mês de todos os usuários ativos:
 docker compose exec -T app2 python -m app.scripts.generate_insights
 ```
 
+## Fallback de NLU do agente via Claude (opcional, desligado por padrão)
+
+Requer `APP2_ANTHROPIC_API_KEY` e `APP2_ENABLE_AI_NLU_FALLBACK=true` no `.env`
+do host, depois recriar o serviço (`docker compose up -d app2`). Sem isso,
+comportamento idêntico a hoje (Groq → parser por regra → "não consegui
+entender"). Não tem comando de cron — roda automaticamente dentro do chat
+quando as duas primeiras tentativas falham. Ver `docs/ARCHITECTURE.md`
+§Inteligência proativa e `.cursor/plans/agente-inteligencia-proativa.md`.
+
 Agendar 1x/dia via cron do host (ex.: 06:00):
 
 ```

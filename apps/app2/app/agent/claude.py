@@ -1,6 +1,9 @@
 import httpx
 
+from app.agent.prompt import SYSTEM_PROMPT, extract_json
+from app.agent.tool_parse import parse_tool_call
 from app.config import settings
+from app.schemas import ToolCall
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -12,8 +15,10 @@ ANTHROPIC_VERSION = "2023-06-01"
 #
 # Usado apenas para tarefas de raciocínio/explicação (insight financeiro,
 # fallback de linguagem livre) — nunca para decidir ferramentas de escrita.
-# O modelo nunca recebe acesso a `execute_tool`; só texto e números que o
-# Python já calculou.
+# `call_claude_tool_call` reaproveita o mesmo SYSTEM_PROMPT de tool-calling do
+# Groq (Fase 3 do plano), mas o resultado passa pelo mesmo `execute_tool` e
+# funil `needs_confirmation` de qualquer outra fonte — o modelo nunca escreve
+# direto nem calcula valores.
 
 
 async def claude_configured() -> bool:
@@ -56,3 +61,20 @@ async def call_claude(
     text = "".join(block.get("text", "") for block in blocks if block.get("type") == "text")
     text = text.strip()
     return text or None
+
+
+async def call_claude_tool_call(user_message: str, *, system_prompt: str | None = None) -> ToolCall | None:
+    """Interpreta a mensagem com Claude e devolve um ToolCall (mesmo contrato de `call_groq`).
+
+    Usado só como fallback de 3º nível (Fase 3), quando Groq e o parser por
+    regra já falharam. Reaproveita o SYSTEM_PROMPT único de tool-calling —
+    não é uma tarefa de raciocínio livre.
+    """
+    text = await call_claude(
+        user_message,
+        system_prompt=system_prompt or SYSTEM_PROMPT,
+        model=settings.anthropic_model_fast,
+    )
+    if not text:
+        return None
+    return parse_tool_call(extract_json(text))

@@ -3,7 +3,7 @@ import re
 
 from app.agent.context import build_intent_context
 from app.agent.tool_parse import DEFAULT_UNSUPPORTED_MESSAGE
-from app.agent.llm import call_intent_llm
+from app.agent.llm import call_claude_intent_llm, call_intent_llm
 from app.schemas import AgentResponse, ToolCall
 from app.services.account_wizard import (
     begin_account_wizard,
@@ -207,6 +207,18 @@ async def _resolve_intent(
     tool_call = try_rule_based_parse(message)
     if tool_call:
         return tool_call, "rule"
+
+    # Fase 3 do plano de inteligência proativa: antes de desistir, tenta uma
+    # vez o Claude Haiku com o mesmo SYSTEM_PROMPT de ferramentas. No-op
+    # (retorna None) quando ENABLE_AI_NLU_FALLBACK/ANTHROPIC_API_KEY não
+    # estiverem configurados — comportamento hoje idêntico ao anterior.
+    try:
+        claude_tool_call, claude_source = await call_claude_intent_llm(message, context=context)
+        if claude_tool_call:
+            ToolCall.model_validate(claude_tool_call.model_dump())
+            return claude_tool_call, claude_source
+    except (ValidationError, ValueError):
+        pass
 
     return None, source
 

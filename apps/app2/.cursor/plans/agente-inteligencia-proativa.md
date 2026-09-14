@@ -1,6 +1,6 @@
 # Plano: dar inteligência proativa ao agente do AssistFin
 
-**Status:** Fase 1 (fundação) e Fase 2 (insight proativo) implementadas em 2026-09-14, feature flag `ENABLE_AI_INSIGHTS` desligada até validar em conta de teste. Fases 3-5 seguem propostas.
+**Status:** Fase 1 (fundação), Fase 2 (insight proativo) e Fase 3 (fallback de NLU) implementadas em 2026-09-14, feature flags `ENABLE_AI_INSIGHTS`/`ENABLE_AI_NLU_FALLBACK` desligadas até validar em conta de teste. Fases 4-5 seguem propostas.
 **Workspace:** `/opt/hosting/apps/app2`
 **Origem:** pedido do usuário — evoluir o assistente de "executor de CRUD financeiro via Groq" para um agente com (1) entendimento de linguagem mais livre, (2) memória de longo prazo/personalização, (3) insights e conselhos financeiros proativos, (4) raciocínio multi-etapas.
 
@@ -52,7 +52,7 @@ Custo estimado (Haiku 4.5, US$1/US$5 por MTok): 1 insight diário por usuário �
 - Job diário/mensal (endpoint interno chamado por cron do host, mesmo padrão do backup em `docs/OPERATIONS.md`) que, por usuário ativo: chama `get_summary` + `get_budget_status` já existentes, monta um prompt curto só com os números, chama Claude Haiku pedindo um insight de 2–3 frases em português, valida (evaluator simples: nenhum número no texto pode divergir dos números de entrada — checagem em Python, não outro LLM) e salva.
 - Exibir no dashboard / mensagem de boas-vindas do chat (`agent_assistant_message.html`), com `source=claude` gravado em `conversation_messages` para auditoria (mesmo padrão já usado para `source=rule|wizard|groq`).
 
-### Fase 3 — Fallback de NLU mais livre (risco baixo)
+### Fase 3 — Fallback de NLU mais livre (risco baixo) — implementada
 
 - Em `runner.py`, quando Groq **e** `try_rule_based_parse` falham (hoje cai direto em `unsupported_action`), tentar uma vez o Claude Haiku com o mesmo `SYSTEM_PROMPT` de ferramentas antes de desistir. Mantém o formato `ToolCall` único — é só mais um nível na cadeia barato→caro já documentada em `ai-agent-design-patterns`.
 
@@ -92,4 +92,4 @@ Custo estimado (Haiku 4.5, US$1/US$5 por MTok): 1 insight diário por usuário �
 
 ## Próximo passo
 
-Plano aprovado → começar pela **Fase 1 + Fase 2** (fundação + insight proativo), que é a parte mais visível e de menor risco, com a feature flag desligada até validar em conta de teste.
+Fases 1-3 implementadas (fundação + insight proativo + fallback de NLU), ambas as feature flags desligadas até validar em conta de teste. Próxima da fila, se o usuário quiser seguir: **Fase 4** (memória de personalização) — precisa de mais design antes de implementar (tabela chave/valor, regras de quando escrever).

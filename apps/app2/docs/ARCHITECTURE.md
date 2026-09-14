@@ -72,6 +72,7 @@ mensagem do usuário
        atalhos de regra (realize_planned, pay_invoice, register_expense, register_income)
        → Groq
        → try_rule_based_parse (fallback)
+       → Claude Haiku (fallback, opcional — ver §Inteligência proativa)
   → WRITE_TOOLS → confirmação → execute_tool
 ```
 
@@ -96,6 +97,14 @@ nunca para tool-calling nem para escrever dados. Controlado por
 - `app/scripts/generate_insights.py` — CLI (`python -m
   app.scripts.generate_insights`) pensado para cron diário do host; no-op se
   a feature estiver desligada
+- `app/agent/claude.py::call_claude_tool_call` (Fase 3, `ENABLE_AI_NLU_FALLBACK`)
+  — fallback de 3º nível em `_resolve_intent`: só roda quando Groq **e**
+  `try_rule_based_parse` já falharam; reaproveita o `SYSTEM_PROMPT` único de
+  tool-calling (mesmo formato `{"tool","arguments"}`) e devolve `source=
+  "claude-fallback"` gravado em `conversation_messages`. O resultado passa
+  pelo mesmo `WRITE_TOOLS`/`needs_confirmation`/`execute_tool` de qualquer
+  outra fonte — Claude só escolhe a ferramenta, nunca escreve nem calcula
+  valores. Desligado por padrão junto com o insight.
 - Exibido no `agent_welcome` (mensagem de boas-vindas do chat) quando há
   insight do mês corrente
 - Plano completo e próximas fases (fallback de NLU, memória de

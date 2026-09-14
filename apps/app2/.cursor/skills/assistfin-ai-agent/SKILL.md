@@ -156,8 +156,14 @@ Segundo modelo, **só leitura/explicação** — nunca tool-calling nem escrita.
 monetário no texto gerado bate com um dos valores enviados (descarta se não
 bater) e salva em `agent_insights`. Exibido nas boas-vindas do chat
 (`agent_welcome` em `pages.py`) quando há insight do mês corrente. Desligado
-por padrão (`ENABLE_AI_INSIGHTS`/`ANTHROPIC_API_KEY`). Próximas fases
-(fallback de NLU, memória, orquestrador multi-etapas): `.cursor/plans/agente-inteligencia-proativa.md`.
+por padrão (`ENABLE_AI_INSIGHTS`/`ANTHROPIC_API_KEY`).
+
+Fase 3 (fallback de NLU) também implementada: `_resolve_intent` (`runner.py`)
+tenta Claude Haiku (`call_claude_tool_call`) com o mesmo `SYSTEM_PROMPT` de
+tool-calling só depois que Groq **e** `try_rule_based_parse` falharem — nunca
+substitui o caminho comum. Desligado por padrão (`ENABLE_AI_NLU_FALLBACK`).
+Próximas fases (memória, orquestrador multi-etapas):
+`.cursor/plans/agente-inteligencia-proativa.md`.
 
 ## Chat UI (HTMX)
 

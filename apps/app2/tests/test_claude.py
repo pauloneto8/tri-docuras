@@ -1,7 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.agent.claude import call_claude, claude_configured
+from app.agent.claude import call_claude, call_claude_tool_call, claude_configured
+from app.schemas import ToolCall
 
 
 @pytest.mark.asyncio
@@ -55,5 +56,39 @@ async def test_call_claude_returns_none_for_empty_content():
         patch("app.agent.claude.httpx.AsyncClient", return_value=client),
     ):
         result = await call_claude("oi", system_prompt="sistema")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_call_claude_tool_call_parses_json_response():
+    with (
+        patch(
+            "app.agent.claude.call_claude",
+            new_callable=AsyncMock,
+            return_value='{"tool":"get_summary","arguments":{}}',
+        ) as claude,
+    ):
+        result = await call_claude_tool_call("resumo do mes")
+
+    assert result == ToolCall(tool="get_summary", arguments={})
+    # reaproveita o SYSTEM_PROMPT único de tool-calling por padrão
+    assert claude.await_args.kwargs["system_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_call_claude_tool_call_returns_none_without_text():
+    with patch("app.agent.claude.call_claude", new_callable=AsyncMock, return_value=None):
+        result = await call_claude_tool_call("oi")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_call_claude_tool_call_returns_none_for_unparseable_text():
+    with patch(
+        "app.agent.claude.call_claude", new_callable=AsyncMock, return_value="nao e json"
+    ):
+        result = await call_claude_tool_call("oi")
 
     assert result is None
