@@ -1,0 +1,68 @@
+name: AssistFin (app2) — testes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/app2/**"
+      - ".github/workflows/app2-tests.yml"
+  pull_request:
+    paths:
+      - "apps/app2/**"
+      - ".github/workflows/app2-tests.yml"
+  workflow_dispatch: {}
+
+defaults:
+  run:
+    working-directory: apps/app2
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app2
+          POSTGRES_PASSWORD: app2
+          POSTGRES_DB: app2
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app2 -d app2"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://app2:app2@localhost:5432/app2
+      SECRET_KEY: ci-test-secret-key-not-for-production
+      ROOT_EMAILS: ci@example.com
+      ALLOW_REGISTRATION: "true"
+      GROQ_API_KEY: ""
+      ANTHROPIC_API_KEY: ""
+      ENABLE_AI_INSIGHTS: "false"
+      ENABLE_AI_NLU_FALLBACK: "false"
+      ENABLE_AI_ORCHESTRATOR: "false"
+      APP_TIMEZONE: America/Recife
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: apps/app2/requirements.txt
+
+      - name: Instalar dependências
+        run: pip install --no-cache-dir -r requirements.txt
+
+      - name: Aplicar migrações (Alembic)
+        run: alembic upgrade head
+
+      - name: Rodar suite de testes
+        run: python -m pytest -q
