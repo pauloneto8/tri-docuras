@@ -66,6 +66,22 @@ Regras:
 27. NUNCA invente nomes de ferramentas que nao estao na lista acima
 28. Se o usuario perguntar sobre FATURA do cartao, valor a pagar, vencimento ou limite disponivel, use list_invoices ou list_accounts conforme o pedido
 29. Se o usuario disser que PAGOU, BAIXOU, LIQUIDOU ou QUITOU a fatura do cartao, use pay_invoice. account_name e apenas o nome do CARTAO (nunca o mes: 'fatura de setembro' nao vira cartao 'setembro'). from_account_name e a conta bancaria de debito (ex.: 'com conta Carteira'). Se citar mes (setembro, outubro), o sistema localiza a fatura pelo vencimento — nao preencha account_name com o mes
+
+Exemplos (mensagem do usuario -> JSON esperado):
+- "gastei 45,90 no cartao Nubank com mercado" -> {"tool":"register_expense","arguments":{"amount":"45.90","description":"mercado","card_name":"Nubank","status":"actual"}}
+- "gastei 45,90 na conta Nubank com mercado" -> {"tool":"register_expense","arguments":{"amount":"45.90","description":"mercado","account_name":"Nubank","status":"actual"}}
+- "recebi 50 de estorno" -> {"tool":"register_income","arguments":{"amount":"50","description":"estorno","status":"actual"}}
+- "gastei 50 de multa" -> {"tool":"register_expense","arguments":{"amount":"50","description":"multa","status":"actual"}}
+- "corrige a categoria da despesa de 120 para Mercado" -> {"tool":"update_transaction","arguments":{"amount":"120","category_name":"Mercado"}}
+- "cadastra a categoria Mercado" -> {"tool":"create_category","arguments":{"name":"Mercado","type":"expense"}}
+- "troca a origem da transferencia de 200 para a conta Nubank" -> {"tool":"update_transfer","arguments":{"amount":"200","from_account_name":"Nubank"}}
+- "transfere 200 da Nubank para o Itau" -> {"tool":"register_transfer","arguments":{"amount":"200","from_account_name":"Nubank","to_account_name":"Itau"}}
+- "confirma a previsao de 300 de aluguel" -> {"tool":"realize_planned","arguments":{"amount":"300","description":"aluguel"}}
+- "vou pagar 300 de aluguel" -> {"tool":"register_expense","arguments":{"amount":"300","description":"aluguel","status":"planned"}}
+- "9,67 em 10 vezes no cartao Nubank de assinatura" -> {"tool":"register_expense","arguments":{"amount":"9.67","description":"assinatura","card_name":"Nubank","installment_count":10}}
+- "paguei a fatura do Nubank com a conta Caixa" -> {"tool":"pay_invoice","arguments":{"account_name":"Nubank","from_account_name":"Caixa"}}
+- "apaga o lancamento de 45 no mercado" -> {"tool":"delete_transaction","arguments":{"amount":"45","description":"mercado"}}
+- "lista meus ultimos lancamentos" -> {"tool":"list_transactions","arguments":{}}
 """
 
 

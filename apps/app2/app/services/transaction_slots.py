@@ -12,6 +12,7 @@ from app.schemas import ToolCall, decimal_to_cents, format_brl
 from app.services import finance
 from app.services.agent_preferences import lookup_description_preference
 from app.services.agent_suggestions import for_transaction_wizard_field
+from app.services.fuzzy_match import fuzzy_find_one
 from app.services.tools import (
     correct_tool_call_descriptions,
     parse_date,
@@ -289,7 +290,7 @@ def infer_card_name(
         for name in names:
             if name.lower() == explicit.lower():
                 return name
-        return None
+        return fuzzy_find_one(explicit, names)
 
     from app.services.intents import _extract_card_reference
 
@@ -314,6 +315,9 @@ def infer_card_name(
                 for key in _card_name_match_keys(name):
                     if key == ref_short.lower() or key in ref_short.lower() or ref_short.lower() in key:
                         return name
+            fuzzy_match = fuzzy_find_one(ref_short, names)
+            if fuzzy_match:
+                return fuzzy_match
 
     lower = message.lower()
     matches: list[str] = []
@@ -441,7 +445,7 @@ def infer_account_name(
         for name in names:
             if name.lower() == explicit.lower():
                 return name
-        return None
+        return fuzzy_find_one(explicit, names)
 
     accounts = db.scalars(
         select(Account)
@@ -504,7 +508,7 @@ def parse_account_answer(message: str, choices: list[str]) -> str | None:
     for name in choices:
         if name.lower() in lower or lower in name.lower():
             return name
-    return None
+    return fuzzy_find_one(text, choices)
 
 
 def parse_category_answer(
@@ -522,7 +526,7 @@ def parse_category_answer(
     for name in choices:
         if name.lower() in lower or lower in name.lower():
             return name
-    return None
+    return fuzzy_find_one(text, choices)
 
 
 def parse_status_answer(message: str) -> str | None:

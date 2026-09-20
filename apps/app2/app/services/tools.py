@@ -113,6 +113,7 @@ ACCOUNT_UPDATE_HINTS = CORRECTION_HINTS + (
 )
 ISO_DATE_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 BR_DATE_RE = re.compile(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b")
+BR_DATE_NO_YEAR_RE = re.compile(r"\b(\d{1,2})/(\d{1,2})\b")
 MONTHS_PT = {
     "janeiro": 1,
     "fevereiro": 2,
@@ -127,6 +128,23 @@ MONTHS_PT = {
     "outubro": 10,
     "novembro": 11,
     "dezembro": 12,
+}
+WEEKDAYS_PT = {
+    "segunda-feira": 0,
+    "segunda": 0,
+    "terça-feira": 1,
+    "terca-feira": 1,
+    "terça": 1,
+    "terca": 1,
+    "quarta-feira": 2,
+    "quarta": 2,
+    "quinta-feira": 3,
+    "quinta": 3,
+    "sexta-feira": 4,
+    "sexta": 4,
+    "sábado": 5,
+    "sabado": 5,
+    "domingo": 6,
 }
 ACCOUNT_NAME_HINTS = (
     ("mercado pago", "Mercado Pago"),
@@ -184,12 +202,35 @@ def parse_amount(text: str) -> str | None:
 def parse_date(text: str) -> date | None:
     lower = text.lower()
     today = local_today()
+    if "anteontem" in lower:
+        return today - timedelta(days=2)
+    if re.search(r"depois\s+de\s+amanh[ãa]", lower):
+        return today + timedelta(days=2)
     if "ontem" in lower:
         return today - timedelta(days=1)
     if "hoje" in lower:
         return today
     if "amanhã" in lower or "amanha" in lower:
         return today + timedelta(days=1)
+    days_match = re.search(r"daqui\s+a\s+(\d+)\s+dias?", lower) or re.search(
+        r"\bem\s+(\d+)\s+dias?\b", lower
+    )
+    if days_match:
+        return today + timedelta(days=int(days_match.group(1)))
+    if re.search(r"semana\s+(?:que\s+vem|seguinte|pr[oó]xima)\b", lower) or re.search(
+        r"pr[oó]xima\s+semana", lower
+    ):
+        return today + timedelta(days=7)
+    if re.search(r"\bsemana\s+passada\b", lower):
+        return today - timedelta(days=7)
+    for name, weekday_idx in WEEKDAYS_PT.items():
+        if re.search(rf"\b{name}\b", lower):
+            delta = (weekday_idx - today.weekday()) % 7
+            if delta == 0 and re.search(
+                rf"pr[oó]xim[ao]\s+{name}|{name}\s+que\s+vem", lower
+            ):
+                delta = 7
+            return today + timedelta(days=delta)
     return None
 
 
@@ -197,7 +238,7 @@ def is_relative_date_message(message: str) -> bool:
     lower = message.lower().strip()
     if parse_date(lower) is None:
         return False
-    if not any(token in lower for token in ("ontem", "hoje", "amanhã", "amanha")):
+    if not _RELATIVE_DATE_TOKEN_RE.search(lower):
         return False
     return len(strip_relative_date_tokens(message)) < 2
 
@@ -212,7 +253,11 @@ def is_date_only_message(message: str) -> bool:
         return False
     if "despesa" in lower or "receita" in lower:
         return False
-    if BR_DATE_RE.fullmatch(stripped) or ISO_DATE_RE.fullmatch(stripped):
+    if (
+        BR_DATE_RE.fullmatch(stripped)
+        or ISO_DATE_RE.fullmatch(stripped)
+        or BR_DATE_NO_YEAR_RE.fullmatch(stripped)
+    ):
         return True
     if is_relative_date_message(stripped):
         return True
@@ -222,7 +267,22 @@ def is_date_only_message(message: str) -> bool:
     return len(stripped.split()) <= 6
 
 
-_RELATIVE_DATE_TOKEN_RE = re.compile(r"\b(?:ontem|hoje|amanh[ãa])\b", re.IGNORECASE)
+_WEEKDAY_ALT_RE = "|".join(re.escape(name) for name in WEEKDAYS_PT)
+_RELATIVE_DATE_TOKEN_RE = re.compile(
+    r"\b(?:"
+    r"anteontem|"
+    r"depois\s+de\s+amanh[ãa]|"
+    r"ontem|hoje|amanh[ãa]|"
+    r"daqui\s+a\s+\d+\s+dias?|"
+    r"em\s+\d+\s+dias?|"
+    r"semana\s+(?:que\s+vem|seguinte|pr[oó]xima|passada)|"
+    r"pr[oó]xima\s+semana|"
+    rf"pr[oó]xim[ao]\s+(?:{_WEEKDAY_ALT_RE})|"
+    rf"(?:{_WEEKDAY_ALT_RE})\s+que\s+vem|"
+    rf"{_WEEKDAY_ALT_RE}"
+    r")\b",
+    re.IGNORECASE,
+)
 _RELATIVE_DATE_PHRASE_RE = re.compile(
     r"^\s*(?:foi|era|é|e|no dia|a despesa foi|despesa foi)\s+",
     re.IGNORECASE,
@@ -256,6 +316,24 @@ def parse_user_date(text: str) -> str | None:
             return date(year, month, day).isoformat()
         except ValueError:
             return None
+
+    no_year_match = BR_DATE_NO_YEAR_RE.search(text)
+    if no_year_match:
+        day = int(no_year_match.group(1))
+        month = int(no_year_match.group(2))
+        today = local_today()
+        try:
+            candidate = date(today.year, month, day)
+        except ValueError:
+            candidate = None
+        if candidate:
+            if candidate < today:
+                try:
+                    candidate = date(today.year + 1, month, day)
+                except ValueError:
+                    candidate = None
+            if candidate:
+                return candidate.isoformat()
 
     lower = text.lower()
     for month_name, month_num in MONTHS_PT.items():

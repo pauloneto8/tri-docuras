@@ -94,6 +94,38 @@ def _resolve_tx_type(message: str, tx_type_hint: str | None) -> str | None:
     return _detect_tx_type(message)
 
 
+def _clause_spans(text: str) -> list[tuple[int, int]]:
+    """Divide o texto nos mesmos limites usados para descrição (SEGMENT_BOUNDARY_RE)."""
+    spans: list[tuple[int, int]] = []
+    last = 0
+    for boundary in SEGMENT_BOUNDARY_RE.finditer(text):
+        spans.append((last, boundary.start()))
+        last = boundary.end()
+    spans.append((last, len(text)))
+    return spans
+
+
+def _detect_segment_tx_type(segment: str) -> str | None:
+    """Tipo local de uma cláusula; None se ambígua/sem pista (cai pro fallback da mensagem)."""
+    lower = segment.lower()
+    has_expense = any(h in lower for h in EXPENSE_HINTS) or "despesa" in lower
+    has_income = any(h in lower for h in INCOME_HINTS) or "receita" in lower
+    if has_expense and not has_income:
+        return "expense"
+    if has_income and not has_expense:
+        return "income"
+    return None
+
+
+def _clause_tx_type_for_position(
+    clauses: list[tuple[int, int]], text: str, position: int
+) -> str | None:
+    for start, end in clauses:
+        if start <= position < end:
+            return _detect_segment_tx_type(text[start:end])
+    return None
+
+
 def _description_after_amount(text: str, match: Match[str], span_end: int) -> str:
     tail = text[match.end() : span_end].strip()
     parts = SEGMENT_BOUNDARY_RE.split(tail, maxsplit=1)
@@ -158,8 +190,8 @@ def parse_multi_movements(
     if len(amounts_found) < 2:
         return None
 
-    tx_type = _resolve_tx_type(text, tx_type_hint)
-    if not tx_type:
+    default_tx_type = _resolve_tx_type(text, tx_type_hint)
+    if not default_tx_type:
         return None
 
     tx_date = None
@@ -167,9 +199,16 @@ def parse_multi_movements(
     if parsed_date:
         tx_date = parsed_date.isoformat()
 
+    clauses = _clause_spans(text)
+
     movements: list[ParsedMovement] = []
     for i, match in enumerate(amounts_found):
         span_end = amounts_found[i + 1].start() if i + 1 < len(amounts_found) else len(text)
+        tx_type = (
+            _clause_tx_type_for_position(clauses, text, match.start())
+            or tx_type_hint
+            or default_tx_type
+        )
         item = _movement_from_match(text, match, span_end, tx_type, tx_date)
         if item:
             movements.append(item)
@@ -177,12 +216,13 @@ def parse_multi_movements(
     if len(movements) < 2:
         return None
 
-    seen_amounts: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     unique: list[ParsedMovement] = []
     for movement in movements:
-        if movement.amount in seen_amounts:
+        key = (movement.amount, movement.description.strip().lower())
+        if key in seen:
             continue
-        seen_amounts.add(movement.amount)
+        seen.add(key)
         unique.append(movement)
 
     return unique if len(unique) >= 2 else None

@@ -7,6 +7,7 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Account, Budget, CardInvoice, Category, CreditCard, RecurringRule, Transaction, User
+from app.services.fuzzy_match import fuzzy_find_one
 from app.schemas import (
     BudgetCreate,
     BudgetStatusInput,
@@ -194,13 +195,23 @@ def get_or_create_account(db: Session, user_id: int, name: str) -> Account:
 
 
 def find_category_by_name(db: Session, user_id: int, name: str, tx_type: str) -> Category | None:
-    return db.scalar(
+    exact = db.scalar(
         select(Category).where(
             Category.user_id == user_id,
             func.lower(Category.name) == name.lower(),
             Category.type == tx_type,
         )
     )
+    if exact:
+        return exact
+
+    categories = db.scalars(
+        select(Category).where(Category.user_id == user_id, Category.type == tx_type)
+    ).all()
+    matched_name = fuzzy_find_one(name, [category.name for category in categories])
+    if matched_name is None:
+        return None
+    return next((c for c in categories if c.name == matched_name), None)
 
 
 def find_category_by_name_any_type(

@@ -71,6 +71,61 @@ def test_date_only_not_multi():
     assert parse_multi_movements("31-08-2026") is None
 
 
+def test_mixed_expense_income_split():
+    message = "gastei 50 no mercado e recebi 30 de reembolso"
+    items = parse_multi_movements(message)
+    assert items is not None
+    assert len(items) == 2
+    assert items[0].amount == "50"
+    assert items[0].tx_type == "expense"
+    assert "mercado" in items[0].description.lower()
+    assert items[1].amount == "30"
+    assert items[1].tx_type == "income"
+    assert "reembolso" in items[1].description.lower()
+
+
+def test_mixed_income_expense_split_reversed():
+    message = "recebi 30 de reembolso e gastei 50 no mercado"
+    items = parse_multi_movements(message)
+    assert items is not None
+    assert len(items) == 2
+    assert items[0].amount == "30"
+    assert items[0].tx_type == "income"
+    assert items[1].amount == "50"
+    assert items[1].tx_type == "expense"
+
+
+def test_dedup_same_amount_different_description_both_kept():
+    message = "gastei 50 no mercado e 50 na farmácia"
+    items = parse_multi_movements(message)
+    assert items is not None
+    assert len(items) == 2
+    assert {item.amount for item in items} == {"50"}
+    descriptions = {item.description.lower() for item in items}
+    assert any("mercado" in d for d in descriptions)
+    assert any("farm" in d for d in descriptions)
+
+
+def test_dedup_true_duplicate_still_collapses():
+    # Mesma cláusula repetida por engano gera 2 valores com a mesma descrição
+    # (após limpeza) — isso ainda deve colapsar para 1 lançamento.
+    message = "gastei 50 de mercado e 50 de mercado"
+    items = parse_multi_movements(message)
+    assert items is None  # menos de 2 itens após dedup, comportamento já existente
+
+
+def test_mixed_type_comma_clause_falls_back_to_default():
+    # Limitação documentada: cláusulas só são separadas por "." ou " e " —
+    # vírgula não separa cláusula para fins de tipo por item, então cai no
+    # default da mensagem inteira (despesa, por ter pista de despesa também).
+    message = "gastei 50 no mercado, recebi 30 de reembolso"
+    items = parse_multi_movements(message)
+    assert items is not None
+    assert len(items) == 2
+    assert items[0].tx_type == "expense"
+    assert items[1].tx_type == "expense"
+
+
 @pytest.mark.asyncio
 async def test_runner_due_date_does_not_spawn_multi_expenses():
     session = {}

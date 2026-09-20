@@ -13,6 +13,8 @@ from app.services.transaction_slots import (
     infer_account_name,
     infer_card_name,
     infer_category_name,
+    parse_account_answer,
+    parse_category_answer,
     parse_payment_source_answer,
     parse_slot_date,
     process_slot_answer,
@@ -1048,6 +1050,127 @@ def test_offer_create_card_sim_starts_card_wizard():
         db.query(CreditCard).filter(CreditCard.user_id == user.id).delete(
             synchronize_session=False
         )
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_infer_account_name_explicit_typo_resolves_via_fuzzy():
+    from app.config import settings
+
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"fuzzy_account_{suffix}@test.com",
+        password="secret1",
+        name="Fuzzy Account",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        account_name = f"Nubank_{suffix}"
+        _create_account(db, user.id, account_name)
+        typo = f"Nubanck_{suffix}"
+        assert infer_account_name(db, user.id, "", explicit=typo) == account_name
+    finally:
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_infer_card_name_explicit_typo_resolves_via_fuzzy():
+    from app.config import settings
+    from app.models import CardInvoice, CreditCard
+
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"fuzzy_card_{suffix}@test.com",
+        password="secret1",
+        name="Fuzzy Card",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        account_name = f"Conta_{suffix}"
+        card_name = f"Nubank_{suffix}"
+        _create_account(db, user.id, account_name)
+        finance.create_card(
+            db,
+            user.id,
+            CreateCardInput(
+                name=card_name,
+                closing_day=9,
+                due_day=14,
+                settlement_account_name=account_name,
+            ),
+        )
+        typo = f"Nubanck_{suffix}"
+        assert infer_card_name(db, user.id, "", explicit=typo) == card_name
+    finally:
+        db.query(Transaction).filter(Transaction.user_id == user.id).delete(synchronize_session=False)
+        db.query(CardInvoice).filter(CardInvoice.user_id == user.id).delete(synchronize_session=False)
+        db.query(CreditCard).filter(CreditCard.user_id == user.id).delete(synchronize_session=False)
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()
+
+
+def test_parse_account_answer_typo_resolves_via_fuzzy():
+    choices = ["Nubank", "Itaú", "Caixa"]
+    assert parse_account_answer("Nubanck", choices) == "Nubank"
+
+
+def test_parse_account_answer_unrelated_answer_returns_none():
+    choices = ["Nubank", "Itaú", "Caixa"]
+    assert parse_account_answer("xyz123", choices) is None
+
+
+def test_parse_category_answer_typo_resolves_via_fuzzy():
+    choices = ["Alimentação", "Transporte", "Lazer"]
+    assert parse_category_answer("Alimentaçao", choices) == "Alimentação"
+
+
+def test_parse_category_answer_does_not_confuse_different_categories():
+    choices = ["Alimentação", "Transporte"]
+    assert parse_category_answer("xyz123", choices) is None
+
+
+@pytest.mark.asyncio
+async def test_find_category_by_name_typo_resolves_via_fuzzy():
+    from app.config import settings
+
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"fuzzy_category_{suffix}@test.com",
+        password="secret1",
+        name="Fuzzy Category",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        category = finance.find_category_by_name(db, user.id, "Alimentaçao", "expense")
+        assert category is not None
+        assert category.name == "Alimentação"
+
+        unrelated = finance.find_category_by_name(db, user.id, "Zzzqwerty", "expense")
+        assert unrelated is None
+    finally:
         db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
         db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
         db.query(User).filter(User.id == user.id).delete(synchronize_session=False)

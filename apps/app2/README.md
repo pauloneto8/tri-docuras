@@ -239,7 +239,7 @@ Operações (reset de dados, migrações, debug): [docs/OPERATIONS.md](docs/OPER
 
 ## Testes
 
-Suite completa no container (**343** testes):
+Suite completa no container (**409** testes):
 
 ```bash
 docker compose exec -T app2 python -m pytest -q
