@@ -112,6 +112,7 @@ async def dashboard(
     next_ref = finance.shift_ref_date(period, current_ref, 1)
     show_agent_welcome = request.session.get("prompt_transaction_on_login", False)
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
         {
             "request": request,
@@ -538,6 +539,7 @@ async def transactions_page(
 
     templates = get_templates(request)
     return templates.TemplateResponse(
+        request,
         "transactions.html",
         _transactions_page_context(request, user, db),
     )
@@ -551,6 +553,7 @@ async def transaction_new_page(
 ):
     templates = get_templates(request)
     return templates.TemplateResponse(
+        request,
         "transaction_form.html",
         _transaction_form_context(request, user, db),
     )
@@ -653,6 +656,7 @@ async def accounts_page(
     templates = get_templates(request)
     scope = read_scope_id(user)
     return templates.TemplateResponse(
+        request,
         "accounts.html",
         _build_accounts_context(request, user, db, scope),
     )
@@ -666,6 +670,7 @@ async def account_new_page(
 ):
     templates = get_templates(request)
     return templates.TemplateResponse(
+        request,
         "account_form.html",
         _account_form_context(request, user, db),
     )
@@ -680,6 +685,7 @@ async def cards_page(
     templates = get_templates(request)
     scope = read_scope_id(user)
     return templates.TemplateResponse(
+        request,
         "accounts.html",
         _build_accounts_context(request, user, db, scope, focus_cards=True),
     )
@@ -693,6 +699,7 @@ async def card_new_page(
 ):
     templates = get_templates(request)
     return templates.TemplateResponse(
+        request,
         "card_form.html",
         _card_form_context(request, user, db),
     )
@@ -732,6 +739,7 @@ async def create_account_form(
         )
     except ValueError as exc:
         return templates.TemplateResponse(
+            request,
             "account_form.html",
             _account_form_context(request, user, db, error=str(exc)),
             status_code=400,
@@ -751,6 +759,7 @@ async def account_edit_page(
     if not account:
         return _flash_and_redirect(request, "/accounts", error="Conta não encontrada.")
     return templates.TemplateResponse(
+        request,
         "account_edit.html",
         _account_form_context(
             request, user, db, account=finance.format_account(account, db=db)
@@ -779,6 +788,7 @@ async def update_account_form(
             account = finance.find_account(db, user.id, account_id=account_id)
             formatted = finance.format_account(account, db=db) if account else {"id": account_id, "name": name}
             return templates.TemplateResponse(
+                request,
                 "account_edit.html",
                 _account_form_context(
                     request, user, db, account=formatted, error="Data do saldo inicial inválida."
@@ -802,6 +812,7 @@ async def update_account_form(
         account = finance.find_account(db, user.id, account_id=account_id)
         formatted = finance.format_account(account, db=db) if account else {"id": account_id}
         return templates.TemplateResponse(
+            request,
             "account_edit.html",
             _account_form_context(request, user, db, account=formatted, error=str(exc)),
             status_code=400,
@@ -836,6 +847,7 @@ async def account_ofx_upload_page(
         return _flash_and_redirect(request, "/accounts", error="Conta não encontrada.")
     ofx_card_import.expire_stale_batches(db, user.id)
     return templates.TemplateResponse(
+        request,
         "account_ofx_upload.html",
         {
             "request": request,
@@ -876,6 +888,7 @@ async def account_ofx_upload(
         )
     except ValueError as exc:
         return templates.TemplateResponse(
+            request,
             "account_ofx_upload.html",
             {
                 "request": request,
@@ -910,6 +923,7 @@ async def account_ofx_review_page(
     except ValueError as exc:
         return _flash_and_redirect(request, f"/accounts/{account_id}/ofx", error=str(exc))
     return templates.TemplateResponse(
+        request,
         "account_ofx_review.html",
         {
             "request": request,
@@ -1011,6 +1025,7 @@ async def create_card_form(
         )
     except ValueError as exc:
         return templates.TemplateResponse(
+            request,
             "card_form.html",
             _card_form_context(request, user, db, error=str(exc)),
             status_code=400,
@@ -1036,6 +1051,7 @@ async def card_edit_page(
             request, "/accounts/cards", error="Cartão não encontrado."
         )
     return templates.TemplateResponse(
+        request,
         "card_edit.html",
         _card_form_context(request, user, db, card=format_credit_card(card, db=db)),
     )
@@ -1080,6 +1096,7 @@ async def update_card_form(
         card = finance.find_card(db, user.id, card_id=card_id)
         formatted = format_credit_card(card, db=db) if card else {"id": card_id, "name": name}
         return templates.TemplateResponse(
+            request,
             "card_edit.html",
             _card_form_context(request, user, db, card=formatted, error=str(exc)),
             status_code=400,
@@ -1122,6 +1139,7 @@ async def card_ofx_upload_page(
         )
     ofx_card_import.expire_stale_batches(db, user.id)
     return templates.TemplateResponse(
+        request,
         "card_ofx_upload.html",
         {
             "request": request,
@@ -1166,6 +1184,7 @@ async def card_ofx_upload(
         )
     except ValueError as exc:
         return templates.TemplateResponse(
+            request,
             "card_ofx_upload.html",
             {
                 "request": request,
@@ -1204,6 +1223,7 @@ async def card_ofx_review_page(
     except ValueError as exc:
         return _flash_and_redirect(request, f"/accounts/cards/{card_id}/ofx", error=str(exc))
     return templates.TemplateResponse(
+        request,
         "card_ofx_review.html",
         {
             "request": request,
@@ -1306,6 +1326,7 @@ async def pay_invoice_form(
             payment_date=pay_dt,
         )
         return templates.TemplateResponse(
+            request,
             "accounts.html",
             _build_accounts_context(
                 request, user, db, scope, focus_cards=True, success="Fatura paga com sucesso."
@@ -1313,6 +1334,7 @@ async def pay_invoice_form(
         )
     except ValueError as exc:
         return templates.TemplateResponse(
+            request,
             "accounts.html",
             _build_accounts_context(
                 request, user, db, scope, focus_cards=True, error=str(exc)
@@ -1487,6 +1509,7 @@ async def create_transaction_form(
             )
     except (ValueError, ValidationError) as exc:
         return templates.TemplateResponse(
+            request,
             "transaction_form.html",
             _transaction_form_context(request, user, db, error=str(exc)),
             status_code=400,
@@ -1517,6 +1540,7 @@ async def transaction_edit_page(
         formatted["from_account_id"] = tx.account_id
         formatted["to_account_id"] = tx.counterparty_account_id
     return templates.TemplateResponse(
+        request,
         "transaction_edit.html",
         _transaction_form_context(request, user, db, tx=formatted),
     )
@@ -1628,6 +1652,7 @@ async def update_transaction_form(
             formatted["from_account_id"] = from_account_id or out.account_id
             formatted["to_account_id"] = to_account_id
         return templates.TemplateResponse(
+            request,
             "transaction_edit.html",
             _transaction_form_context(
                 request, user, db, tx=formatted, error=str(exc)
@@ -1677,6 +1702,7 @@ async def realize_planned_form(
     }
     if same_account.strip().lower() in {"no", "não", "nao"} and not account_name.strip():
         return templates.TemplateResponse(
+            request,
             "transactions.html",
             _transactions_page_context(
                 request,
@@ -1698,11 +1724,13 @@ async def realize_planned_form(
         ctx = _transactions_page_context(request, user, db)
         ctx["error"] = str(exc)
         return templates.TemplateResponse(
+            request,
             "transactions.html",
             ctx,
             status_code=400,
         )
     return templates.TemplateResponse(
+        request,
         "transactions.html",
         _transactions_page_context(
             request, user, db, success="Previsto realizado com sucesso."
@@ -1724,11 +1752,13 @@ async def stop_recurring_rule(
         deactivate_recurring_rule(db, user.id, rule_id)
     except ValueError as exc:
         return templates.TemplateResponse(
+            request,
             "transactions.html",
             _transactions_page_context(request, user, db, error=str(exc)),
             status_code=400,
         )
     return templates.TemplateResponse(
+        request,
         "transactions.html",
         _transactions_page_context(
             request, user, db, success="Série fixa encerrada. Previstos pendentes removidos."
@@ -1750,11 +1780,13 @@ async def stop_installment_plan(
         cancel_installment_plan(db, user.id, plan_id)
     except ValueError as exc:
         return templates.TemplateResponse(
+            request,
             "transactions.html",
             _transactions_page_context(request, user, db, error=str(exc)),
             status_code=400,
         )
     return templates.TemplateResponse(
+        request,
         "transactions.html",
         _transactions_page_context(
             request, user, db, success="Parcelas pendentes canceladas."
@@ -1787,6 +1819,7 @@ async def budgets_page(
         .all()
     )
     return templates.TemplateResponse(
+        request,
         "budgets.html",
         {
             "request": request,
@@ -1840,6 +1873,7 @@ async def budget_new_page(
 ):
     templates = get_templates(request)
     return templates.TemplateResponse(
+        request,
         "budget_form.html",
         _budget_form_context(request, user, db),
     )
@@ -1869,6 +1903,7 @@ async def create_budget_form(
         )
     except (ValueError, ValidationError) as exc:
         return templates.TemplateResponse(
+            request,
             "budget_form.html",
             _budget_form_context(request, user, db, error=str(exc)),
             status_code=400,
@@ -1892,6 +1927,7 @@ async def budget_edit_page(
     if not budget:
         return _flash_and_redirect(request, "/budgets", error="Orçamento não encontrado.")
     return templates.TemplateResponse(
+        request,
         "budget_edit.html",
         _budget_form_context(request, user, db, budget=budget),
     )
@@ -1928,6 +1964,7 @@ async def update_budget_form(
             "limit": limit,
         }
         return templates.TemplateResponse(
+            request,
             "budget_edit.html",
             _budget_form_context(request, user, db, budget=budget, error=str(exc)),
             status_code=400,
@@ -1974,6 +2011,7 @@ async def admin_page(
     flash_success, flash_error = _consume_flash(request)
     backups = db_backup.list_backups()
     return templates.TemplateResponse(
+        request,
         "admin.html",
         {
             "request": request,
@@ -2001,6 +2039,7 @@ async def admin_user_detail(
     templates = get_templates(request)
     detail = admin.get_user_detail(db, user_id)
     return templates.TemplateResponse(
+        request,
         "admin_user.html",
         {
             "request": request,
@@ -2198,6 +2237,7 @@ async def agent_welcome(
         source=result.source,
     )
     return templates.TemplateResponse(
+        request,
         "partials/agent_assistant_message.html",
         {
             "request": request,
@@ -2233,6 +2273,7 @@ async def agent_chat(
             source="cancel",
         )
         return templates.TemplateResponse(
+            request,
             "partials/agent_response.html",
             {
                 "request": request,
@@ -2269,6 +2310,7 @@ async def agent_chat(
                 metadata={"pending_action": parsed_action},
             )
             return templates.TemplateResponse(
+                request,
                 "partials/agent_response.html",
                 {
                     "request": request,
@@ -2295,6 +2337,7 @@ async def agent_chat(
                 metadata={"pending_action": parsed_action},
             )
             return templates.TemplateResponse(
+                request,
                 "partials/agent_response.html",
                 {
                     "request": request,
@@ -2321,6 +2364,7 @@ async def agent_chat(
                 metadata={"pending_action": parsed_action},
             )
             return templates.TemplateResponse(
+                request,
                 "partials/agent_response.html",
                 {
                     "request": request,
@@ -2373,6 +2417,7 @@ async def agent_chat(
                         },
                     )
                     return templates.TemplateResponse(
+                        request,
                         "partials/agent_response.html",
                         {
                             "request": request,
@@ -2418,6 +2463,7 @@ async def agent_chat(
                             },
                         )
                         return templates.TemplateResponse(
+                            request,
                             "partials/agent_response.html",
                             {
                                 "request": request,
@@ -2458,6 +2504,7 @@ async def agent_chat(
                         },
                     )
                     return templates.TemplateResponse(
+                        request,
                         "partials/agent_response.html",
                         {
                             "request": request,
@@ -2490,6 +2537,7 @@ async def agent_chat(
             metadata={"pending_action": tool_call.model_dump()},
         )
         return templates.TemplateResponse(
+            request,
             "partials/agent_response.html",
             {
                 "request": request,
@@ -2547,6 +2595,7 @@ async def agent_chat(
     )
 
     return templates.TemplateResponse(
+        request,
         "partials/agent_response.html",
         {
             "request": request,

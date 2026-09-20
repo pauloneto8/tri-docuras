@@ -41,6 +41,7 @@ async def login_page(request: Request, db: Session = Depends(get_db)):
     if request.query_params.get("pending") == "1":
         info = "Cadastro realizado. Aguarde a liberação do administrador para entrar."
     return templates.TemplateResponse(
+        request,
         "login.html",
         {
             "request": request,
@@ -64,6 +65,7 @@ async def login_submit(
     except HTTPException as exc:
         if exc.status_code == 429:
             return templates.TemplateResponse(
+                request,
                 "login.html",
                 {
                     "request": request,
@@ -77,6 +79,7 @@ async def login_submit(
     user = get_user_by_email(db, email)
     if not user or not verify_password(password, user.password_hash):
         return templates.TemplateResponse(
+            request,
             "login.html",
             {
                 "request": request,
@@ -90,6 +93,7 @@ async def login_submit(
     db.commit()
     if not user.is_active:
         return templates.TemplateResponse(
+            request,
             "login.html",
             {
                 "request": request,
@@ -116,6 +120,7 @@ async def register_page(request: Request, db: Session = Depends(get_db)):
         return redirect
     templates = get_templates(request)
     return templates.TemplateResponse(
+        request,
         "register.html", {"request": request, "error": None}
     )
 
@@ -136,6 +141,7 @@ async def register_submit(
     except HTTPException as exc:
         if exc.status_code == 429:
             return templates.TemplateResponse(
+                request,
                 "register.html",
                 {
                     "request": request,
@@ -146,12 +152,14 @@ async def register_submit(
         raise
     if len(password) < 6:
         return templates.TemplateResponse(
+            request,
             "register.html",
             {"request": request, "error": "A senha deve ter pelo menos 6 caracteres."},
             status_code=400,
         )
     if get_user_by_email(db, email):
         return templates.TemplateResponse(
+            request,
             "register.html",
             {"request": request, "error": "Este e-mail já está cadastrado."},
             status_code=400,
@@ -176,6 +184,7 @@ async def onboarding_page(
         return RedirectResponse(url="/", status_code=303)
     templates = get_templates(request)
     return templates.TemplateResponse(
+        request,
         "onboarding.html",
         {
             "request": request,
@@ -203,6 +212,7 @@ async def onboarding_submit(
         return RedirectResponse(url="/", status_code=303)
     if len(name.strip()) < 2:
         return templates.TemplateResponse(
+            request,
             "onboarding.html",
             {
                 "request": request,
@@ -219,6 +229,7 @@ async def onboarding_submit(
             balance_date = date.fromisoformat(opening_balance_date.strip())
         except ValueError:
             return templates.TemplateResponse(
+                request,
                 "onboarding.html",
                 {
                     "request": request,
@@ -239,6 +250,7 @@ async def onboarding_submit(
         )
     except ValueError as exc:
         return templates.TemplateResponse(
+            request,
             "onboarding.html",
             {
                 "request": request,
