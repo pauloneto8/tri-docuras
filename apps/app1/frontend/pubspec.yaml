@@ -24,3 +24,34 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Fontes empacotadas no app (self-host). Sem isso o google_fonts e o fallback
+  # de texto do engine baixam Poppins/Lora/Roboto/NotoSansSymbols de
+  # fonts.gstatic.com, que é bloqueado pelo CSP em nginx/ssl/app1.conf
+  # (font-src/connect-src 'self'). Todas sob SIL Open Font License 1.1.
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Poppins-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+    - family: Lora
+      fonts:
+        - asset: assets/fonts/Lora-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Lora-SemiBoldItalic.ttf
+          weight: 600
+          style: italic
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700
+    - family: Noto Sans Symbols
+      fonts:
+        - asset: assets/fonts/NotoSansSymbols-Regular.ttf
+          weight: 400
