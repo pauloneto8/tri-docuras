@@ -1,0 +1,66 @@
+name: Tri Doçuras (app1) — testes da API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/app1/api/**"
+      - ".github/workflows/app1-tests.yml"
+  pull_request:
+    paths:
+      - "apps/app1/api/**"
+      - ".github/workflows/app1-tests.yml"
+  workflow_dispatch: {}
+
+defaults:
+  run:
+    working-directory: apps/app1/api
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # A suíte é hermética: `Env.override`/`Env.reset` controlam as variáveis
+    # lidas por AdminAuth e MercadoPagoWebhookSignature. As duas variantes
+    # abaixo provam isso — se algum teste voltar a ler `Platform.environment`
+    # diretamente, a execução com o ambiente poluído quebra.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: env-limpo
+            admin_password: ""
+            admin_password_legacy: ""
+            mp_webhook_secret: ""
+            mp_use_test: "false"
+            store_whatsapp: ""
+          - variant: env-poluido
+            admin_password: ci-admin-pw
+            admin_password_legacy: ci-legacy-pw
+            mp_webhook_secret: ci-webhook-secret
+            mp_use_test: "true"
+            store_whatsapp: "5581999999999"
+
+    name: ${{ matrix.variant }}
+    env:
+      APP1_ADMIN_PASSWORD: ${{ matrix.admin_password }}
+      ADMIN_PASSWORD: ${{ matrix.admin_password_legacy }}
+      APP1_MP_WEBHOOK_SECRET: ${{ matrix.mp_webhook_secret }}
+      APP1_MP_USE_TEST: ${{ matrix.mp_use_test }}
+      APP1_DOMAIN: tridocuras.com.br
+      APP1_STORE_WHATSAPP: ${{ matrix.store_whatsapp }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Instalar dependências
+        run: dart pub get
+
+      - name: Rodar suite de testes
+        run: dart test

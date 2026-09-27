@@ -1,0 +1,40 @@
+name: Tri Doçuras (app1) — testes do Flutter
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/app1/frontend/**"
+      - ".github/workflows/app1-frontend-tests.yml"
+  pull_request:
+    paths:
+      - "apps/app1/frontend/**"
+      - ".github/workflows/app1-frontend-tests.yml"
+  workflow_dispatch: {}
+
+defaults:
+  run:
+    working-directory: apps/app1/frontend
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Instalar dependências
+        run: flutter pub get
+
+      - name: Analisar
+        run: flutter analyze --fatal-infos
+
+      - name: Rodar suite de testes
+        run: flutter test
