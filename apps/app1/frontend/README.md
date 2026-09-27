@@ -218,13 +218,14 @@ Pedidos persistidos na API; pagamento via webhook MP + polling; status operacion
 
 ### Pendente
 
-Notificação WhatsApp; fotos dos produtos no catálogo.
+PWA (service worker/offline); publicação na Play Store (AAB + ficha); app iOS.
 
 ## Testes
 
 ```bash
 cd /opt/hosting/apps/app1/frontend
-flutter test
+flutter analyze   # gate no CI: --fatal-infos
+flutter test      # 33 testes
 ```
 
 | Arquivo | Foco |
@@ -236,6 +237,7 @@ flutter test
 | `test/models/created_order_test.dart` | Parse da resposta (pedido + Pix) |
 | `test/models/order_tracking_test.dart` | Parse da timeline |
 | `test/favorites/favorites_controller_test.dart` | Toggle e remoção de favoritos |
+| `test/orders/order_history_controller_test.dart` | Histórico de pedidos persistido |
 | `test/widget_test.dart` | Smoke do app |
 
 ## Desenvolvimento

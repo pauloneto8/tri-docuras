@@ -126,9 +126,11 @@ Documentação: [apps/app1/README.md](apps/app1/README.md)
 Finanças pessoais multiusuário: contas, cartões, faturas, movimentos, orçamentos, importação OFX/CSV/PDF, assistente com wizards e confirmação de escritas.
 
 ```bash
-docker compose build app2 && docker compose up -d app2
-docker compose exec -T app2 python -m pytest -q
+docker compose build app1 app1-web && docker compose up -d app1 app1-web
 ```
+
+Testes da API: `docker run --rm -v ./apps/app1/api:/app -w /app dart:stable sh -c "dart pub get && dart test"` · Frontend: `flutter test` em `apps/app1/frontend`. CI: `.github/workflows/app1-tests.yml` e `app1-frontend-tests.yml`. Detalhes em [apps/app1/README.md](apps/app1/README.md#testes).
+
 
 Documentação: [apps/app2/README.md](apps/app2/README.md) · [AGENTS.md](apps/app2/AGENTS.md)
 

@@ -325,18 +325,37 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 
 ## Testes
 
+Suíte verde: **44 testes na API** e **33 no frontend**. As duas suítes são
+herméticas — não dependem de `.env` nem de variáveis do processo.
+
 ### API (`apps/app1/api`)
 
 ```bash
 docker run --rm -v /opt/hosting/apps/app1/api:/app -w /app dart:stable sh -c "dart pub get && dart test"
 ```
 
+Variáveis de ambiente que a API lê (`APP1_ADMIN_PASSWORD`, `APP1_MP_*`,
+`APP1_STORE_WHATSAPP`, …) são acessadas por `Env.get` (`api/lib/env.dart`).
+`Platform.environment` é imutável e não pode ser substituído, então os testes
+usam `Env.override({...})` / `Env.reset()` para controlar o ambiente — inclusive
+para simular "nada configurado" (`Env.override({})`).
+
+> Ao adicionar código que leia env, passe por `Env.get` e **não** por
+> `Platform.environment` direto: o CI roda a suíte duas vezes, com o ambiente
+> limpo e com todas as variáveis de app1 poluídas, justamente para detectar
+> teste que dependa do ambiente do processo.
+
 | Arquivo | Cobertura |
 |---------|-----------|
-| `test/mercado_pago_client_test.dart` | Status de pagamento MP |
+| `test/admin_auth_test.dart` | Sessão do painel: HMAC do token, expiração, adulteração, senha não configurada |
 | `test/admin_orders_test.dart` | Labels e transições de status |
 | `test/admin_products_test.dart` | Validação do CRUD de produtos |
+| `test/mercado_pago_client_test.dart` | Status de pagamento MP |
+| `test/mercado_pago_webhook_test.dart` | Assinatura do webhook (manifest, HMAC, opt-in da secret) |
+| `test/app_public_config_test.dart` | Config pública da loja e link `wa.me` |
 | `test/order_tracking_test.dart` | Timeline do cliente |
+| `test/product_images_test.dart` | Validação de upload de fotos |
+| `test/whatsapp_notify_test.dart` | Montagem das mensagens de WhatsApp |
 
 ### Frontend
 
@@ -349,7 +368,22 @@ docker run --rm -v /opt/hosting/apps/app1/api:/app -w /app dart:stable sh -c "da
 | `test/models/created_order_test.dart` | Parse da resposta (pedido + Pix) |
 | `test/models/order_tracking_test.dart` | Parse da timeline |
 | `test/favorites/favorites_controller_test.dart` | Toggle de favoritos |
+| `test/orders/order_history_controller_test.dart` | Histórico de pedidos no aparelho |
 | `test/widget_test.dart` | Smoke do app |
+
+### CI (GitHub Actions)
+
+| Workflow | Gate |
+|----------|------|
+| [`.github/workflows/app1-tests.yml`](../../.github/workflows/app1-tests.yml) | `dart test` na API, em 2 variantes de ambiente (limpo e poluído) |
+| [`.github/workflows/app1-frontend-tests.yml`](../../.github/workflows/app1-frontend-tests.yml) | `flutter analyze --fatal-infos` + `flutter test` |
+
+Rodam em push na `main` e em pull request, restritos aos caminhos do app1.
+
+> A API ainda não passa em `dart analyze`: o `dart_frog_lint` gera ~235 infos
+> de estilo (doc comments, limite de 80 colunas) pré-existentes. Por isso o
+> workflow da API usa `dart test` como gate, sem `dart analyze`. O frontend já
+> está limpo e analysis entra como gate.
 
 ## Mobile
 
