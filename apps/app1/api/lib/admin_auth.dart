@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:dart_frog/dart_frog.dart';
+import 'package:tri_docuras_api/env.dart';
 
 /// Sessão do painel `/admin`.
 ///
@@ -13,12 +14,8 @@ import 'package:dart_frog/dart_frog.dart';
 class AdminAuth {
   static const _sessionTtl = Duration(hours: 12);
 
-  static String? get password {
-    final value = Platform.environment['APP1_ADMIN_PASSWORD'] ??
-        Platform.environment['ADMIN_PASSWORD'];
-    if (value == null || value.trim().isEmpty) return null;
-    return value.trim();
-  }
+  static String? get password =>
+      Env.get('APP1_ADMIN_PASSWORD') ?? Env.get('ADMIN_PASSWORD');
 
   static bool get isConfigured => password != null;
 

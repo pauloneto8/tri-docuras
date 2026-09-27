@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:dart_frog/dart_frog.dart';
+import 'package:tri_docuras_api/env.dart';
 
 /// Validação de assinatura do webhook do Mercado Pago.
 ///
@@ -15,11 +15,7 @@ import 'package:dart_frog/dart_frog.dart';
 /// pedido. Configure a secret no painel do Mercado Pago e em `.env` para
 /// ativar a checagem.
 class MercadoPagoWebhookSignature {
-  static String? get _secret {
-    final value = Platform.environment['APP1_MP_WEBHOOK_SECRET'];
-    if (value == null || value.trim().isEmpty) return null;
-    return value.trim();
-  }
+  static String? get _secret => Env.get('APP1_MP_WEBHOOK_SECRET');
 
   static bool get isConfigured => _secret != null;
 

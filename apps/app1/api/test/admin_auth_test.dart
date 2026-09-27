@@ -1,16 +1,20 @@
 import 'package:test/test.dart';
 import 'package:tri_docuras_api/admin_auth.dart';
+import 'package:tri_docuras_api/env.dart';
 
-// Requer APP1_ADMIN_PASSWORD definida no ambiente do processo de teste
-// (ex.: `docker run -e APP1_ADMIN_PASSWORD=test-pw ... dart test`).
+const _password = 'test-pw';
+
 void main() {
   group('AdminAuth (com senha configurada)', () {
+    setUp(() => Env.override({'APP1_ADMIN_PASSWORD': _password}));
+    tearDown(Env.reset);
+
     test('isConfigured é true quando a env var está setada', () {
       expect(AdminAuth.isConfigured, isTrue);
     });
 
     test('verifyPassword aceita a senha correta e rejeita a errada', () {
-      expect(AdminAuth.verifyPassword('test-pw'), isTrue);
+      expect(AdminAuth.verifyPassword(_password), isTrue);
       expect(AdminAuth.verifyPassword('test-pw-errada'), isFalse);
       expect(AdminAuth.verifyPassword(''), isFalse);
     });
@@ -23,7 +27,7 @@ void main() {
 
     test('token não é mais reversível para a senha em claro (não é base64 dela)', () {
       final token = AdminAuth.issueToken();
-      expect(token, isNot(contains('test-pw')));
+      expect(token, isNot(contains(_password)));
     });
 
     test('assinatura adulterada é rejeitada', () {
@@ -45,11 +49,10 @@ void main() {
     });
 
     test('token expirado é rejeitado mesmo com assinatura válida', () {
-      // Fabrica um token expirado manualmente reaproveitando a lógica pública
-      // não é possível sem acesso ao _sign privado; então validamos indiretamente:
-      // um token com timestamp no passado e assinatura (recalculada via outro
-      // issueToken + substituição do campo de expiração) deve falhar por expiração
-      // OU por assinatura — em ambos os casos, o resultado esperado é false.
+      // A assinatura é HMAC do campo de expiração: para obtain-la com um
+      // timestamp no passado é preciso reaproveitar a assinatura de um token
+      // válido e trocar o timestamp — o que também invalida a assinatura.
+      // Nos dois caminhos (expiração ou assinatura) o esperado é `false`.
       final pastEpoch = DateTime.now()
           .toUtc()
           .subtract(const Duration(hours: 1))
@@ -66,6 +69,54 @@ void main() {
       expect(AdminAuth.verifyToken('123.'), isFalse);
       expect(AdminAuth.verifyToken('.assinatura'), isFalse);
       expect(AdminAuth.verifyToken(null), isFalse);
+    });
+
+    test('token emitido com outra senha não é aceito', () {
+      final token = AdminAuth.issueToken();
+      Env.override({'APP1_ADMIN_PASSWORD': 'outra-senha'});
+      expect(AdminAuth.verifyToken(token), isFalse);
+    });
+  });
+
+  group('AdminAuth (senha em ADMIN_PASSWORD, legado)', () {
+    setUp(() => Env.override({'ADMIN_PASSWORD': '  legado  '}));
+    tearDown(Env.reset);
+
+    test('fallback é lido e normalizado com trim', () {
+      expect(AdminAuth.password, 'legado');
+      expect(AdminAuth.verifyPassword('legado'), isTrue);
+    });
+  });
+
+  group('AdminAuth (sem senha configurada)', () {
+    setUp(() => Env.override({}));
+    tearDown(Env.reset);
+
+    test('isConfigured é false', () {
+      expect(AdminAuth.isConfigured, isFalse);
+    });
+
+    test('verifyPassword rejeita qualquer candidato', () {
+      expect(AdminAuth.verifyPassword(''), isFalse);
+      expect(AdminAuth.verifyPassword('qualquer'), isFalse);
+    });
+
+    test('verifyToken rejeita qualquer token', () {
+      expect(AdminAuth.verifyToken('1.abc'), isFalse);
+    });
+
+    test('issueToken lança StateError', () {
+      expect(AdminAuth.issueToken, throwsStateError);
+    });
+  });
+
+  group('AdminAuth (senha só com espaços)', () {
+    setUp(() => Env.override({'APP1_ADMIN_PASSWORD': '   '}));
+    tearDown(Env.reset);
+
+    test('valor em branco é tratado como não configurado', () {
+      expect(AdminAuth.isConfigured, isFalse);
+      expect(AdminAuth.verifyPassword('   '), isFalse);
     });
   });
 }
