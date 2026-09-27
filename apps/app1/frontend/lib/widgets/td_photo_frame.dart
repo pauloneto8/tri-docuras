@@ -31,7 +31,7 @@ class TdPhotoFrame extends StatelessWidget {
                     fit: BoxFit.cover,
                     width: double.infinity,
                     height: double.infinity,
-                    errorBuilder: (_, __, ___) => const _PhotoPlaceholder(),
+                    errorBuilder: (_, _, _) => const _PhotoPlaceholder(),
                   )
                 : const _PhotoPlaceholder(),
           ),

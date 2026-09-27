@@ -140,6 +140,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         draft: draft,
         items: cart.items,
       );
+      if (!mounted) return;
       await OrderHistoryScope.of(context).remember(
         id: order.id,
         total: order.total,
