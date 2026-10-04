@@ -19,6 +19,14 @@ MAX_BACKOFF_SECONDS = 30.0
 RETRY_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
 
 
+class GroqRateLimitError(httpx.HTTPStatusError):
+    """429 do Groq que persistiu depois de todas as tentativas.
+
+    Separado dos demais erros para o chamador cair no fallback legado sem
+    registrar traceback: rate limit é esperado, não é falha do agente.
+    """
+
+
 async def groq_configured() -> bool:
     return bool(settings.groq_api_key.strip())
 
@@ -62,6 +70,13 @@ async def _post_json(client: httpx.AsyncClient, payload: dict) -> dict:
         )
         await asyncio.sleep(delay)
     assert last_error is not None
+    assert last_error.response is not None
+    if last_error.response.status_code == 429:
+        raise GroqRateLimitError(
+            f"{last_error.response.status_code} do Groq após {MAX_ATTEMPTS} tentativas",
+            request=last_error.request,
+            response=last_error.response,
+        ) from last_error
     raise last_error
 
 

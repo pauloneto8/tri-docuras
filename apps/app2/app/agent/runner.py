@@ -4,6 +4,7 @@ import re
 
 from app.config import settings
 from app.agent.context import build_intent_context
+from app.agent.groq import MAX_ATTEMPTS, GroqRateLimitError
 from app.agent.tool_parse import DEFAULT_UNSUPPORTED_MESSAGE
 from app.agent.llm import call_claude_intent_llm, call_intent_llm
 from app.agent.orchestrator import (
@@ -138,6 +139,15 @@ async def _process_message_v2(
             channel=channel,
             history=history,
         )
+    except GroqRateLimitError as exc:
+        # Rate limit esgotado não é falha do agente: cai no legado sem traceback.
+        logger.warning(
+            "Groq em rate limit (status=%s, tentativas=%s); seguindo com o fluxo legado (user_id=%s)",
+            exc.response.status_code if exc.response is not None else 429,
+            MAX_ATTEMPTS,
+            user_id,
+        )
+        return None
     except Exception:  # noqa: BLE001 — falha do v2 cai no fluxo legado
         logger.exception("Falha no agente v2 (user_id=%s)", user_id)
         return None
