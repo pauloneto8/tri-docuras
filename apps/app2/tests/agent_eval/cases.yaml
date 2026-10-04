@@ -1,0 +1,440 @@
+# Casos de avaliação do agente AssistFin (legado vs v2)
+# Cada caso: mensagem + ferramentas/argumentos esperados.
+# `expected_tools` compara a ferramenta escolhida; `args` compara apenas as
+# chaves listadas (subconjunto), tolerando defaults do domínio.
+# `expected_reads` (opcional) exige que uma leitura específica tenha ocorrido
+# antes de uma escrita (ex.: search_transactions antes de update/delete).
+# `answer` (opcional) indica pergunta analítica: não exige tool exata, só que
+# a resposta final cite somente valores vindos de ferramentas.
+
+cases:
+  # --- Lançamento simples -------------------------------------------------
+  - id: simples_expense
+    message: "gastei 35,50 no mercado ontem"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "35.50", description: "mercado", status: "actual"}
+  - id: simples_expense_hoje
+    message: "paguei 12 reais de café hoje"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "12", status: "actual"}
+  - id: simples_income
+    message: "recebi 3000 de salário"
+    expected_tools:
+      - tool: "register_income"
+        args: {amount: "3000", description: "salário"}
+  - id: simples_income_freela
+    message: "entrou 850 de freela no pix"
+    expected_tools:
+      - tool: "register_income"
+        args: {amount: "850"}
+  - id: previsto_despesa
+    message: "vou gastar 200 de luz mês que vem"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "200", status: "planned"}
+  - id: simples_expense_parcela_unica
+    message: "comprei um livro por 49,90"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "49.90"}
+  - id: expense_com_categoria
+    message: "gastei 80 de gasolina hoje"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "80"}
+  - id: receita_aluguel
+    message: "recebi 1200 de aluguel"
+    expected_tools:
+      - tool: "register_income"
+        args: {amount: "1200"}
+  - id: despesa_pix
+    message: "mandei 40 pix pro pedro"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "40"}
+  - id: despesa_farmacia
+    message: "gastei 67,30 na farmácia"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "67.30"}
+
+  # --- Cartão de crédito --------------------------------------------------
+  - id: cartao_simples
+    message: "gastei 45,90 no cartão Nubank com mercado"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "45.90", card_name: "Nubank", status: "actual"}
+  - id: cartao_posto
+    message: "abasteci 210 no posto no cartão Itaú"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "210", card_name: "Itaú"}
+  - id: cartao_previsto
+    message: "vou comprar um tênis de 350 no cartão Nubank"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "350", card_name: "Nubank", status: "planned"}
+  - id: cartao_ifood
+    message: "pedi ifood 58,90 no cartão"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "58.90"}
+  - id: cartao_assinatura
+    message: "assinatura da netflix 39,90 no cartão nubank todo mês"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "39.90", is_recurring: true}
+  - id: cartao_estorno
+    message: "estornaram 120 do mercado no cartão Nubank"
+    expected_tools:
+      - tool: "register_income"
+        args: {amount: "120"}
+
+  # --- Parcelado ----------------------------------------------------------
+  - id: parcelado_simples
+    message: "comprei uma geladeira de 2400 em 12x no cartão Nubank"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "2400", installment_count: 12, card_name: "Nubank"}
+  - id: parcelado_5x
+    message: "passei 500 em 5 vezes sem juros no cartão"
+    expected_tools:
+      - tool: "register_expense"
+        args: {installment_count: 5}
+  - id: parcelado_conta
+    message: "parcelei 900 em 3x no boleto"
+    expected_tools:
+      - tool: "register_expense"
+        args: {installment_count: 3}
+  - id: parcelado_parcela_atual
+    message: "comprei 600 em 6x, já na 3ª parcela, no cartão Nubank"
+    expected_tools:
+      - tool: "register_expense"
+        args: {installment_count: 6}
+  - id: parcelado_por_parcela
+    message: "comprei um celular em 10x de 299 no cartão Itaú"
+    expected_tools:
+      - tool: "register_expense"
+        args: {installment_count: 10}
+  - id: parcelado_previsto
+    message: "vou parcelar 1200 em 4x no cartão Nubank"
+    expected_tools:
+      - tool: "register_expense"
+        args: {installment_count: 4}
+
+  # --- Lançamento fixo ----------------------------------------------------
+  - id: fixo_aluguel
+    message: "meu aluguel é 1800 todo mês, pago dia 5"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "1800", is_recurring: true}
+  - id: fixo_salario
+    message: "recebo 5000 de salário todo mês no dia 10"
+    expected_tools:
+      - tool: "register_income"
+        args: {amount: "5000", is_recurring: true}
+  - id: fixo_internet
+    message: "internet 119,90 toda mês"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "119.90", is_recurring: true}
+  - id: fixo_academia
+    message: "academia 89,90 mensal no cartão"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "89.90", is_recurring: true}
+  - id: fixo_seguro
+    message: "seguro do carro 230 todo mês"
+    expected_tools:
+      - tool: "register_expense"
+        args: {is_recurring: true}
+  - id: fixo_escola
+    message: "escola da filha 750 todo dia 15"
+    expected_tools:
+      - tool: "register_expense"
+        args: {is_recurring: true}
+
+  # --- Vários lançamentos numa frase -------------------------------------
+  - id: multi_dois_gastos
+    message: "gastei 35 no ifood e 120 no mercado ontem"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "35"}
+      - tool: "register_expense"
+        args: {amount: "120"}
+  - id: multi_tres
+    message: "paguei 20 de uber, 15 de café e 8 de água hoje"
+    expected_tools:
+      - tool: "register_expense"
+      - tool: "register_expense"
+      - tool: "register_expense"
+  - id: multi_receita_despesa
+    message: "recebi 500 do freela e gastei 80 no almoço"
+    expected_tools:
+      - tool: "register_income"
+        args: {amount: "500"}
+      - tool: "register_expense"
+        args: {amount: "80"}
+  - id: multi_cartao_conta
+    message: "paguei 50 no cartão Nubank e 30 no pix"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "50"}
+      - tool: "register_expense"
+        args: {amount: "30"}
+  - id: multi_previstos
+    message: "mês que vem vou gastar 100 de água e 250 de luz"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "100"}
+      - tool: "register_expense"
+        args: {amount: "250"}
+
+  # --- Edição -------------------------------------------------------------
+  - id: editar_valor_descricao
+    message: "muda o mercado de ontem para 110"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "update_transaction"
+        args: {amount: "110"}
+  - id: editar_descricao
+    message: "corrige a descrição do lançamento de 45,90 para farmácia"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "update_transaction"
+        args: {description: "farmácia"}
+  - id: editar_conta
+    message: "aquele gasto de 80 foi na conta Itaú, não na Nubank"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "update_transaction"
+  - id: editar_categoria
+    message: "coloca o lançamento do posto na categoria transporte"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "update_transaction"
+  - id: editar_data
+    message: "o ifood não foi ontem, foi anteontem"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "update_transaction"
+  - id: editar_parcela_esta
+    message: "muda só a parcela 3/12 da geladeira para 210"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "update_transaction"
+        args: {installment_scope: "this"}
+  - id: editar_parcela_subsequentes
+    message: "muda a parcela desse mês da geladeira para 210 e as próximas também"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "update_transaction"
+        args: {installment_scope: "subsequent"}
+  - id: editar_tipo
+    message: "esse lançamento de 200 era receita, não despesa"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "update_transaction"
+        args: {type: "income"}
+
+  # --- Exclusão -----------------------------------------------------------
+  - id: excluir_ifood
+    message: "apaga o ifood"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "delete_transaction"
+  - id: excluir_por_valor
+    message: "exclui o lançamento de 45,90"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "delete_transaction"
+  - id: excluir_planejado
+    message: "cancela aquele gasto previsto de academia"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "delete_transaction"
+  - id: excluir_ambiguo
+    message: "apaga o mercado"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "delete_transaction"
+
+  # --- Transferência ------------------------------------------------------
+  - id: transferencia_simples
+    message: "transfere 200 da Nubank para o Itaú"
+    expected_tools:
+      - tool: "register_transfer"
+        args: {amount: "200", from_account_name: "Nubank", to_account_name: "Itaú"}
+  - id: transferencia_poupanca
+    message: "manda 500 pra poupança"
+    expected_tools:
+      - tool: "register_transfer"
+        args: {amount: "500"}
+  - id: transferencia_invertida
+    message: "na verdade a transferência de 200 foi do Itaú pra Nubank"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "update_transfer"
+        args: {amount: "200"}
+  - id: transferencia_corrige_valor
+    message: "aquela transferência foi 250, não 200"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "update_transfer"
+        args: {amount: "250"}
+  - id: transferencia_nao_e_despesa
+    message: "transferi 1000 entre minhas contas"
+    expected_tools:
+      - tool: "register_transfer"
+        args: {amount: "1000"}
+
+  # --- Pagar fatura -------------------------------------------------------
+  - id: pagar_fatura
+    message: "paga a fatura do cartão Nubank"
+    expected_tools:
+      - tool: "pay_invoice"
+        args: {card_name: "Nubank"}
+  - id: pagar_fatura_valor
+    message: "paguei a fatura do Itaú de 1200"
+    expected_tools:
+      - tool: "pay_invoice"
+        args: {card_name: "Itaú"}
+  - id: pagar_fatura_parcial
+    message: "paguei 300 da fatura do Nubank"
+    expected_tools:
+      - tool: "pay_invoice"
+        args: {card_name: "Nubank"}
+  - id: fatura_valor
+    message: "quanto tá a fatura do Nubank?"
+    expected_tools:
+      - tool: "list_invoices"
+        args: {account_name: "Nubank"}
+
+  # --- Realizar previsto --------------------------------------------------
+  - id: realizar_previsto
+    message: "paguei o previsto de luz de 200"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "realize_planned"
+        args: {amount: "200"}
+  - id: realizar_previsto_descricao
+    message: "a academia prevista já foi cobrada"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "realize_planned"
+  - id: realizar_previsto_conta
+    message: "paguei o aluguel previsto pela conta Itaú"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "realize_planned"
+  - id: realizar_previsto_hoje
+    message: "liquida o previsto de internet hoje"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "realize_planned"
+
+  # --- Perguntas analíticas ----------------------------------------------
+  - id: resumo_mes
+    message: "resumo do mês"
+    expected_reads: ["get_summary"]
+  - id: quanto_gastei_mes
+    message: "quanto eu gastei esse mês?"
+    expected_reads: ["get_summary"]
+  - id: saldo_contas
+    message: "quanto tenho na conta?"
+    expected_reads: ["get_balances"]
+  - id: comparar_meses
+    message: "como estou esse mês comparado ao anterior?"
+    expected_reads: ["compare_periods"]
+  - id: gastos_categoria
+    message: "onde mais gastei esse mês?"
+    expected_reads: ["spending_breakdown"]
+  - id: projecao_fim_mes
+    message: "quanto posso gastar até o fim do mês?"
+    expected_reads: ["get_cashflow_projection"]
+  - id: contas_a_vencer
+    message: "o que tenho pra pagar essa semana?"
+    expected_reads: ["list_upcoming_bills"]
+  - id: fixos_e_parcelas
+    message: "quais são meus gastos fixos e parcelas ativas?"
+    expected_reads: ["list_recurring_and_installments"]
+  - id: detalhe_fatura
+    message: "detalha a fatura do Nubank desse mês"
+    expected_reads: ["get_invoice_detail"]
+  - id: orcamento
+    message: "como estão meus orçamentos?"
+    expected_reads: ["get_budget_status"]
+  - id: previsto_versus_real
+    message: "o que eu previ gastar e ainda não gastei?"
+    expected_reads: ["list_transactions"]
+  - id: gasto_por_conta
+    message: "quanto gastei em cada conta esse mês?"
+    expected_reads: ["spending_breakdown"]
+
+  # --- Gírias e erros de digitação ---------------------------------------
+  - id: typo_ifood
+    message: "gastei 35 no ifod"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "35"}
+  - id: typo_mercadu
+    message: "gastei 80 no mercadu"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "80"}
+  - id: giria_gastei_balada
+    message: "torrei 150 na balada ontem"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "150"}
+  - id: giria_papei
+    message: "papei 60 no almoço"
+    expected_tools:
+      - tool: "register_expense"
+        args: {amount: "60"}
+  - id: typo_buscar
+    message: "muda o gaste de mercado de ontem pra 110"
+    expected_reads: ["search_transactions"]
+    expected_tools:
+      - tool: "update_transaction"
+        args: {amount: "110"}
+  - id: giria_nao_entendi
+    message: "aaaaaaaaa"
+    expected_tools: []
+    answer: true
+
+  # --- Contas, cartões, categorias, orçamento -----------------------------
+  - id: criar_conta
+    message: "cria uma conta no banco Inter"
+    expected_tools:
+      - tool: "create_account"
+        args: {name: "Inter"}
+  - id: criar_cartao
+    message: "cadastra um cartão Visa do Nubank, fecha dia 5 vence dia 12"
+    expected_tools:
+      - tool: "create_card"
+        args: {name: "Nubank"}
+  - id: criar_categoria
+    message: "cria a categoria pets"
+    expected_tools:
+      - tool: "create_category"
+        args: {name: "pets"}
+  - id: atualizar_categoria
+    message: "renomeia a categoria mercado para supermercado"
+    expected_tools:
+      - tool: "update_category"
+  - id: excluir_categoria
+    message: "apaga a categoria pets"
+    expected_tools:
+      - tool: "delete_category"
+        args: {name: "pets"}
+  - id: listar_contas
+    message: "quais contas eu tenho?"
+    expected_tools:
+      - tool: "list_accounts"
+  - id: listar_categorias
+    message: "me mostra minhas categorias"
+    expected_tools:
+      - tool: "list_categories"

@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     enable_ai_insights: bool = False
     enable_ai_nlu_fallback: bool = False
     enable_ai_orchestrator: bool = False
+    enable_agent_v2: bool = False
+    agent_v2_users: str = ""
     port: int = 8000
     secret_key: str = _INSECURE_SECRET
     allow_registration: bool = True
@@ -26,6 +28,12 @@ class Settings(BaseSettings):
     debug: bool = False
     backup_dir: str = "/app/data/backups"
     backup_keep: int = 20
+    telegram_bot_token: str = ""
+    telegram_webhook_secret: str = ""
+    whatsapp_access_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_verify_token: str = ""
+    whatsapp_app_secret: str = ""
 
     @field_validator("secret_key")
     @classmethod
@@ -43,6 +51,19 @@ class Settings(BaseSettings):
     @property
     def trusted_host_list(self) -> list[str]:
         return [host.strip() for host in self.trusted_hosts.split(",") if host.strip()]
+
+    @property
+    def agent_v2_user_set(self) -> set[int]:
+        ids: set[int] = set()
+        for part in (self.agent_v2_users or "").split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                ids.add(int(part))
+            except ValueError:
+                continue
+        return ids
 
 
 settings = Settings()

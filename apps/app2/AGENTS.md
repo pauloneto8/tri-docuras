@@ -141,7 +141,8 @@ Previstos liquidados **não** listados (evita duplicata). Pares previsto/realiza
 
 - `assistfin-implementation` — deploy, testes, convenções
 - `assistfin-finance-domain` — saldos, períodos, transferências
-- `assistfin-ai-agent` — runner, LLM, ferramentas, visual do chat
+- `assistfin-ai-agent` — runner, LLM, ferramentas, visual do chat (legado)
+- `assistfin-agent-v2` — loop de ferramentas no Groq, toolkit, confirmação em lote, canais, eval
 - `assistfin-installments` — parcelas (total vs parcela, índice, datas)
 - `assistfin-onboarding` — primeira conta
 - `assistfin-agent-tests` — pytest do agente
@@ -151,7 +152,7 @@ Previstos liquidados **não** listados (evita duplicata). Pares previsto/realiza
 
 ## Planos em `.cursor/plans/`
 
-Já implementados (não reexecutar): [chat-visual-completo.md](.cursor/plans/chat-visual-completo.md), [valor-total-ou-parcela.md](.cursor/plans/valor-total-ou-parcela.md). Sem briefing pendente.
+Já implementados (não reexecutar): [chat-visual-completo.md](.cursor/plans/chat-visual-completo.md), [valor-total-ou-parcela.md](.cursor/plans/valor-total-ou-parcela.md), [agente-autonomo-v2.md](.cursor/plans/agente-autonomo-v2.md) — agente autônomo com loop de ferramentas no Groq (flag `ENABLE_AGENT_V2`), confirmação em lote, Telegram/WhatsApp; ver skill `assistfin-agent-v2`.
 
 ## Não editar
 

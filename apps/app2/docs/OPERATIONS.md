@@ -32,15 +32,61 @@ docker compose exec -T app2 alembic revision -m "descricao" --autogenerate
 
 ## Insight financeiro proativo (opcional, desligado por padrão)
 
-Requer `APP2_ANTHROPIC_API_KEY` e `APP2_ENABLE_AI_INSIGHTS=true` no `.env` do
-host, depois recriar o serviço (`docker compose up -d app2`) — sem isso o
-comando abaixo não faz nada. Ver `docs/ARCHITECTURE.md` §Inteligência
-proativa e `.cursor/plans/agente-inteligencia-proativa.md`.
+Requer `APP2_GROQ_API_KEY` (já usada pelo agente) e
+`APP2_ENABLE_AI_INSIGHTS=true` no `.env` do host, depois recriar o serviço
+(`docker compose up -d app2`) — sem isso o comando abaixo não faz nada. Ver
+`docs/ARCHITECTURE.md` §Inteligência proativa.
 
 Gerar/atualizar o insight do mês de todos os usuários ativos:
 
 ```bash
 docker compose exec -T app2 python -m app.scripts.generate_insights
+```
+
+## Agente autônomo v2 (loop de ferramentas)
+
+Ligado por `APP2_ENABLE_AGENT_V2=true` + `APP2_AGENT_V2_USERS=<ids>` (lista
+separada por vírgula; só esses usuários usam o v2, o restante segue no legado).
+Sem isso, tudo roda no motor antigo. Ver `docs/ARCHITECTURE.md` §Agente
+autônomo v2 e a skill `.cursor/skills/assistfin-agent-v2/SKILL.md`.
+
+Avaliação contra Groq real (não roda no cron):
+
+```bash
+docker compose exec -T app2 python -m app.scripts.agent_eval          # v2 vs legado
+docker compose exec -T app2 python -m app.scripts.agent_eval --dry-run # só valida o YAML
+```
+
+### Telegram
+
+1. Crie um bot no @BotFather e copie o token.
+2. No `.env` do host: `APP2_TELEGRAM_BOT_TOKEN=<token>` e
+   `APP2_TELEGRAM_WEBHOOK_SECRET=<string aleatória>`; `docker compose up -d app2`.
+3. Registre o webhook (uma vez):
+   ```bash
+   docker compose exec -T app2 python -m app.scripts.set_telegram_webhook
+   ```
+   Confira com `... set_telegram_webhook --info` (ou `--delete` para remover).
+4. O usuário abre `/channels` no AssistFin, copia o código e manda
+   `/vincular <código>` para o bot. Depois é só conversar (texto ou áudio).
+
+### WhatsApp (Meta Cloud API)
+
+1. No app da Meta, obtenha `APP2_WHATSAPP_ACCESS_TOKEN`,
+   `APP2_WHATSAPP_PHONE_NUMBER_ID`, `APP2_WHATSAPP_VERIFY_TOKEN` (qualquer
+   string, usada no handshake) e `APP2_WHATSAPP_APP_SECRET`; recrie o serviço.
+2. Configure a URL do webhook na Meta: `https://assistfin.com.br/whatsapp/webhook`
+   com o mesmo verify token.
+3. Mesmo fluxo de vínculo em `/channels`.
+
+### Resumo proativo diário (cron)
+
+`app/services/proactive.py` monta o texto em Python (contas a vencer em 3 dias,
+previstos atrasados, orçamento > 80%, faturas fechando) e
+`app/scripts/notify_channels.py` envia pelos vínculos. Agendar 1x/dia:
+
+```
+0 6 * * * cd /opt/hosting && docker compose exec -T app2 python -m app.scripts.notify_channels >> /var/log/assistfin-notify.log 2>&1
 ```
 
 ## Fallback de NLU do agente via Claude (opcional, desligado por padrão)

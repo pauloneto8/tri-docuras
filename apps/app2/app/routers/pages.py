@@ -3,12 +3,14 @@ from datetime import date
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.agent.runner import process_message
 from app.auth import read_scope_id, require_root, require_user
 from app.db import get_db
-from app.models import Account, Category, CreditCard, User
+from app.models import Account, Category, CreditCard, User, UserChannelLink
 from app.security.csrf import ensure_csrf_token, validate_csrf_token
 from app.schemas import (
     BudgetCreate,
@@ -1659,6 +1661,12 @@ async def update_transaction_form(
             ),
             status_code=400,
         )
+    except IntegrityError:
+        db.rollback()
+        return _flash_and_redirect_transactions(
+            request,
+            error="Não foi possível salvar: já existe um lançamento com essa data.",
+        )
 
     return _flash_and_redirect_transactions(request, success=success)
 
@@ -2578,6 +2586,8 @@ async def agent_chat(
         metadata["pending_action"] = result.pending_action
     if result.needs_confirmation:
         metadata["needs_confirmation"] = True
+    if result.source == "agent-v2" and result.data:
+        metadata["agent_v2"] = result.data
     if get_wizard(request.session):
         metadata["wizard_active"] = True
     if get_transaction_wizard(request.session):
@@ -2608,3 +2618,45 @@ async def agent_chat(
             "refresh_page": False,
         },
     )
+
+
+@router.get("/channels", response_class=HTMLResponse)
+async def channels_page(
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    from app.services import channels as channels_service
+
+    telegram_code = channels_service.create_link_code(db, user.id, "telegram")
+    whatsapp_code = channels_service.create_link_code(db, user.id, "whatsapp")
+    telegram_link = db.scalar(
+        select(UserChannelLink).where(
+            UserChannelLink.user_id == user.id, UserChannelLink.channel == "telegram"
+        )
+    )
+    whatsapp_link = db.scalar(
+        select(UserChannelLink).where(
+            UserChannelLink.user_id == user.id, UserChannelLink.channel == "whatsapp"
+        )
+    )
+
+    def _status(link):
+        if link and link.external_user_id:
+            return "vinculado"
+        return "não vinculado"
+
+    html = f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<title>Conectar canais — AssistFin</title></head><body>
+<h1>Conectar canais</h1>
+<h2>Telegram — {_status(telegram_link)}</h2>
+<p>Abra o bot do AssistFin no Telegram e envie:</p>
+<p><code>/vincular {telegram_code}</code></p>
+<p>O código expira em 10 minutos.</p>
+<h2>WhatsApp — {_status(whatsapp_link)}</h2>
+<p>Envie para o número do AssistFin:</p>
+<p><code>vincular {whatsapp_code}</code></p>
+<p>O código expira em 10 minutos.</p>
+<p><a href="/agent">Voltar ao chat</a></p>
+</body></html>"""
+    return HTMLResponse(html)

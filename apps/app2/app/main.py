@@ -10,12 +10,21 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.chat_format import chat_md
 from app.config import settings
-from app.routers import api, auth, pages
+from app.routers import api, auth, pages, telegram, whatsapp
 from app.security.csrf import ensure_csrf_token
 from app.timezone import to_local_datetime
 
 PUBLIC_PATHS = {"/login", "/register", "/api/health"}
 ONBOARDING_EXEMPT = {"/onboarding", "/logout"}
+WEBHOOK_PREFIXES = ("/telegram/webhook", "/whatsapp/webhook")
+
+
+def _is_public_path(path: str) -> bool:
+    return (
+        path.startswith("/static")
+        or path in PUBLIC_PATHS
+        or path.startswith(WEBHOOK_PREFIXES)
+    )
 
 SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
@@ -81,7 +90,7 @@ async def security_headers_middleware(request: Request, call_next):
 @app.middleware("http")
 async def onboarding_redirect_middleware(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/static") or path in PUBLIC_PATHS or path in ONBOARDING_EXEMPT:
+    if _is_public_path(path) or path in ONBOARDING_EXEMPT:
         return await call_next(request)
     if request.session.get("user_id") and not request.session.get("onboarding_completed"):
         if path.startswith("/api/"):
@@ -96,7 +105,7 @@ async def onboarding_redirect_middleware(request: Request, call_next):
 @app.middleware("http")
 async def auth_redirect_middleware(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/static") or path in PUBLIC_PATHS:
+    if _is_public_path(path):
         return await call_next(request)
     if request.session.get("user_id"):
         return await call_next(request)
@@ -120,3 +129,5 @@ if settings.trusted_host_list:
 app.include_router(auth.router)
 app.include_router(pages.router)
 app.include_router(api.router)
+app.include_router(telegram.router)
+app.include_router(whatsapp.router)

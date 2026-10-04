@@ -1,6 +1,8 @@
 from pydantic import ValidationError
+import logging
 import re
 
+from app.config import settings
 from app.agent.context import build_intent_context
 from app.agent.tool_parse import DEFAULT_UNSUPPORTED_MESSAGE
 from app.agent.llm import call_claude_intent_llm, call_intent_llm
@@ -72,6 +74,95 @@ from app.services.tools import (
     format_tool_result,
     try_rule_based_parse,
 )
+
+logger = logging.getLogger(__name__)
+
+_AFFIRM_RE = re.compile(
+    r"^\s*(sim|s|ok|okay|okey|confirmo|confirmar|confirmado|pode|pode sim|"
+    r"isso|isso mesmo|isso a[ií]|beleza|blz|manda|manda ver|vai|fa[çc]a|"
+    r"claro|com certeza)\b",
+    re.IGNORECASE,
+)
+_NEG_RE = re.compile(
+    r"^\s*(n[ãa]o|n|cancela|cancelar|cancelado|deixa|deixa pra l[áa]|"
+    r"n[ãa]o quero|para|pare|esquece)\b",
+    re.IGNORECASE,
+)
+
+
+def _agent_v2_enabled(user_id: int) -> bool:
+    return settings.enable_agent_v2 and user_id in settings.agent_v2_user_set
+
+
+async def _process_message_v2(
+    db,
+    user_id: int,
+    message: str,
+    session: dict,
+    *,
+    history: list[dict] | None = None,
+    channel: str = "web",
+) -> AgentResponse | None:
+    from app.agent import brain as agent_brain
+    from app.agent.confirm import cancel_plan, confirm_plan, is_expired
+
+    plan = session.get("agent_v2_plan")
+    if plan:
+        if is_expired(plan):
+            session.pop("agent_v2_plan", None)
+        elif _AFFIRM_RE.match(message):
+            outcome = confirm_plan(db, user_id, plan)
+            session.pop("agent_v2_plan", None)
+            messages = [
+                item["message"] for item in outcome.get("results", []) if item.get("ok")
+            ]
+            if not messages:
+                messages = ["Não foi possível confirmar as ações pendentes."]
+            return AgentResponse(
+                message="\n".join(messages), source="agent-v2", clear_wizard=True
+            )
+        elif _NEG_RE.match(message):
+            cancel_plan(db, user_id, plan)
+            session.pop("agent_v2_plan", None)
+            return AgentResponse(
+                message="Tudo bem, cancelei as ações pendentes.", source="agent-v2"
+            )
+        else:
+            session.pop("agent_v2_plan", None)
+
+    try:
+        result = await agent_brain.run(
+            db=db,
+            user_id=user_id,
+            message=message,
+            channel=channel,
+            history=history,
+        )
+    except Exception:  # noqa: BLE001 — falha do v2 cai no fluxo legado
+        logger.exception("Falha no agente v2 (user_id=%s)", user_id)
+        return None
+
+    if result.needs_confirmation:
+        session["agent_v2_plan"] = result.pending_plan
+        text = (result.response or "").strip()
+        suffix = "Responda *sim* para confirmar ou *não* para cancelar."
+        message_out = f"{text}\n\n{suffix}" if text else suffix
+        return AgentResponse(
+            message=message_out,
+            needs_confirmation=True,
+            source="agent-v2",
+            data={"metrics": result.metrics, "tool_calls": result.tool_calls},
+        )
+
+    text = (result.response or "").strip()
+    if not text:
+        return None
+    return AgentResponse(
+        message=text,
+        source="agent-v2",
+        data={"metrics": result.metrics, "tool_calls": result.tool_calls},
+    )
+
 
 WRITE_TOOLS = {
     "register_expense",
@@ -239,8 +330,14 @@ async def process_message(
     *,
     session: dict | None = None,
     confirmed: bool = False,
+    history: list[dict] | None = None,
 ) -> AgentResponse:
     session = session if session is not None else {}
+
+    if _agent_v2_enabled(user_id):
+        v2_result = await _process_message_v2(db, user_id, message, session, history=history)
+        if v2_result is not None:
+            return v2_result
 
     pref_result = try_process_pending_description_preference(
         session, message, db, user_id

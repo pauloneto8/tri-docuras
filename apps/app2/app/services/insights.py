@@ -14,7 +14,7 @@ import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.agent.claude import call_claude
+from app.agent.groq import call_groq_text
 from app.config import settings
 from app.models import AgentInsight, User
 from app.schemas import BudgetStatusInput, SummaryInput
@@ -85,9 +85,9 @@ async def generate_monthly_insight(
     prompt, known_values = _build_prompt(summary, budgets)
 
     try:
-        text = await call_claude(prompt, system_prompt=INSIGHT_SYSTEM_PROMPT, max_tokens=300)
+        text = await call_groq_text(prompt, system_prompt=INSIGHT_SYSTEM_PROMPT, max_tokens=300)
     except Exception:  # noqa: BLE001 — erro de rede/API não deve derrubar o job
-        logger.exception("Falha ao chamar Claude para insight (user_id=%s)", user.id)
+        logger.exception("Falha ao chamar Groq para insight (user_id=%s)", user.id)
         return None
 
     if not text:
@@ -105,7 +105,7 @@ async def generate_monthly_insight(
 
 
 def save_insight(
-    db: Session, *, user_id: int, year: int, month: int, text: str, source: str = "claude-insight"
+    db: Session, *, user_id: int, year: int, month: int, text: str, source: str = "groq-insight"
 ) -> AgentInsight:
     existing = db.scalar(
         select(AgentInsight).where(

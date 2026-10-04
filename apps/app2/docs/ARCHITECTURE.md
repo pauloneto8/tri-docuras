@@ -81,22 +81,27 @@ mensagem do usuário
 - Estado em `session` Starlette (wizards, flags)
 - Histórico em `conversation_messages`
 
-### Inteligência proativa (Claude, opcional — desligada por padrão)
+### Inteligência proativa (Groq, opcional — desligada por padrão)
 
-Segundo modelo (`app/agent/claude.py`, mesmo padrão httpx de `groq.py`) usado
-**só** para tarefas de raciocínio/explicação sobre números já calculados —
-nunca para tool-calling nem para escrever dados. Controlado por
-`ENABLE_AI_INSIGHTS` + `ANTHROPIC_API_KEY` (ambos vazios/false por padrão).
+Usa o **mesmo provedor do agente** (Groq) só para tarefas de
+raciocínio/explicação sobre números já calculados — nunca para tool-calling
+nem para escrever dados. Controlado por `ENABLE_AI_INSIGHTS` +
+`GROQ_API_KEY` (ambos vazios/false por padrão).
 
 - `app/services/insights.py` — `generate_monthly_insight()` chama
   `finance.get_summary`/`get_budget_status`, monta um prompt só com os
-  números formatados, chama Claude Haiku e **valida** que todo valor
-  monetário citado no texto gerado é um dos valores enviados antes de
-  salvar em `agent_insights` (descarta se não bater — evaluator simples,
-  sem segunda chamada de LLM)
+  números formatados, chama `app/agent/groq.py::call_groq_text` e **valida**
+  que todo valor monetário citado no texto gerado é um dos valores enviados
+  antes de salvar em `agent_insights` (descarta se não bater — evaluator
+  simples, sem segunda chamada de LLM)
 - `app/scripts/generate_insights.py` — CLI (`python -m
   app.scripts.generate_insights`) pensado para cron diário do host; no-op se
   a feature estiver desligada
+- `app/services/proactive.py` + `app/scripts/notify_channels.py` — resumo
+  proativo diário (Fase 6): contas a vencer em 3 dias, previstos atrasados,
+  orçamentos > 80% e faturas fechando, montado **em Python** e enviado pelos
+  canais vinculados (`AgentSession`/`UserChannelLink`). Sem chave Groq o
+  texto determinístico já é seguro.
 - `app/agent/claude.py::call_claude_tool_call` (Fase 3, `ENABLE_AI_NLU_FALLBACK`)
   — fallback de 3º nível em `_resolve_intent`: só roda quando Groq **e**
   `try_rule_based_parse` já falharam; reaproveita o `SYSTEM_PROMPT` único de
@@ -150,6 +155,38 @@ nunca para tool-calling nem para escrever dados. Controlado por
   `source="claude-orchestrator"` gravado em `conversation_messages`.
 - Plano completo:
   [`.cursor/plans/agente-inteligencia-proativa.md`](../.cursor/plans/agente-inteligencia-proativa.md)
+
+### Agente autônomo v2 (loop de ferramentas, Groq — `ENABLE_AGENT_V2`)
+
+Segundo motor de chat, atrás da flag `ENABLE_AGENT_V2` + `AGENT_V2_USERS`
+(só os usuários listados; o legado acima continua como fallback/rollback).
+Ativado por `_agent_v2_enabled()` no topo de `runner.process_message`.
+
+- `app/agent/brain.py` — loop agentico real (até 8 iterações / ~30 s):
+  `chat_with_tools` (`app/agent/groq.py`, httpx) devolve tool calls; leituras
+  executam na hora, **escritas nunca** — viram `pending_plan` e voltam ao
+  modelo como `pending_confirmation`. Dedup de chamadas idênticas, retry de
+  resposta e guarda anti-alucinação de dinheiro (`_MONEY_RE`, 1 retentativa,
+  fallback genérico).
+- `app/agent/toolkit.py` — registry único (`build_toolkit()`, 31 tools: 15 de
+  leitura + 16 de escrita): schema `ToolSpec.to_openai_tool`, `validate_write`,
+  `run_read`. Nova ferramenta = 1 entrada aqui (schema + handler).
+- `app/agent/prompt_v2.py` — system prompt dinâmico (data/hora America/Recife,
+  contas/cartões/categorias do usuário, preferências, política de
+  perguntar só o que falta e de sempre `search_transactions` antes de editar).
+- `app/services/agent_reads.py` — leituras novas (só Python/finance):
+  `search_transactions`, `get_balances`, `get_cashflow_projection`,
+  `compare_periods`, `spending_breakdown`, `list_upcoming_bills`,
+  `list_recurring_and_installments`, `get_invoice_detail`.
+- `app/agent/confirm.py` — `confirm_plan()` executa o lote de escritas
+  (depois `cancel_plan()`/`is_expired()`, TTL 30 min). Estado por canal em
+  `agent_sessions.pending_plan` (migração `022`); web usa a sessão Starlette.
+- Canais: `app/services/channels.py` (vínculo por código de 6 dígitos,
+  `handle_channel_message`, envio Telegram/WhatsApp com botões, Whisper);
+  webhooks em `app/routers/telegram.py` e `app/routers/whatsapp.py` (isentos
+  de CSRF via `_is_public_path` em `app/main.py`).
+- Plano completo:
+  [`.cursor/plans/agente-autonomo-v2.md`](../.cursor/plans/agente-autonomo-v2.md)
 
 ## Modelo de dados (resumo)
 

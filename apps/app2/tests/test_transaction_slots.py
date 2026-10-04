@@ -697,7 +697,10 @@ async def test_card_installment_skips_due_date_and_uses_invoice_due():
         assert result.question is not None
         assert "vencimento" not in result.question.lower()
         wizard = session["transaction_wizard"]
-        assert wizard.get("due_date") == "2026-09-14"
+        from app.services.credit_cards import cycle_for_purchase
+
+        _, _, expected_due = cycle_for_purchase(9, 14, local_today())
+        assert wizard.get("due_date") == expected_due.isoformat()
     finally:
         db.query(Transaction).filter(Transaction.user_id == user.id).delete(synchronize_session=False)
         db.query(CardInvoice).filter(CardInvoice.user_id == user.id).delete(synchronize_session=False)

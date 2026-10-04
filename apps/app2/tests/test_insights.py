@@ -74,7 +74,7 @@ async def test_generate_monthly_insight_discards_invalid_value():
         patch("app.services.insights.finance.get_summary", return_value=_SUMMARY),
         patch("app.services.insights.finance.get_budget_status", return_value=_BUDGETS),
         patch(
-            "app.services.insights.call_claude",
+            "app.services.insights.call_groq_text",
             new_callable=AsyncMock,
             return_value="Voce ainda tem R$ 999,99 sobrando.",
         ),
@@ -98,7 +98,7 @@ async def test_generate_monthly_insight_saves_valid_text():
         patch("app.services.insights.finance.get_summary", return_value=_SUMMARY),
         patch("app.services.insights.finance.get_budget_status", return_value=_BUDGETS),
         patch(
-            "app.services.insights.call_claude",
+            "app.services.insights.call_groq_text",
             new_callable=AsyncMock,
             return_value="Voce recebeu R$ 5.000,00 e sobrou R$ 1.799,50.",
         ),

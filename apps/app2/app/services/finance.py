@@ -1248,6 +1248,19 @@ def update_transaction(db: Session, user_id: int, payload: UpdateTransactionInpu
             payment_date=payload.payment_date or tx.payment_date,
             transaction_date=payload.transaction_date or tx.transaction_date,
         )
+        if tx.recurrence_id and due != tx.due_date:
+            collision = db.scalar(
+                select(Transaction).where(
+                    Transaction.recurrence_id == tx.recurrence_id,
+                    Transaction.due_date == due,
+                    Transaction.id != tx.id,
+                )
+            )
+            if collision:
+                raise ValueError(
+                    "Já existe um lançamento desta recorrência nessa data. "
+                    "Escolha outra data."
+                )
         tx.competence_date = comp
         tx.due_date = due
         tx.payment_date = payment

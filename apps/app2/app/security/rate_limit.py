@@ -23,3 +23,25 @@ def check_rate_limit(request: Request, *, key: str, limit: int, window_seconds: 
         )
 
     bucket.append(now)
+
+
+def rate_limited(key: str, limit: int = 30, window_seconds: int = 60):
+    from functools import wraps
+
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            request = None
+            for a in args:
+                if isinstance(a, Request):
+                    request = a
+                    break
+            if request is None and "request" in kwargs:
+                request = kwargs["request"]
+            if request is not None:
+                check_rate_limit(request, key=key, limit=limit, window_seconds=window_seconds)
+            return await func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator

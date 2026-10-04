@@ -13,11 +13,10 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
-
-
 class TransactionType(str, Enum):
     EXPENSE = "expense"
     INCOME = "income"
@@ -513,3 +512,35 @@ class AgentInsight(Base):
     )
 
     user: Mapped["User"] = relationship()
+
+
+class AgentSession(Base):
+    __tablename__ = "agent_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    channel: Mapped[str] = mapped_column(String(32), nullable=False)
+    external_chat_id: Mapped[str | None] = mapped_column(String(255))
+    pending_plan: Mapped[dict | None] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
+class UserChannelLink(Base):
+    __tablename__ = "user_channel_links"
+    __table_args__ = (
+        UniqueConstraint("user_id", "channel", name="uq_user_channel_link"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    channel: Mapped[str] = mapped_column(String(32), nullable=False)
+    external_user_id: Mapped[str | None] = mapped_column(String(255))
+    telegram_username: Mapped[str | None] = mapped_column(String(255))
+    code: Mapped[str | None] = mapped_column(String(16))
+    code_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )

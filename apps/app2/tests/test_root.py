@@ -81,7 +81,13 @@ def test_root_personal_scope_excludes_other_users():
         )
         assert all(tx.get("description") != "Compra teste" for tx in personal_txs)
 
-        global_txs = finance.list_transactions(db, None, ListTransactionsInput(limit=100))
+        # Visão global (admin) sem filtro de usuário. Restringe ao dia do lançamento
+        # para não depender de dados de produção (previstos futuros) no limit.
+        global_txs = finance.list_transactions(
+            db,
+            None,
+            ListTransactionsInput(limit=100, start_date=date.today(), end_date=date.today()),
+        )
         emails = {tx.get("user_email") for tx in global_txs}
         assert other.email in emails
 

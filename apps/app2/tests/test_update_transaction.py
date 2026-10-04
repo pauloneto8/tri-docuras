@@ -363,3 +363,71 @@ def test_rule_parse_update_description_and_invoice_month():
     assert "amigo" in tool.arguments.get("description", "").lower()
     assert "fatura" not in tool.arguments.get("description", "").lower()
     assert tool.arguments.get("invoice_due_month") == 9
+
+
+def test_update_transaction_rejects_recurrence_date_collision():
+    """Mover uma ocorrência recorrente para a data de outra irmã não pode dar 500."""
+    from sqlalchemy import select
+
+    from app.config import settings
+    from app.models import RecurringRule
+    from app.timezone import local_today
+
+    engine = create_engine(settings.database_url)
+    db = sessionmaker(bind=engine)()
+    suffix = uuid.uuid4().hex[:8]
+    user = create_user(
+        db,
+        email=f"rec_collision_{suffix}@test.com",
+        password="secret1",
+        name="Rec Collision",
+        is_active=True,
+    )
+    try:
+        _setup_user(db, user)
+        account = _create_account(db, user.id, f"Conta_{suffix}")
+        start = local_today().replace(day=5)
+        first = register_expense(
+            db,
+            user.id,
+            RegisterExpenseInput(
+                amount="120",
+                description="Assinatura",
+                account_name=account["name"],
+                category_name="Lazer",
+                competence_date=start,
+                due_date=start,
+                status="planned",
+                frequency="monthly",
+            ),
+        )
+        txs = db.scalars(
+            select(Transaction)
+            .where(Transaction.recurrence_id == first["recurrence_id"])
+            .order_by(Transaction.due_date.asc())
+        ).all()
+        assert len(txs) >= 2
+        a, b = txs[0], txs[1]
+
+        with pytest.raises(ValueError):
+            update_transaction(
+                db,
+                user.id,
+                UpdateTransactionInput(
+                    transaction_id=a.id,
+                    due_date=b.due_date,
+                    competence_date=b.due_date,
+                ),
+            )
+
+        db.refresh(a)
+        assert a.due_date != b.due_date
+    finally:
+        db.rollback()
+        db.query(Transaction).filter(Transaction.user_id == user.id).delete(synchronize_session=False)
+        db.query(RecurringRule).filter(RecurringRule.user_id == user.id).delete(synchronize_session=False)
+        db.query(Account).filter(Account.user_id == user.id).delete(synchronize_session=False)
+        db.query(Category).filter(Category.user_id == user.id).delete(synchronize_session=False)
+        db.query(User).filter(User.id == user.id).delete(synchronize_session=False)
+        db.commit()
+        db.close()

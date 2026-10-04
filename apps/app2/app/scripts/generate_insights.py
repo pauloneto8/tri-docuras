@@ -10,7 +10,7 @@ Pensado para rodar 1x/dia via cron do host, ex.:
     0 6 * * * docker compose exec -T app2 python -m app.scripts.generate_insights
 
 No-op seguro (sai sem chamar a API) se ENABLE_AI_INSIGHTS estiver desligado
-ou sem ANTHROPIC_API_KEY configurada — pode ser agendado antes de ativar a
+ou sem GROQ_API_KEY configurada — pode ser agendado antes de ativar a
 feature.
 """
 
@@ -27,9 +27,9 @@ logger = logging.getLogger(__name__)
 
 
 async def _run() -> None:
-    if not settings.enable_ai_insights or not settings.anthropic_api_key.strip():
+    if not settings.enable_ai_insights or not settings.groq_api_key.strip():
         logger.info(
-            "AI insights desligado (ENABLE_AI_INSIGHTS/ANTHROPIC_API_KEY) — nada a fazer."
+            "AI insights desligado (ENABLE_AI_INSIGHTS/GROQ_API_KEY) — nada a fazer."
         )
         return
 
