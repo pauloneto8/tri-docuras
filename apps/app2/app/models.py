@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
 
 from sqlalchemy import (
@@ -17,6 +17,13 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+
+
+def utcnow_naive() -> datetime:
+    """UTC sem tzinfo, como as colunas `DateTime` (timestamp without time zone)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class TransactionType(str, Enum):
     EXPENSE = "expense"
     INCOME = "income"
@@ -523,7 +530,7 @@ class AgentSession(Base):
     external_chat_id: Mapped[str | None] = mapped_column(String(255))
     pending_plan: Mapped[dict | None] = mapped_column(JSONB)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, nullable=False, default=utcnow_naive, onupdate=utcnow_naive
     )
 
 
@@ -540,7 +547,7 @@ class UserChannelLink(Base):
     telegram_username: Mapped[str | None] = mapped_column(String(255))
     code: Mapped[str | None] = mapped_column(String(16))
     code_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow_naive)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, nullable=False, default=utcnow_naive, onupdate=utcnow_naive
     )

@@ -15,7 +15,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import AgentSession, UserChannelLink
+from app.models import AgentSession, UserChannelLink, utcnow_naive
 from app.timezone import local_now
 
 logger = logging.getLogger(__name__)
@@ -159,7 +159,7 @@ async def handle_channel_message(
 
     plan = session.get("agent_v2_plan")
     agent_session.pending_plan = plan
-    agent_session.updated_at = datetime.utcnow()
+    agent_session.updated_at = utcnow_naive()
     db.commit()
 
     log_message(
