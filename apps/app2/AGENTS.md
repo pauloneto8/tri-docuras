@@ -154,6 +154,8 @@ Previstos liquidados **não** listados (evita duplicata). Pares previsto/realiza
 
 Já implementados (não reexecutar): [chat-visual-completo.md](.cursor/plans/chat-visual-completo.md), [valor-total-ou-parcela.md](.cursor/plans/valor-total-ou-parcela.md), [agente-autonomo-v2.md](.cursor/plans/agente-autonomo-v2.md) — agente autônomo com loop de ferramentas no Groq (flag `ENABLE_AGENT_V2`), confirmação em lote, Telegram/WhatsApp; ver skill `assistfin-agent-v2`.
 
+Briefing **pendente**: [agente-v2-operacionalizacao.md](.cursor/plans/agente-v2-operacionalizacao.md) — deploy, 429 do Groq, eval, Telegram/WhatsApp, cron (o código do v2 já está pronto; não reimplementar).
+
 ## Não editar
 
 - Arquivos de plano em `.cursor/plans/` (a menos que o usuário peça)

@@ -1,7 +1,7 @@
 # Plano: Agente autônomo do AssistFin (v2) — briefing para implementação
 
 **Status:** código das Fases 0-6 implementado (2026-10-04); migrações `022`/`023` aplicadas; suíte com 446 testes verde. `ENABLE_AGENT_V2` ligado só para `AGENT_V2_USERS=1`.
-**Pendente (operacional):** tokens e webhook do Telegram; credenciais do WhatsApp na Meta; cron de `notify_channels`/`generate_insights` (`ENABLE_AI_INSIGHTS` ainda `false`); rodar `agent_eval` contra o Groq real (meta ≥ 90%, v2 ≥ legado); testes manuais da seção Verificação; tratar respostas 429 do Groq vistas no log.
+**Pendente (operacional):** tokens e webhook do Telegram; credenciais do WhatsApp na Meta; cron de `notify_channels`/`generate_insights` (`ENABLE_AI_INSIGHTS` ainda `false`); rodar `agent_eval` contra o Groq real (meta ≥ 90%, v2 ≥ legado); testes manuais da seção Verificação; tratar respostas 429 do Groq vistas no log. Execução detalhada em [agente-v2-operacionalizacao.md](agente-v2-operacionalizacao.md).
 **Workspace:** `/opt/hosting/apps/app2`. Responder ao usuário em **português**.
 
 ## Antes de começar (notas para o agente implementador)
