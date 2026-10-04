@@ -44,11 +44,13 @@ venv/
 
 # Bancos de dados / dumps (podem conter dados sensíveis)
 **/*.sql
+**/*.sql.gz
 **/*.sqlite
 **/*.sqlite3
 **/*.db
 **/*.dump
 **/*.bak
+apps/app2/data/
 
 # OS
 .DS_Store
