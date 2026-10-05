@@ -31,6 +31,24 @@ def _429(headers: dict[str, str] | None = None) -> httpx.Response:
     return httpx.Response(429, json={"error": "rate limit"}, headers=headers or {})
 
 
+def _429_daily() -> httpx.Response:
+    """429 de orçamento diário (TPD): não passa com espera, só com o dia virando."""
+    return httpx.Response(
+        429,
+        json={
+            "error": {
+                "message": (
+                    "Rate limit reached for model `openai/gpt-oss-120b` in organization "
+                    "`org_x` service tier `on_demand` on tokens per day (TPD): "
+                    "Limit 200000, Used 196345, Requested 3658."
+                ),
+                "type": "tokens",
+                "code": "rate_limit_exceeded",
+            }
+        },
+    )
+
+
 def _record_sleeps(monkeypatch) -> list[float]:
     """Substitui asyncio.sleep por um recorder async (não espera de verdade)."""
     sleeps: list[float] = []
@@ -142,7 +160,39 @@ async def test_non_retryable_error_is_raised_immediately(monkeypatch):
 def _rate_limit_error() -> GroqRateLimitError:
     request = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
     response = httpx.Response(429, request=request)
-    return GroqRateLimitError("429 do Groq", request=request, response=response)
+    error = GroqRateLimitError("429 do Groq", request=request, response=response)
+    error.attempts = MAX_ATTEMPTS
+    return error
+
+
+@pytest.mark.asyncio
+async def test_orcamento_diario_esgotado_nao_insiste(monkeypatch):
+    """429 de TPD sobe na primeira resposta: esperar não devolve token nenhum."""
+    sleeps = _record_sleeps(monkeypatch)
+
+    client, calls = _client([_429_daily() for _ in range(MAX_ATTEMPTS + 2)])
+    async with client:
+        with pytest.raises(GroqRateLimitError) as excinfo:
+            await _post_json(client, {"model": "x", "messages": []})
+
+    assert len(calls) == 1
+    assert sleeps == []
+    assert excinfo.value.attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_429_por_minuto_ainda_retenta(monkeypatch):
+    """Só o 429 sem menção a TPD é o passageiro, e continua com backoff."""
+    sleeps = _record_sleeps(monkeypatch)
+
+    client, calls = _client(
+        [httpx.Response(429, json={"error": "rate limit"}), httpx.Response(200, json=CHAT)]
+    )
+    async with client:
+        await _post_json(client, {"model": "x", "messages": []})
+
+    assert len(calls) == 2
+    assert len(sleeps) == 1
 
 
 class _FakeDB:

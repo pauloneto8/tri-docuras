@@ -53,9 +53,46 @@ class ToolSpec(BaseModel):
             "function": {
                 "name": self.name,
                 "description": self.description,
-                "parameters": self.parameters,
+                "parameters": compact_schema(self.parameters),
             },
         }
+
+
+def compact_schema(node: Any) -> Any:
+    """Tira o ruído que o pydantic injeta no JSON Schema (`title`, `anyOf` com
+    `null`, `default: null`).
+
+    O toolkit inteiro é reenviado em **cada** iteração do loop, então esse ruído
+    é pago a cada chamada: nos modelos do Groq free ele sozinho estourava o
+    limite de 8.000 tokens/min. Tipo, enum, formato e limites continuam intactos;
+    campo opcional continua opcional por não estar em `required`.
+    """
+    if isinstance(node, list):
+        return [compact_schema(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+
+    out: Dict[str, Any] = {}
+    for key, value in node.items():
+        if key == "title":
+            continue
+        if key == "default" and value is None:
+            continue
+        out[key] = compact_schema(value)
+
+    branches = out.get("anyOf")
+    if isinstance(branches, list):
+        real = [
+            branch
+            for branch in branches
+            if not (isinstance(branch, dict) and branch.get("type") == "null")
+        ]
+        if len(real) == 1 and len(branches) <= 2:
+            collapsed = {key: value for key, value in out.items() if key != "anyOf"}
+            for key, value in real[0].items():
+                collapsed.setdefault(key, value)
+            return collapsed
+    return out
 
 
 def _schema_of(model) -> Dict[str, Any]:

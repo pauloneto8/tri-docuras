@@ -24,7 +24,25 @@ class GroqRateLimitError(httpx.HTTPStatusError):
 
     Separado dos demais erros para o chamador cair no fallback legado sem
     registrar traceback: rate limit é esperado, não é falha do agente.
+    `attempts` é quantas chamadas foram realmente feitas (1 quando o orçamento
+    diário acabou e não há retry possível).
     """
+
+    attempts: int = MAX_ATTEMPTS
+
+
+def _is_daily_quota(response: httpx.Response) -> bool:
+    """Distingue 429 por minuto (429 passageiro) de 429 por dia (orçamento do dia).
+
+    O tier free do gpt-oss-120b tem 8.000 tokens/min e 200.000 tokens/dia. Quando
+    é o dia que estourou, repetir a chamada não adianta dentro da janela: a espera
+    só segura o usuário por ~2 minutos antes do fallback legado. Nesse caso o erro
+    sobe na primeira resposta.
+    """
+    if response.status_code != 429:
+        return False
+    body = response.text.lower()
+    return "tokens per day" in body or "(tpd)" in body
 
 
 async def groq_configured() -> bool:
@@ -48,7 +66,9 @@ async def _post_json(client: httpx.AsyncClient, payload: dict) -> dict:
         "Content-Type": "application/json",
     }
     last_error: httpx.HTTPStatusError | None = None
+    attempts = 0
     for attempt in range(MAX_ATTEMPTS):
+        attempts = attempt + 1
         response = await client.post(GROQ_API_URL, json=payload, headers=headers)
         if response.status_code not in RETRY_STATUS:
             response.raise_for_status()
@@ -58,6 +78,12 @@ async def _post_json(client: httpx.AsyncClient, payload: dict) -> dict:
             request=response.request,
             response=response,
         )
+        if _is_daily_quota(response):
+            logger.warning(
+                "Groq: orcamento diario de tokens (TPD) esgotado; sem nova tentativa "
+                "nesta janela"
+            )
+            break
         if attempt == MAX_ATTEMPTS - 1:
             break
         delay = _retry_delay(response, attempt)
@@ -72,11 +98,13 @@ async def _post_json(client: httpx.AsyncClient, payload: dict) -> dict:
     assert last_error is not None
     assert last_error.response is not None
     if last_error.response.status_code == 429:
-        raise GroqRateLimitError(
-            f"{last_error.response.status_code} do Groq após {MAX_ATTEMPTS} tentativas",
+        error = GroqRateLimitError(
+            f"{last_error.response.status_code} do Groq após {attempts} tentativas",
             request=last_error.request,
             response=last_error.response,
-        ) from last_error
+        )
+        error.attempts = attempts
+        raise error from last_error
     raise last_error
 
 

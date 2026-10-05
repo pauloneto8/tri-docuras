@@ -4,7 +4,7 @@ import re
 
 from app.config import settings
 from app.agent.context import build_intent_context
-from app.agent.groq import MAX_ATTEMPTS, GroqRateLimitError
+from app.agent.groq import GroqRateLimitError
 from app.agent.tool_parse import DEFAULT_UNSUPPORTED_MESSAGE
 from app.agent.llm import call_claude_intent_llm, call_intent_llm
 from app.agent.orchestrator import (
@@ -144,7 +144,7 @@ async def _process_message_v2(
         logger.warning(
             "Groq em rate limit (status=%s, tentativas=%s); seguindo com o fluxo legado (user_id=%s)",
             exc.response.status_code if exc.response is not None else 429,
-            MAX_ATTEMPTS,
+            exc.attempts,
             user_id,
         )
         return None
