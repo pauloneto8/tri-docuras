@@ -21,7 +21,9 @@ AssistFin é finanças pessoais multiusuário com chat híbrido (regras + Groq).
 - **Nunca** calcular saldos no LLM — só em `finance.py`.
 - Transferências **nunca** somam em receitas/despesas do período.
 - Escritas no agente exigem **confirmação** (`WRITE_TOOLS` em `runner.py`).
-- Após mudanças: `docker compose build app2 && docker compose up -d app2` e `pytest -q` no container.
+- **Orçamento do Groq free é 200.000 tokens/dia por modelo** (e 8.000/min). Uma mensagem do agente v2 gasta ~12.000 tokens (31 ferramentas no prompt). Job diário de insight só para `INSIGHTS_EMAILS`; eval em lotes (`--offset`/`--limit`).
+- Após mudanças: `docker compose build app2 && docker compose up -d app2`.
+- **Testes num Postgres descartável**, nunca no `hosting-app2-db` (receita em `docs/OPERATIONS.md` §Testes): a suíte cria usuários `@test.com` e polui produção.
 
 ## Domínio financeiro (resumo)
 
@@ -154,7 +156,7 @@ Previstos liquidados **não** listados (evita duplicata). Pares previsto/realiza
 
 Já implementados (não reexecutar): [chat-visual-completo.md](.cursor/plans/chat-visual-completo.md), [valor-total-ou-parcela.md](.cursor/plans/valor-total-ou-parcela.md), [agente-autonomo-v2.md](.cursor/plans/agente-autonomo-v2.md) — agente autônomo com loop de ferramentas no Groq (flag `ENABLE_AGENT_V2`), confirmação em lote, Telegram/WhatsApp; ver skill `assistfin-agent-v2`.
 
-Briefing **pendente**: [agente-v2-operacionalizacao.md](.cursor/plans/agente-v2-operacionalizacao.md) — deploy, 429 do Groq, eval, Telegram/WhatsApp, cron (o código do v2 já está pronto; não reimplementar).
+Briefing: [agente-v2-operacionalizacao.md](.cursor/plans/agente-v2-operacionalizacao.md) — deploy, 429 do Groq, eval, Telegram/WhatsApp, cron (o código do v2 já está pronto; não reimplementar). Fases A, B e H.1 concluídas; G (cron + escopo do insight) concluída; C (eval) em lotes diários — o free tier não cabe com os 83 casos de uma vez, relatórios em `docs/eval/`; D, E e F dependem do usuário.
 
 ## Não editar
 

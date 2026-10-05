@@ -9,6 +9,10 @@ Pensado para rodar 1x/dia via cron do host, ex.:
 
     0 6 * * * docker compose exec -T app2 python -m app.scripts.generate_insights
 
+Só gera para os e-mails de `INSIGHTS_EMAILS` (vazio = `ROOT_EMAILS`): cada
+usuário consome ~2.500 tokens por dia no Groq free, então gerar para todos os
+cadastrados esgota o orçamento diário e derruba o chat.
+
 No-op seguro (sai sem chamar a API) se ENABLE_AI_INSIGHTS estiver desligado
 ou sem GROQ_API_KEY configurada — pode ser agendado antes de ativar a
 feature.
@@ -35,7 +39,17 @@ async def _run() -> None:
 
     db = SessionLocal()
     try:
-        users = db.query(User).filter(User.is_active.is_(True)).all()
+        emails = settings.insights_email_set
+        users = (
+            db.query(User)
+            .filter(User.is_active.is_(True), User.email.in_(emails))
+            .all()
+            if emails
+            else []
+        )
+        if not users:
+            logger.info("Nenhum usuario elegivel a insight (INSIGHTS_EMAILS/ROOT_EMAILS).")
+            return
         generated = 0
         for user in users:
             try:

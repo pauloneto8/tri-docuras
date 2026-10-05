@@ -1,6 +1,6 @@
 # Plano: Colocar o agente v2 do AssistFin em operação — briefing para execução
 
-**Status:** PENDENTE — criado em 2026-10-04. Nenhuma fase iniciada.
+**Status:** Fases A, B e H.1 concluídas; G concluída em 2026-10-05 (cron 06:00/06:05 + logrotate + `INSIGHTS_EMAILS`); C **parcial** — o free tier do Groq não cabe com os 83 casos (12.218 tokens por caso contra 200.000/dia por modelo), medidos 2 casos em [docs/eval/agent-eval-2026-10-05.md](../../docs/eval/agent-eval-2026-10-05.md), semveredito do critério. D, E e F dependem do usuário. Criado em 2026-10-04.
 **Workspace:** `/opt/hosting/apps/app2` (FastAPI + Postgres, container `hosting-app2`). Repositório git em `/opt/hosting` (branch `main`, remoto `origin`). Responder ao usuário em **português**.
 **Pré-requisito:** o código do plano [agente-autonomo-v2.md](agente-autonomo-v2.md) já está implementado e na `main` (commit `3722ac6`). **Não reimplemente nada daquele plano**; este plano cobre só deploy, configuração, validação e ajustes.
 

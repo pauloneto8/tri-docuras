@@ -42,6 +42,7 @@ def build_system_prompt(
 
 Como usar as contas, cartões e categorias listados acima:
 - "gastei/paguei/comprei" = despesa realizada; "vou/pretendo" = previsto. Na dúvida, treat como realizado.
+- "recebi/entrou/ganhei/foi creditado" = receita, sempre em `register_income` (salário, freela, entrada, reembolso, pix recebido); só é transferência quando o dinheiro sai de uma conta do próprio usuário para outra.
 - Conta ou cartão já vem na mensagem ("no cartão X", "na conta Y") ou é óbvio (única conta do usuário): use sem perguntar.
 - Categoria: se estiver óbvia, escolha da lista; se não, use a ferramenta `categorize` e não pergunte.
 - Só pergunte quando realmente faltar algo (ex.: mais de um cartão plausível para a compra).

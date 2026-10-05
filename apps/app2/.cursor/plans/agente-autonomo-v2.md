@@ -1,7 +1,7 @@
 # Plano: Agente autônomo do AssistFin (v2) — briefing para implementação
 
-**Status:** código das Fases 0-6 implementado (2026-10-04); migrações `022`/`023` aplicadas; suíte com 446 testes verde. `ENABLE_AGENT_V2` ligado só para `AGENT_V2_USERS=1`.
-**Pendente (operacional):** tokens e webhook do Telegram; credenciais do WhatsApp na Meta; cron de `notify_channels`/`generate_insights` (`ENABLE_AI_INSIGHTS` ainda `false`); rodar `agent_eval` contra o Groq real (meta ≥ 90%, v2 ≥ legado); testes manuais da seção Verificação; tratar respostas 429 do Groq vistas no log. Execução detalhada em [agente-v2-operacionalizacao.md](agente-v2-operacionalizacao.md).
+**Status:** código das Fases 0-6 implementado (2026-10-04); migrações `022`/`023` aplicadas; suíte com 469 testes verde (Postgres descartável). `ENABLE_AGENT_V2` ligado só para `AGENT_V2_USERS=1`.
+**Pendente (operacional):** token do Telegram e credenciais do WhatsApp na Meta; testes manuais da seção Verificação (Fase D). O cron de `generate_insights`/`notify_channels` está instalado (Fase G) e o `ENABLE_AI_INSIGHTS` ligado com escopo em `INSIGHTS_EMAILS`. O retry de 429 com fallback legado está em produção desde 2026-10-04 sem traceback (Fase B). O `agent_eval` contra o Groq real **não roda no free tier**: medido 12.218 tokens por caso contra 200.000/dia por modelo — resultado parcial em `docs/eval/agent-eval-2026-10-05.md`. Execução detalhada em [agente-v2-operacionalizacao.md](agente-v2-operacionalizacao.md).
 **Workspace:** `/opt/hosting/apps/app2`. Responder ao usuário em **português**.
 
 ## Antes de começar (notas para o agente implementador)

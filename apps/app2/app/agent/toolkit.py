@@ -306,7 +306,13 @@ def build_toolkit() -> Dict[str, ToolSpec]:
 
     # Escritas (executadas só após confirmação)
     add_write("register_expense", "Novo lançamento de despesa (conta ou cartão; à vista, fixo ou parcelado; previsto ou realizado).", RegisterExpenseInput)
-    add_write("register_income", "Novo lançamento de receita.", RegisterIncomeInput)
+    add_write(
+        "register_income",
+        "Novo lançamento de receita. Use quando o usuário disser que recebeu, "
+        "entrou, ganhou ou foi creditado dinheiro (salário, freela, vale "
+        "refeição, reembolso, entrada, pix recebido) — não quando é despesa.",
+        RegisterIncomeInput,
+    )
     add_write("register_transfer", "Transferência entre contas (não é receita nem despesa).", RegisterTransferInput)
     add_write("realize_planned", "Converte um previsto em realizado.", RealizePlannedInput)
     add_write("update_transfer", "Corrige uma transferência existente (origem/destino/valor/data).", UpdateTransferInput)

@@ -37,10 +37,23 @@ Requer `APP2_GROQ_API_KEY` (já usada pelo agente) e
 (`docker compose up -d app2`) — sem isso o comando abaixo não faz nada. Ver
 `docs/ARCHITECTURE.md` §Inteligência proativa.
 
-Gerar/atualizar o insight do mês de todos os usuários ativos:
+Gera/atualiza o insight do mês de quem está em `APP2_INSIGHTS_EMAILS` (vazio =
+`APP2_ROOT_EMAILS`):
 
 ```bash
 docker compose exec -T app2 python -m app.scripts.generate_insights
+```
+
+Cada usuário custa ~2.500 tokens de LLM por dia. O free tier do Groq é de
+200.000 tokens/dia **por modelo** e uma mensagem do agente v2 gasta ~12.000:
+gerar insight para todos os cadastrados esgota o orçamento e derruba o chat.
+Por isso a lista é explícita — quem não estiver nela não entra.
+
+Agendado 1x/dia às 06:00 no crontab do root (log em
+`/var/log/assistfin-insights.log`, rotacionado por `/etc/logrotate.d/assistfin`):
+
+```
+0 6 * * * cd /opt/hosting && docker compose exec -T app2 python -m app.scripts.generate_insights >> /var/log/assistfin-insights.log 2>&1
 ```
 
 ## Agente autônomo v2 (loop de ferramentas)
@@ -53,9 +66,15 @@ autônomo v2 e a skill `.cursor/skills/assistfin-agent-v2/SKILL.md`.
 Avaliação contra Groq real (não roda no cron):
 
 ```bash
-docker compose exec -T app2 python -m app.scripts.agent_eval          # v2 vs legado
-docker compose exec -T app2 python -m app.scripts.agent_eval --dry-run # só valida o YAML
+docker compose exec -T app2 python -m app.scripts.agent_eval --dry-run  # só valida o YAML
+docker compose exec -T app2 python -m app.scripts.agent_eval --mode both --delay 45
 ```
+
+O free tier não roda os 83 casos de uma vez: `--offset`/`--limit` separam o
+lote e o script para sozinho quando o orçamento diário do modelo acaba (os
+casos não medidos não contam como falha). O `--delay` default é 45 s porque o
+teto é 8.000 tokens/min e um caso do v2 gasta ~12.000. Relatórios em
+`docs/eval/`.
 
 ### Telegram
 
@@ -83,11 +102,15 @@ docker compose exec -T app2 python -m app.scripts.agent_eval --dry-run # só val
 
 `app/services/proactive.py` monta o texto em Python (contas a vencer em 3 dias,
 previstos atrasados, orçamento > 80%, faturas fechando) e
-`app/scripts/notify_channels.py` envia pelos vínculos. Agendar 1x/dia:
+`app/scripts/notify_channels.py` envia pelos vínculos. Sem vínculo, o comando é
+no-op seguro. Agendado 1x/dia às 06:05 no crontab do root:
 
 ```
-0 6 * * * cd /opt/hosting && docker compose exec -T app2 python -m app.scripts.notify_channels >> /var/log/assistfin-notify.log 2>&1
+5 6 * * * cd /opt/hosting && docker compose exec -T app2 python -m app.scripts.notify_channels >> /var/log/assistfin-notify.log 2>&1
 ```
+
+Conferir no dia seguinte: `tail /var/log/assistfin-notify.log` (esperado
+`Resumos proativos enviados: N/N vínculos`).
 
 ## Fallback de NLU do agente via Claude (opcional, desligado por padrão)
 
@@ -97,12 +120,6 @@ comportamento idêntico a hoje (Groq → parser por regra → "não consegui
 entender"). Não tem comando de cron — roda automaticamente dentro do chat
 quando as duas primeiras tentativas falham. Ver `docs/ARCHITECTURE.md`
 §Inteligência proativa e `.cursor/plans/agente-inteligencia-proativa.md`.
-
-Agendar 1x/dia via cron do host (ex.: 06:00):
-
-```
-0 6 * * * cd /opt/hosting && docker compose exec -T app2 python -m app.scripts.generate_insights >> /var/log/assistfin-insights.log 2>&1
-```
 
 ## Orquestrador multi-etapas do agente (opcional, desligado por padrão)
 
@@ -182,12 +199,42 @@ O conjunto aplicado (incluindo período) fica na **sessão** (`transactions_list
 
 ## Testes
 
-```bash
-# Suite completa
-docker compose exec -T app2 python -m pytest -q
+A suíte cria usuários e transações de teste. **Rodar contra o
+`hosting-app2-db` enche o banco de produção de lixo** (108 usuários
+`@test.com` foram apagados em 2026-10-05 por causa disso) e o cron de insights
+passa a tentar gerar insight para cada um. Use um Postgres descartável:
 
-# Área específica
+```bash
+cd /opt/hosting
+docker run -d --name app2-test-db --network app2_internal \
+  -e POSTGRES_USER=app2 -e POSTGRES_PASSWORD=app2 -e POSTGRES_DB=app2 \
+  postgres:16-alpine
+# espera o banco responder
+until docker exec app2-test-db pg_isready -U app2 -d app2; do sleep 1; done
+
+TEST_DB="postgresql://app2:app2@app2-test-db:5432/app2"
+docker compose run --rm --no-deps -T -e DATABASE_URL=$TEST_DB -e DB_HOST=app2-test-db \
+  -v "$PWD/apps/app2:/app" --entrypoint sh app2 -c "alembic upgrade head"
+docker compose run --rm --no-deps -T -e DATABASE_URL=$TEST_DB -e DB_HOST=app2-test-db \
+  -v "$PWD/apps/app2:/app" --entrypoint python app2 -m pytest -q -p no:cacheprovider
+
+# no fim
+docker rm -f app2-test-db
+```
+
+Só para area específica, acrescente `tests/test_arquivo.py -q`.
+
+Se precisar rodar no container de produção mesmo assim (ex.: depurar algo que
+só acontece lá), limpe depois — a receita está em
+[Zerar dados de teste](#zerar-dados-de-teste-manter-usuários) e, para os
+usuários, `DELETE FROM users WHERE email LIKE '%@test.com'` depois de remover
+transações, contas e categorias filhas (muitas FKs do schema não têm
+`ON DELETE CASCADE`).
+
+```bash
+# Área específica (mesmo Postgres descartável acima)
 docker compose exec -T app2 python -m pytest tests/test_transfers.py -q
+docker compose exec -T app2 python -m pytest tests/test_update_transfer.py -q
 docker compose exec -T app2 python -m pytest tests/test_update_transfer.py -q
 docker compose exec -T app2 python -m pytest tests/test_summary.py -q
 docker compose exec -T app2 python -m pytest tests/test_planned_transactions.py -q
@@ -299,9 +346,12 @@ O assistente usa **apenas** Groq (`APP2_GROQ_API_KEY` / `APP2_GROQ_MODEL`). Sem 
 
 ## Health check
 
+O endpoint público é `/api/health` (o `/health` exige sessão e devolve 303 para
+o login):
+
 ```bash
-curl -s http://localhost/api/health
-# ou via domínio configurado
+curl -s https://assistfin.com.br/api/health
+# {"status":"ok"}
 ```
 
 ## Troubleshooting

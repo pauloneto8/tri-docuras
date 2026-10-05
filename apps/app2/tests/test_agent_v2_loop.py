@@ -149,3 +149,46 @@ async def test_iteration_limit_without_answer_falls_back(monkeypatch):
 
     assert result.response
     assert result.metrics["iterations"] == 3
+
+
+@pytest.mark.asyncio
+async def test_metrics_somam_tokens_de_cada_iteracao(monkeypatch):
+    """O custo da mensagem é a soma das chamadas: o orçamento do Groq free é por token."""
+    def fake_run_read(spec, db, user_id, args):
+        return {"ok": True}
+
+    monkeypatch.setattr(brain, "run_read", fake_run_read)
+
+    async def llm(messages, tools):
+        reply = _msg(None, [_tool_call("list_accounts", {})]) if not any(
+            m.get("role") == "tool" for m in messages
+        ) else _msg("pronto")
+        reply["usage"] = {
+            "prompt_tokens": 3200,
+            "completion_tokens": 100,
+            "prompt_tokens_details": {"cached_tokens": 3000},
+        }
+        return reply
+
+    result = await brain.run(db=FakeDB(), user_id=1, message="x", llm=llm)
+
+    tokens = result.metrics["tokens"]
+    assert tokens["prompt"] == 6400
+    assert tokens["completion"] == 200
+    assert tokens["cached"] == 6000
+    assert tokens["total"] == 6600
+
+
+@pytest.mark.asyncio
+async def test_metrics_tokens_zerado_sem_usage():
+    async def llm(messages, tools):
+        return _msg("oi")
+
+    result = await brain.run(db=FakeDB(), user_id=1, message="x", llm=llm)
+
+    assert result.metrics["tokens"] == {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+    }

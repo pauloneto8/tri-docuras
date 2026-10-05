@@ -169,6 +169,9 @@ async def chat_with_tools(
     A message pode conter `content` e/ou `tool_calls` (formato OpenAI). O loop
     agêntico (brain.py) interpreta as tool_calls. Se não houver chave, devolve
     mensagem vazia para o chamador cair no fluxo normal.
+
+    `usage` da resposta vai junto na message (chave `usage`): o orçamento do Groq
+    free é por tokens, então o loop precisa saber quanto cada chamada custou.
     """
     if not await groq_configured():
         return {"role": "assistant", "content": ""}
@@ -187,4 +190,7 @@ async def chat_with_tools(
     async with httpx.AsyncClient(timeout=60.0) as client:
         data = await _post_json(client, payload)
 
-    return data.get("choices", [{}])[0].get("message", {}) or {"role": "assistant", "content": ""}
+    message = data.get("choices", [{}])[0].get("message", {}) or {}
+    out = dict(message)
+    out["usage"] = data.get("usage") or {}
+    return out

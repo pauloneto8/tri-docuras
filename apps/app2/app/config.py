@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     anthropic_model_fast: str = "claude-haiku-4-5"
     anthropic_model_reasoning: str = "claude-sonnet-5"
     enable_ai_insights: bool = False
+    insights_emails: str = ""
     enable_ai_nlu_fallback: bool = False
     enable_ai_orchestrator: bool = False
     enable_agent_v2: bool = False
@@ -47,6 +48,21 @@ class Settings(BaseSettings):
     @property
     def root_email_set(self) -> set[str]:
         return {email.strip().lower() for email in self.root_emails.split(",") if email.strip()}
+
+    @property
+    def insights_email_set(self) -> set[str]:
+        """Quem recebe insight diário por LLM.
+
+        Vazio cai nos e-mails root: o insight custa ~2.500 tokens por usuário por
+        dia no Groq free (200k/dia), então gerar para todos os cadastrados
+        esgota o orçamento e derruba o chat.
+        """
+        explicit = {
+            email.strip().lower()
+            for email in self.insights_emails.split(",")
+            if email.strip()
+        }
+        return explicit or self.root_email_set
 
     @property
     def trusted_host_list(self) -> list[str]:

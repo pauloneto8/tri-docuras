@@ -2,7 +2,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
+from app.config import Settings
+from app.scripts.generate_insights import _run
 from app.services.insights import _build_prompt, _validate, generate_monthly_insight
 
 _SUMMARY = {
@@ -115,3 +118,73 @@ async def test_generate_monthly_insight_saves_valid_text():
         month=9,
         text="Voce recebeu R$ 5.000,00 e sobrou R$ 1.799,50.",
     )
+
+
+def test_insights_email_set_falls_back_to_root_emails():
+    settings = Settings(secret_key="x" * 32, root_emails="root@example.com")
+
+    assert settings.insights_email_set == {"root@example.com"}
+
+
+def test_insights_email_set_prefers_explicit_list():
+    settings = Settings(
+        secret_key="x" * 32,
+        root_emails="root@example.com",
+        insights_emails=" Alvo@Example.com ,outro@example.com ",
+    )
+
+    assert settings.insights_email_set == {"alvo@example.com", "outro@example.com"}
+
+
+@pytest.mark.asyncio
+async def test_script_generates_only_for_eligible_emails():
+    """Cada insight custa ~2.500 tokens/dia: o job não pode varrer todos os usuários."""
+    user = SimpleNamespace(id=1, email="alvo@example.com")
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.return_value = [user]
+
+    with (
+        patch("app.scripts.generate_insights.settings") as settings,
+        patch("app.scripts.generate_insights.SessionLocal", return_value=db),
+        patch(
+            "app.scripts.generate_insights.generate_monthly_insight",
+            new_callable=AsyncMock,
+            return_value=object(),
+        ) as generate,
+    ):
+        settings.enable_ai_insights = True
+        settings.groq_api_key = "chave"
+        settings.insights_email_set = {"alvo@example.com"}
+        await _run()
+
+    where = " ".join(
+        str(
+            clause.compile(
+                dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+            )
+        )
+        for clause in db.query.return_value.filter.call_args.args
+    )
+    assert "alvo@example.com" in where
+    generate.assert_awaited_once_with(db, user)
+
+
+@pytest.mark.asyncio
+async def test_script_noop_without_eligible_users():
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.return_value = []
+
+    with (
+        patch("app.scripts.generate_insights.settings") as settings,
+        patch("app.scripts.generate_insights.SessionLocal", return_value=db),
+        patch(
+            "app.scripts.generate_insights.generate_monthly_insight",
+            new_callable=AsyncMock,
+        ) as generate,
+    ):
+        settings.enable_ai_insights = True
+        settings.groq_api_key = "chave"
+        settings.insights_email_set = set()
+        await _run()
+
+    generate.assert_not_awaited()

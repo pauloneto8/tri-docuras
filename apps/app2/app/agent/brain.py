@@ -167,11 +167,13 @@ async def run(
     pending: List[Dict[str, Any]] = []
     tool_calls_log: List[Dict[str, Any]] = []
     seen: Dict[tuple, Any] = {}
+    tokens = {"prompt": 0, "completion": 0, "cached": 0}
 
     iterations = 0
     final_text = ""
     for iterations in range(1, max_iterations + 1):
         reply = await call_llm(messages, tools)
+        _accumulate_tokens(tokens, reply)
         content = (reply or {}).get("content") or ""
         tool_calls = (reply or {}).get("tool_calls") or []
 
@@ -190,6 +192,7 @@ async def run(
                     }
                 )
                 retry = await call_llm(messages, tools)
+                _accumulate_tokens(tokens, retry)
                 retry_text = (retry or {}).get("content") or ""
                 retry_unknown = [
                     m for m in _MONEY_RE.findall(retry_text) if m not in known_money
@@ -198,7 +201,7 @@ async def run(
                     return BrainResult(
                         response=_FALLBACK_MONEY,
                         tool_calls=tool_calls_log,
-                        metrics=_metrics(start, iterations, tool_calls_log),
+                        metrics=_metrics(start, iterations, tool_calls_log, tokens),
                     )
                 final_text = retry_text
             break
@@ -283,15 +286,44 @@ async def run(
         response=final_text,
         pending_plan=plan,
         tool_calls=tool_calls_log,
-        metrics=_metrics(start, iterations, tool_calls_log),
+        metrics=_metrics(start, iterations, tool_calls_log, tokens),
     )
 
 
-def _metrics(start: float, iterations: int, tool_calls: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _metrics(
+    start: float,
+    iterations: int,
+    tool_calls: List[Dict[str, Any]],
+    tokens: Dict[str, int],
+) -> Dict[str, Any]:
     return {
         "iterations": iterations,
         "tools": [c["tool"] for c in tool_calls],
         "tool_count": len(tool_calls),
         "latency_ms": int((time.perf_counter() - start) * 1000),
         "model": getattr(settings, "groq_model", None),
+        "tokens": {
+            "prompt": tokens.get("prompt", 0),
+            "completion": tokens.get("completion", 0),
+            "cached": tokens.get("cached", 0),
+            "total": tokens.get("prompt", 0) + tokens.get("completion", 0),
+        },
     }
+
+
+def _accumulate_tokens(tokens: Dict[str, int], reply: Optional[Dict[str, Any]]) -> None:
+    """Soma o `usage` de cada chamada do loop.
+
+    O `cached` vem em `prompt_tokens_details.cached_tokens` (o Groq só o
+    manda em alguns planos); o free tier conta tokens em cache como não
+    consumidos no orçamento diário, então saber quanto do prompt é cache diz
+    quanto custa de verdade uma mensagem.
+    """
+    usage = (reply or {}).get("usage") or {}
+    if not isinstance(usage, dict):
+        return
+    tokens["prompt"] += int(usage.get("prompt_tokens") or 0)
+    tokens["completion"] += int(usage.get("completion_tokens") or 0)
+    details = usage.get("prompt_tokens_details") or {}
+    if isinstance(details, dict):
+        tokens["cached"] += int(details.get("cached_tokens") or 0)
