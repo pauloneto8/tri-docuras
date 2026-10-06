@@ -120,7 +120,10 @@ async def _process_message_v2(
             if not messages:
                 messages = ["Não foi possível confirmar as ações pendentes."]
             return AgentResponse(
-                message="\n".join(messages), source="agent-v2", clear_wizard=True
+                message="\n".join(messages),
+                source="agent-v2",
+                clear_wizard=True,
+                refresh_page=bool(outcome.get("ok")),
             )
         elif _NEG_RE.match(message):
             cancel_plan(db, user_id, plan)

@@ -49,7 +49,7 @@ class BrainResult:
         metrics: Optional[Dict[str, Any]] = None,
     ):
         self.response = response
-        self.pending_plan = pending_plan or {}
+        self.pending_plan = json_safe(pending_plan or {})
         self.tool_calls = tool_calls or []
         self.metrics = metrics or {}
 
@@ -60,6 +60,17 @@ class BrainResult:
 
 def _json_default(obj: Any) -> str:
     return str(obj)
+
+
+def json_safe(value: Any) -> Any:
+    """Cópia serializável em JSON (`date`/`datetime` viram ISO).
+
+    O plano pendente vai para o cookie de sessão do web e para o JSONB do
+    Telegram, e os dois são gravados com `json.dumps`: um `date` que escapou do
+    `model_dump` do pydantic derrubava a resposta inteira com 500 depois de a
+    mensagem já estar salva no banco.
+    """
+    return json.loads(json.dumps(value, ensure_ascii=False, default=_json_default))
 
 
 def _tool_message(tool_call_id: str, result: Any) -> dict:

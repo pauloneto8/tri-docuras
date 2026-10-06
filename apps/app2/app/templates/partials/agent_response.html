@@ -17,6 +17,8 @@
       </div>
       {% if needs_confirmation and pending_action %}
       {% include "partials/agent_confirm_actions.html" %}
+      {% elif needs_confirmation %}
+      {% include "partials/agent_confirm_actions_v2.html" %}
       {% elif suggestions %}
       {% include "partials/agent_suggestions.html" %}
       {% endif %}

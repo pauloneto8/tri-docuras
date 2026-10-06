@@ -8,7 +8,7 @@
     hx-target="{{ chip_target|default('closest .agent-exchange') }}"
     hx-swap="{{ chip_swap|default('outerHTML') }}"
     hx-indicator="#htmx-indicator"
-    hx-timeout="45000"
+    hx-timeout="180000"
   >
     <input type="hidden" name="message" value="{{ chip }}">
     <input type="hidden" name="confirmed" value="false">

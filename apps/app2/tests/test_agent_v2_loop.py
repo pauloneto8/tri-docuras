@@ -82,6 +82,45 @@ async def test_write_tool_becomes_pending_plan(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_plano_com_data_sobe_serializavel_em_json():
+    """O plano pendente vai para o cookie de sessão e para o JSONB do canal.
+
+    `RegisterExpenseInput` tem campos `date`, e o `model_dump` do pydantic
+    devolve `datetime.date` — com um deles dentro, `json.dumps` da sessão
+    estourava e a resposta do chat virava 500 (a mensagem já ficava salva no
+    banco, então o usuário só via o erro).
+    """
+    async def llm(messages, tools):
+        if not any(m.get("role") == "tool" for m in messages):
+            return _msg(
+                None,
+                [
+                    _tool_call(
+                        "register_expense",
+                        {
+                            "amount": "35.00",
+                            "description": "ifood",
+                            "card_name": "Ourocard",
+                            "transaction_date": "2026-10-04",
+                            "payment_date": "2026-10-04",
+                        },
+                    )
+                ],
+            )
+        return _msg("Confirma?")
+
+    result = await brain.run(
+        db=FakeDB(), user_id=1, message="gastei 35 no ifood ontem", llm=llm
+    )
+
+    assert result.needs_confirmation
+    assert json.loads(json.dumps(result.pending_plan)) == result.pending_plan
+    argumentos = result.pending_plan["actions"][0]["arguments"]
+    assert argumentos["transaction_date"] == "2026-10-04"
+    assert argumentos["payment_date"] == "2026-10-04"
+
+
+@pytest.mark.asyncio
 async def test_invalid_write_arguments_are_reported_back(monkeypatch):
     async def llm(messages, tools):
         if not any(m.get("role") == "tool" for m in messages):

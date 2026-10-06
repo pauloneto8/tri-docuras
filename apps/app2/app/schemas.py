@@ -447,5 +447,6 @@ class AgentResponse(BaseModel):
     needs_confirmation: bool = False
     pending_action: dict | None = None
     clear_wizard: bool = False
+    refresh_page: bool = False
     source: str | None = None
     suggestions: list[str] | None = None

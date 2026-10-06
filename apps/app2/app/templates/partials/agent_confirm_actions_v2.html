@@ -8,8 +8,7 @@
     hx-timeout="180000"
   >
     <input type="hidden" name="message" value="Confirmar">
-    <input type="hidden" name="confirmed" value="true">
-    <input type="hidden" name="pending_action" value='{{ pending_action | tojson }}'>
+    <input type="hidden" name="confirmed" value="false">
     <button
       type="submit"
       class="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 px-3 py-1 text-xs font-medium text-white transition-colors"
@@ -29,7 +28,7 @@
     hx-timeout="180000"
   >
     <input type="hidden" name="message" value="cancelar">
-    <input type="hidden" name="confirmed" value="false">
+    <input type="hidden" name="confirmed" value="true">
     <button
       type="submit"
       class="inline-flex items-center gap-1.5 rounded-full border border-rose-800/80 bg-rose-950/40 text-rose-200 hover:bg-rose-900/60 px-3 py-1 text-xs transition-colors"

@@ -2615,7 +2615,7 @@ async def agent_chat(
             "needs_confirmation": result.needs_confirmation,
             "pending_action": result.pending_action,
             "suggestions": result.suggestions,
-            "refresh_page": False,
+            "refresh_page": result.refresh_page,
         },
     )
 
