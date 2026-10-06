@@ -2,7 +2,7 @@ import httpx
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.agent.groq import call_groq, chat_with_tools
+from app.agent.groq import call_groq, call_groq_text, chat_with_tools
 from app.schemas import ToolCall
 
 
@@ -89,3 +89,38 @@ async def test_call_groq_parses_json_from_text_response():
     assert result == tool
     payload = client.post.await_args.kwargs["json"]
     assert "response_format" not in payload
+
+
+@pytest.mark.asyncio
+async def test_call_groq_text_pega_reasoning_effort_low_em_modelo_que_raciocina():
+    """gpt-oss consome o max_tokens raciocinando: sem `low` devolveu content vazio."""
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
+    client = _client_with(response)
+
+    with (
+        patch("app.agent.groq.groq_configured", new_callable=AsyncMock, return_value=True),
+        patch("app.agent.groq.httpx.AsyncClient", return_value=client),
+        patch("app.agent.groq.settings.groq_model", "openai/gpt-oss-120b"),
+    ):
+        assert await call_groq_text("resuma") == "ok"
+
+    assert client.post.await_args.kwargs["json"]["reasoning_effort"] == "low"
+
+
+@pytest.mark.asyncio
+async def test_call_groq_text_nao_manda_reasoning_effort_para_modelo_sem_suporte():
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
+    client = _client_with(response)
+
+    with (
+        patch("app.agent.groq.groq_configured", new_callable=AsyncMock, return_value=True),
+        patch("app.agent.groq.httpx.AsyncClient", return_value=client),
+        patch("app.agent.groq.settings.groq_model", "qwen/qwen3.8-27b"),
+    ):
+        await call_groq_text("resuma")
+
+    assert "reasoning_effort" not in client.post.await_args.kwargs["json"]

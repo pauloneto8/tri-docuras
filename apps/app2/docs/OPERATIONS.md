@@ -44,10 +44,12 @@ Gera/atualiza o insight do mês de quem está em `APP2_INSIGHTS_EMAILS` (vazio =
 docker compose exec -T app2 python -m app.scripts.generate_insights
 ```
 
-Cada usuário custa ~2.500 tokens de LLM por dia. O free tier do Groq é de
-200.000 tokens/dia **por modelo** e uma mensagem do agente v2 gasta ~12.000:
-gerar insight para todos os cadastrados esgota o orçamento e derruba o chat.
-Por isso a lista é explícita — quem não estiver nela não entra.
+Cada usuário custa ~350 tokens de LLM por dia (medido em 2026-10-05: 254 de
+prompt + 97 de resposta, com `reasoning_effort=low` — antes eram ~2.500, porque
+o `gpt-oss` gastava o `max_tokens` inteiro raciocinando). Ainda assim o free tier
+do Groq é de 200.000 tokens/dia **por modelo** e uma mensagem do agente v2 gasta
+~12.000: insight para todo mundo registrado continua esgotando o orçamento e
+derrubando o chat. Por isso a lista é explícita — quem não estiver nela não entra.
 
 Agendado 1x/dia às 06:00 no crontab do root (log em
 `/var/log/assistfin-insights.log`, rotacionado por `/etc/logrotate.d/assistfin`):

@@ -18,6 +18,20 @@ BACKOFF_BASE_SECONDS = 2.0
 MAX_BACKOFF_SECONDS = 30.0
 RETRY_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
 
+# Modelos que gastam parte do max_tokens raciocinando antes de responder.
+REASONING_MODELS = ("openai/gpt-oss",)
+
+
+def _reasoning_kwargs(model: str) -> dict:
+    """`reasoning_effort=low` nos modelos que raciocinam (medido, 2026-10-05).
+
+    O `gpt-oss-120b` com `max_tokens=300` devolveu `finish_reason=length` e
+    `content` vazio: os 300 tokens foram só raciocínio, então o insight diário
+    era descartado todo dia sem erro nenhum no log. Com `low` o mesmo pedido
+    fecha em ~57 tokens e responde — mais barato e com resposta.
+    """
+    return {"reasoning_effort": "low"} if model.startswith(REASONING_MODELS) else {}
+
 
 class GroqRateLimitError(httpx.HTTPStatusError):
     """429 do Groq que persistiu depois de todas as tentativas.
@@ -120,6 +134,7 @@ async def call_groq(user_message: str, *, system_prompt: str | None = None) -> T
         ],
         "temperature": 0.1,
         "max_tokens": 512,
+        **_reasoning_kwargs(settings.groq_model),
     }
     async with httpx.AsyncClient(timeout=60.0) as client:
         data = await _post_json(client, payload)
@@ -148,6 +163,7 @@ async def call_groq_text(
         ],
         "temperature": temperature,
         "max_tokens": max_tokens,
+        **_reasoning_kwargs(settings.groq_model),
     }
     async with httpx.AsyncClient(timeout=60.0) as client:
         data = await _post_json(client, payload)

@@ -35,6 +35,43 @@ def test_build_prompt_includes_only_known_values():
     }
 
 
+def test_build_prompt_prefixa_valores_sem_simbolo_de_finance():
+    """`finance.get_summary` devolve "1.637,46" (sem R$); o insight sai com o prefixo."""
+    summary = {
+        **_SUMMARY,
+        "income": "0,00",
+        "expense": "95,60",
+        "balance": "-95,60",
+        "projected_ending_balance": "1.637,46",
+    }
+    budgets = [{"category": "Lazer", "spent": "300,00", "limit": "400,00", "percent_used": 75.0}]
+
+    prompt, known = _build_prompt(summary, budgets)
+
+    assert "Receita: R$ 0,00" in prompt
+    assert "Saldo do periodo: -R$ 95,60" in prompt
+    assert "gasto R$ 300,00 de R$ 400,00" in prompt
+    assert known == {
+        "R$ 0,00",
+        "R$ 95,60",
+        "-R$ 95,60",
+        "R$ 1.637,46",
+        "R$ 300,00",
+        "R$ 400,00",
+    }
+
+
+def test_validate_aceita_valor_com_ou_sem_prefixo_de_real():
+    _, known = _build_prompt(
+        {**_SUMMARY, "income": "1.637,46", "expense": "95,60", "balance": "-95,60"},
+        [],
+    )
+
+    assert _validate("Sua receita foi R$ 1.637,46 e as despesas 95,60.", known) is True
+    assert _validate("Saldo de -R$ 95,60 no mes.", known) is True
+    assert _validate("Sobrou R$ 250,00 no mes.", known) is False
+
+
 def test_validate_accepts_text_with_only_known_values():
     _, known = _build_prompt(_SUMMARY, _BUDGETS)
     text = "Voce recebeu R$ 5.000,00 e gastou R$ 3.200,50 — sobrou R$ 1.799,50 no mes."
@@ -118,6 +155,29 @@ async def test_generate_monthly_insight_saves_valid_text():
         month=9,
         text="Voce recebeu R$ 5.000,00 e sobrou R$ 1.799,50.",
     )
+
+
+@pytest.mark.asyncio
+async def test_generate_monthly_insight_reserva_max_tokens_para_o_raciocinio():
+    """Com 300 o gpt-oss gastava tudo raciocinando e devolvia texto vazio."""
+    user = SimpleNamespace(id=1)
+    db = MagicMock()
+
+    with (
+        patch("app.services.insights.settings") as settings,
+        patch("app.services.insights.finance.get_summary", return_value=_SUMMARY),
+        patch("app.services.insights.finance.get_budget_status", return_value=_BUDGETS),
+        patch(
+            "app.services.insights.call_groq_text",
+            new_callable=AsyncMock,
+            return_value="ok",
+        ) as call_groq_text,
+        patch("app.services.insights.save_insight"),
+    ):
+        settings.enable_ai_insights = True
+        await generate_monthly_insight(db, user, year=2026, month=9)
+
+    assert call_groq_text.await_args.kwargs["max_tokens"] >= 600
 
 
 def test_insights_email_set_falls_back_to_root_emails():
