@@ -49,6 +49,8 @@ Future<List<Map<String, Object?>>> listOrdersForAdmin({
     } else if (adminAllStatuses.contains(normalizedStatus)) {
       parameters.add(normalizedStatus);
       conditions.add('status = \$${parameters.length}');
+    } else {
+      throw AdminOrderException('Status inválido: $normalizedStatus.');
     }
   }
 
