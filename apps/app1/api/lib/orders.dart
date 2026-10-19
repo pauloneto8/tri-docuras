@@ -1,11 +1,21 @@
+import 'dart:io';
+
 import 'package:postgres/postgres.dart';
 import 'package:tri_docuras_api/db.dart';
 import 'package:tri_docuras_api/mercado_pago_client.dart';
 import 'package:tri_docuras_api/mercado_pago_config.dart';
+import 'package:tri_docuras_api/payment_check_throttle.dart';
 import 'package:tri_docuras_api/whatsapp_notify.dart';
 
 const lactoseExtraPrice = 3.0;
 const deliveryFeeAmount = 6.0;
+
+/// Únicos status a partir dos quais uma confirmação do Mercado Pago pode
+/// marcar o pedido como pago. Notificações repetidas sobre pedidos já
+/// pagos/em preparo/prontos/concluídos/cancelados são ignoradas.
+const paymentConfirmableStatuses = ['pending_payment'];
+
+final _paymentCheckThrottle = PaymentCheckThrottle();
 
 class OrderValidationException implements Exception {
   OrderValidationException(this.message);
@@ -381,6 +391,29 @@ Future<bool> syncOrderPaymentFromMercadoPago(int paymentId) async {
   return markOrderPaid(externalRef, paymentId: paymentId);
 }
 
+/// Rede de segurança para o webhook: enquanto o pedido está aguardando Pix,
+/// o polling do app reconsulta o Mercado Pago (no máximo a cada 15 s por
+/// pedido). Nunca lança: falha do MP não pode quebrar o `GET` do pedido.
+Future<Map<String, Object?>> refreshOrderPaymentIfStale(
+  Map<String, Object?> order,
+) async {
+  final paymentId = order['mp_payment_id'];
+  if (order['status'] != 'pending_payment' || paymentId is! int) {
+    return order;
+  }
+  final publicId = order['id']! as String;
+  if (!_paymentCheckThrottle.shouldCheck(publicId, DateTime.now())) {
+    return order;
+  }
+  try {
+    final updated = await syncOrderPaymentFromMercadoPago(paymentId);
+    if (updated) return await getOrderByPublicId(publicId);
+  } catch (e) {
+    stderr.writeln('[mp] reconsulta do pedido $publicId falhou: $e');
+  }
+  return order;
+}
+
 Future<bool> markOrderPaid(String publicId, {int? paymentId}) async {
   final connection = await getConnection();
   final result = await connection.execute(
@@ -389,12 +422,18 @@ Future<bool> markOrderPaid(String publicId, {int? paymentId}) async {
     SET status = 'paid',
         paid_at = NOW(),
         mp_payment_id = COALESCE(\$2, mp_payment_id)
-    WHERE public_id = \$1 AND status <> 'paid' AND status <> 'cancelled'
+    WHERE public_id = \$1 AND status = ANY(\$3::text[])
     RETURNING public_id;
     ''',
-    parameters: [publicId, paymentId],
+    parameters: [publicId, paymentId, paymentConfirmableStatuses],
   );
   final updated = result.isNotEmpty;
+  if (!updated) {
+    stderr.writeln(
+      '[mp] pagamento $paymentId ignorado: pedido $publicId '
+      'não está em pending_payment',
+    );
+  }
   if (updated) {
     try {
       await notifyOrderPaid(publicId);

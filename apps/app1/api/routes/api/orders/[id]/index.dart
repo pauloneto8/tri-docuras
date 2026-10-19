@@ -8,7 +8,7 @@ Future<Response> onRequest(RequestContext context, String id) async {
     return Response(statusCode: HttpStatus.methodNotAllowed);
   }
 
-  final order = await getOrderByPublicId(id);
+  var order = await getOrderByPublicId(id);
   if (order.isEmpty) {
     return Response.json(
       statusCode: HttpStatus.notFound,
@@ -16,5 +16,6 @@ Future<Response> onRequest(RequestContext context, String id) async {
     );
   }
 
+  order = await refreshOrderPaymentIfStale(order);
   return Response.json(body: {'order': orderToPublicJson(order)});
 }
