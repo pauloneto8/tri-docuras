@@ -224,6 +224,10 @@ const adminPanelHtml = r'''<!DOCTYPE html>
                 <input id="categorySort" type="number" step="1" value="0">
               </div>
             </div>
+            <div>
+              <label for="categorySlug">IDENTIFICAÇÃO</label>
+              <input id="categorySlug" maxlength="50" placeholder="gerada do nome (ex.: bolos)" pattern="[a-z0-9]+(-[a-z0-9]+)*">
+            </div>
             <div class="checks">
               <label><input id="categoryActive" type="checkbox" checked> Ativa no app</label>
             </div>
@@ -348,6 +352,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     const categoryFormError = document.getElementById("categoryFormError");
     const categoryIdInput = document.getElementById("categoryId");
     const categoryLabelInput = document.getElementById("categoryLabel");
+    const categorySlugInput = document.getElementById("categorySlug");
     const categorySortInput = document.getElementById("categorySort");
     const categoryActiveInput = document.getElementById("categoryActive");
     const categoriesEl = document.getElementById("categories");
@@ -650,6 +655,9 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     function resetCategoryForm() {
       categoryIdInput.value = "";
       categoryLabelInput.value = "";
+      categorySlugInput.value = "";
+      categorySlugInput.disabled = false;
+      categorySlugInput.required = false;
       categorySortInput.value = "0";
       categoryActiveInput.checked = true;
       categoryFormError.textContent = "";
@@ -661,6 +669,8 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       if (category) {
         categoryIdInput.value = category.id;
         categoryLabelInput.value = category.label;
+        categorySlugInput.value = category.slug;
+        categorySlugInput.disabled = true;
         categorySortInput.value = category.sort_order;
         categoryActiveInput.checked = !!category.active;
       }
@@ -668,11 +678,15 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     }
 
     function categoryPayload() {
-      return {
+      const payload = {
         label: categoryLabelInput.value.trim(),
         sort_order: Number(categorySortInput.value) || 0,
         active: categoryActiveInput.checked
       };
+      if (!categorySlugInput.disabled) {
+        payload.slug = categorySlugInput.value.trim();
+      }
+      return payload;
     }
 
     async function saveCategory(event) {
