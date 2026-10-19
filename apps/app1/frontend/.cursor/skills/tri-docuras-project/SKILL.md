@@ -57,7 +57,7 @@ Admin (fora do Flutter): `POST /api/admin/session`, pedidos (`GET/POST /api/admi
 - `favorites_screen.dart` — aba Favoritos (bottom nav índice 2)
 - `profile_screen.dart` — aba Perfil (índice 3) + `StoreMenuSheet` (menu ☰ no catálogo)
 - Coração em `product_screen.dart` — toggle via `FavoritesScope`
-- WhatsApp da loja: `AppConfig.storeWhatsApp` em `config.dart` (não é variável de ambiente)
+- WhatsApp da loja: vem de `GET /api/config` (`APP1_STORE_WHATSAPP` no `.env` da API); o app não embute número
 - Deps: `shared_preferences`, `url_launcher`
 
 ## Design system (v1)

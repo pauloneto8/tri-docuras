@@ -172,7 +172,7 @@ Integrada com Mercado Pago (produção ou teste):
 - Cards: retirada, entrega, pagamento Pix, WhatsApp da loja
 - Botão WhatsApp abre `wa.me` via `url_launcher`
 - Versão do app (`AppConfig.appVersion`)
-- Número da loja: `AppConfig.storeWhatsApp` em `config.dart`
+- Número da loja: vem de `GET /api/config` (`APP1_STORE_WHATSAPP`); sem número, os botões de WhatsApp ficam ocultos
 
 ### Menu da loja (`StoreMenuSheet` em `profile_screen.dart`)
 

@@ -28,8 +28,6 @@ class StoreConfigRepository {
 extension StoreConfigFallback on StoreConfig {
   static StoreConfig get fallback => StoreConfig(
         appName: AppConfig.appName,
-        storeWhatsApp: AppConfig.storeWhatsApp,
-        storeWhatsAppDisplay: AppConfig.storeWhatsAppDisplay,
         categories: const [
           StoreCategory(slug: 'brownies', label: 'Brownies'),
           StoreCategory(slug: 'combos', label: 'Combos'),

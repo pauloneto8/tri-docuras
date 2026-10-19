@@ -55,12 +55,14 @@ class ProfileScreen extends StatelessWidget {
               icon: Icons.chat_outlined,
               title: 'Fale conosco',
               body: 'Dúvidas sobre pedidos? Chame no WhatsApp.',
-              action: TdButton(
-                label: 'WhatsApp',
-                expand: false,
-                variant: TdButtonVariant.soft,
-                onPressed: () => _openWhatsApp(context),
-              ),
+              action: StoreConfigHolder.instance.storeWhatsApp == null
+                  ? null
+                  : TdButton(
+                      label: 'WhatsApp',
+                      expand: false,
+                      variant: TdButtonVariant.soft,
+                      onPressed: () => _openWhatsApp(context),
+                    ),
             ),
             const SizedBox(height: 20),
             Text(

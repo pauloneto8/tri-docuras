@@ -1,4 +1,3 @@
-import 'package:tri_docuras/config.dart';
 import 'package:tri_docuras/models/store_config.dart';
 import 'package:tri_docuras/services/store_config_repository.dart';
 
@@ -11,10 +10,12 @@ class StoreConfigHolder {
 
   StoreConfig get config => _config;
 
-  String? get storeWhatsApp => _config.storeWhatsApp ?? AppConfig.storeWhatsApp;
+  String? get storeWhatsApp {
+    final phone = _config.storeWhatsApp;
+    return phone == null || phone.isEmpty ? null : phone;
+  }
 
-  String get storeWhatsAppDisplay =>
-      _config.storeWhatsAppDisplay ?? AppConfig.storeWhatsAppDisplay;
+  String? get storeWhatsAppDisplay => _config.storeWhatsAppDisplay;
 
   Future<void> load({StoreConfigRepository? repository}) async {
     final repo = repository ?? StoreConfigRepository();

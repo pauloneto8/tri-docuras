@@ -88,7 +88,7 @@ Categorias: `brownies`, `combos`.
 
 **Favoritos:** coração na tela do produto; IDs salvos localmente no dispositivo/navegador.
 
-**Contato da loja:** `AppConfig.storeWhatsApp` em `frontend/lib/config.dart` (ajustar número real).
+**Contato da loja:** vem de `GET /api/config` (`APP1_STORE_WHATSAPP` no `.env`); o app não embute número e esconde os botões de WhatsApp se a API não informar.
 
 Carrinho e checkout no Flutter; **Gerar Pix** grava o pedido (`POST /api/orders`), gera cobrança Pix no Mercado Pago e exibe QR + copia-e-cola. A confirmação é automática via webhook + polling (`GET /api/orders/{id}`).
 
