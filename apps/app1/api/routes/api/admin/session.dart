@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dart_frog/dart_frog.dart';
 import 'package:tri_docuras_api/admin_auth.dart';
+import 'package:tri_docuras_api/rate_limiter.dart';
 
 Future<Response> onRequest(RequestContext context) async {
   if (context.request.method != HttpMethod.post) {
@@ -14,6 +15,9 @@ Future<Response> onRequest(RequestContext context) async {
       body: {'error': 'Painel admin não configurado.'},
     );
   }
+
+  final limited = rateLimitResponse(loginLimiter, clientIp(context));
+  if (limited != null) return limited;
 
   try {
     final body = await context.request.json() as Map<String, dynamic>;

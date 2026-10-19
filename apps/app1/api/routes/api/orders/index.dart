@@ -4,11 +4,15 @@ import 'package:dart_frog/dart_frog.dart';
 import 'package:tri_docuras_api/mercado_pago_client.dart';
 import 'package:tri_docuras_api/mercado_pago_config.dart';
 import 'package:tri_docuras_api/orders.dart';
+import 'package:tri_docuras_api/rate_limiter.dart';
 
 Future<Response> onRequest(RequestContext context) async {
   if (context.request.method != HttpMethod.post) {
     return Response(statusCode: HttpStatus.methodNotAllowed);
   }
+
+  final limited = rateLimitResponse(orderCreateLimiter, clientIp(context));
+  if (limited != null) return limited;
 
   try {
     final body = await context.request.json() as Map<String, dynamic>;

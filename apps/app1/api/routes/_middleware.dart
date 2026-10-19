@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dart_frog/dart_frog.dart';
 import 'package:tri_docuras_api/db.dart';
+import 'package:tri_docuras_api/env.dart';
 
 Handler middleware(Handler handler) {
   return (context) async {
@@ -39,7 +40,7 @@ String? _allowedOrigin(RequestContext context) {
   if (isDev) return origin;
 
   // Produção: somente o domínio da loja (mesmo esquema https).
-  final domain = Platform.environment['APP1_DOMAIN']?.toLowerCase() ?? '';
+  final domain = Env.get('APP1_DOMAIN')?.toLowerCase() ?? '';
   if (domain.isEmpty || uri.scheme != 'https') return null;
   if (uri.host == domain || uri.host == 'www.$domain') return origin;
   return null;
