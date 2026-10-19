@@ -174,10 +174,9 @@ Future<void> _seedCategories(Connection connection) async {
 Future<void> seedProducts(Connection connection) async {
   final result = await connection.execute('SELECT COUNT(*) FROM products;');
   final count = result.first.first as int;
-  if (count > 0) {
-    await _migrateCatalog(connection);
-    return;
-  }
+  // Só semeia banco vazio. O catálogo é gerenciado pelo painel: reaplicar o
+  // seed a cada requisição sobrescrevia preços e ocultava produtos novos.
+  if (count > 0) return;
 
   await _insertCatalog(connection);
 }
@@ -220,49 +219,6 @@ Future<void> _insertCatalog(Connection connection) async {
   );
 }
 
-Future<void> _migrateCatalog(Connection connection) async {
-  final catalog = [
-    ['Brownie Tradicional', 'Brownie amanteigado clássico, macio por dentro e com casquinha.', 12.00, true, 'brownies'],
-    ['Ninho c/ Nutella', 'Brownie amanteigado, recheado e coberto com Nutella derretida e leite Ninho.', 15.00, true, 'brownies'],
-    ['Brownie c/ Nozes', 'Brownie intenso com nozes caramelizadas e textura crocante.', 14.00, false, 'brownies'],
-    ['Caixa Presente (4un)', 'Seleção especial de 4 brownies artesanais para presentear.', 48.00, false, 'combos'],
-  ];
-
-  for (final item in catalog) {
-    final existing = await connection.execute(
-      'SELECT id FROM products WHERE name = \$1 LIMIT 1;',
-      parameters: [item[0]],
-    );
-    if (existing.isEmpty) {
-      await connection.execute(
-        r'''
-        INSERT INTO products (name, description, price, featured, category, available)
-        VALUES ($1, $2, $3, $4, $5, TRUE);
-        ''',
-        parameters: [item[0], item[1], item[2], item[3], item[4]],
-      );
-    } else {
-      await connection.execute(
-        r'''
-        UPDATE products
-        SET description = $2, price = $3, featured = $4, category = $5, available = TRUE
-        WHERE name = $1;
-        ''',
-        parameters: [item[0], item[1], item[2], item[3], item[4]],
-      );
-    }
-  }
-
-  final catalogNames = catalog.map((item) => item[0]).toList();
-  await connection.execute(
-    r'''
-    UPDATE products SET available = FALSE
-    WHERE NOT (name = ANY($1::text[]));
-    ''',
-    parameters: [catalogNames],
-  );
-}
-
 Future<void> closeConnection() async {
   if (_connection != null) {
     await _connection!.close();
@@ -270,10 +226,17 @@ Future<void> closeConnection() async {
   }
 }
 
+bool _databaseInitialized = false;
+
+/// Idempotente e executada uma vez por processo (o middleware a chama a cada
+/// requisição). Só marca como pronta após sucesso, para tentar de novo se o
+/// banco ainda estiver subindo.
 Future<void> initializeDatabase() async {
+  if (_databaseInitialized) return;
   final connection = await getConnection();
   await ensureSchema(connection);
   await seedProducts(connection);
+  _databaseInitialized = true;
 }
 
 Future<bool> pingDatabase() async {
