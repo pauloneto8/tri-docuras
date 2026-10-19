@@ -17,14 +17,19 @@ O frontend Flutter consome estes endpoints no checkout e na tela de pagamento.
 | POST | `/api/webhooks/mercadopago` | Webhook de confirmação de pagamento |
 | GET | `/api/orders/{id}/tracking` | Timeline de rastreamento para o cliente |
 | POST | `/api/admin/session` | Login do painel (senha → token) |
-| GET | `/api/admin/orders` | Lista pedidos para a loja (autenticado) |
-| POST | `/api/admin/orders/{id}/status` | Atualiza status do pedido |
-| GET | `/api/admin/products` | Lista produtos (inclui ocultos) |
+| GET | `/api/admin/orders` | Lista pedidos (`search`, `from`, `to` opcionais) |
+| POST | `/api/admin/orders/{id}/status` | Atualiza status do pedido (inclui `cancelled`) |
+| GET | `/api/admin/products` | Lista produtos (inclui ocultos) + categorias |
 | POST | `/api/admin/products` | Cria produto |
 | PUT | `/api/admin/products/{id}` | Atualiza produto |
 | POST | `/api/admin/products/{id}/image` | Upload da foto do produto |
+| GET | `/api/admin/categories` | Lista categorias |
+| POST | `/api/admin/categories` | Cria categoria |
+| PUT | `/api/admin/categories/{id}` | Atualiza categoria |
+| DELETE | `/api/admin/categories/{id}` | Remove categoria (se não houver produtos) |
+| GET | `/api/admin/finance/report` | Relatório de faturamento (`from`, `to`) |
 | GET | `/api/uploads/products/{filename}` | Foto do produto |
-| GET | `/admin` | Painel web (pedidos + produtos) |
+| GET | `/admin` | Painel web (pedidos + produtos + financeiro) |
 
 ### Exemplo — health
 
@@ -225,12 +230,14 @@ Para ocultar do catálogo público, envie `"available": false` (soft-delete; ped
 | `preparing` | Em preparo (painel admin) |
 | `ready` | Pronto para retirada/entrega |
 | `completed` | Retirado ou entregue |
+| `cancelled` | Cancelado no painel (fora do faturamento) |
 
 ## Tabelas
 
 | Tabela | Uso |
 |--------|-----|
 | `products` | Catálogo |
+| `product_categories` | Categorias editáveis (`slug`, `label`, `sort_order`, `active`) |
 | `orders` | Pedido (cliente, entrega, totais, `public_id` tipo `TD-0001`, campos MP/Pix) |
 | `order_items` | Itens com snapshot de nome e preço unitário |
 
@@ -244,8 +251,10 @@ api/
 │   ├── db.dart                    # Postgres, schema, seed
 │   ├── orders.dart                # Validação, criação, Pix, webhook sync
 │   ├── order_tracking.dart        # Timeline para o cliente
-│   ├── admin_orders.dart          # Listagem e status (painel)
+│   ├── admin_orders.dart          # Listagem, filtros e status (painel)
 │   ├── admin_products.dart        # CRUD de produtos (painel)
+│   ├── admin_categories.dart      # CRUD de categorias (painel)
+│   ├── finance.dart               # Relatório de faturamento (painel)
 │   ├── admin_auth.dart            # Autenticação do painel
 │   ├── admin_panel_html.dart      # UI HTML do /admin
 │   ├── mercado_pago_client.dart   # Cliente API MP v1 payments
@@ -260,7 +269,9 @@ api/
 │       ├── admin/
 │       │   ├── session.dart         # POST login
 │       │   ├── orders/              # GET lista, POST status
-│       │   └── products/            # GET/POST lista e criar; PUT por id
+│       │   ├── products/            # GET/POST lista e criar; PUT por id
+│       │   ├── categories/          # GET/POST; PUT/DELETE por id
+│       │   └── finance/             # GET relatório de faturamento
 │       ├── orders/
 │       │   ├── index.dart           # POST create
 │       │   └── [id]/
@@ -291,23 +302,28 @@ O `entrypoint.sh` aguarda o Postgres, aplica schema/seed e inicia o servidor.
 
 ## Painel admin (`/admin`)
 
-Interface HTML com duas seções: **Pedidos** e **Produtos** (`admin_panel_html.dart`).
+Interface HTML com três seções: **Pedidos**, **Produtos** e **Financeiro** (`admin_panel_html.dart`).
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
 | GET | `/admin` | Interface web (HTML) |
 | POST | `/api/admin/session` | `{ "password": "..." }` → `{ "token": "..." }` |
-| GET | `/api/admin/orders?status=active` | Lista pedidos (`Authorization: Bearer <token>`) |
-| POST | `/api/admin/orders/{id}/status` | `{ "status": "preparing" }` etc. |
+| GET | `/api/admin/orders?status=active&search=Maria&from=2026-09-01&to=2026-09-30` | Lista pedidos (`Authorization: Bearer <token>`) |
+| POST | `/api/admin/orders/{id}/status` | `{ "status": "preparing" }` etc. (inclui `cancelled`) |
 | GET | `/api/admin/products` | Lista produtos (inclui ocultos) + categorias |
 | POST | `/api/admin/products` | Cria produto |
 | PUT | `/api/admin/products/{id}` | Atualiza produto (inclui `available`) |
+| GET/POST | `/api/admin/categories` | Lista / cria categorias |
+| PUT/DELETE | `/api/admin/categories/{id}` | Edita / remove categoria |
+| GET | `/api/admin/finance/report?from=&to=` | Faturamento do período |
 
-**Pedidos** — filtros `status`: `active` (fila), `paid`, `preparing`, `ready`, `pending_payment`, `completed`.
+**Pedidos** — filtros `status`: `active` (fila), `paid`, `preparing`, `ready`, `pending_payment`, `completed`, `cancelled`. Busca por ID/cliente (`search`) e período por data de criação (`from`/`to`, `AAAA-MM-DD`).
 
-**Produtos** — categorias: `brownies`, `combos`. Campo `available: false` oculta do `GET /api/products` sem apagar o registro.
+**Produtos** — categorias editáveis (tabela `product_categories`; padrão `brownies`, `combos`). Campo `available: false` oculta do `GET /api/products` sem apagar o registro. Excluir uma categoria exige mover os produtos antes.
 
-Fluxo de status após pagamento: `paid` → `preparing` → `ready` → `completed`.
+**Financeiro** — relatório de leitura derivado dos pedidos pagos (`paid`, `preparing`, `ready`, `completed`), agrupado por dia no fuso `America/Recife`: faturamento, nº de pedidos, ticket médio, taxas de entrega, série diária e vendas por produto. Cancelados e aguardando Pix ficam fora.
+
+Fluxo de status após pagamento: `paid` → `preparing` → `ready` → `completed`; `cancelled` encerra o pedido (irreversível) e o exclui do faturamento.
 
 **Configuração:**
 

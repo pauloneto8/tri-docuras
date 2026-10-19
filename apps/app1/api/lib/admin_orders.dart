@@ -9,12 +9,14 @@ const adminAllStatuses = [
   'preparing',
   'ready',
   'completed',
+  'cancelled',
 ];
 
 const _statusTransitions = <String, List<String>>{
-  'paid': ['preparing', 'ready', 'completed'],
-  'preparing': ['ready', 'completed'],
-  'ready': ['completed'],
+  'pending_payment': ['cancelled'],
+  'paid': ['preparing', 'ready', 'completed', 'cancelled'],
+  'preparing': ['ready', 'completed', 'cancelled'],
+  'ready': ['completed', 'cancelled'],
 };
 
 class AdminOrderException implements Exception {
@@ -28,24 +30,52 @@ class AdminOrderException implements Exception {
 
 Future<List<Map<String, Object?>>> listOrdersForAdmin({
   String? status,
+  String? search,
+  String? from,
+  String? to,
   int limit = 50,
 }) async {
   final connection = await getConnection();
   final normalizedStatus = status?.trim();
-  final parameters = <Object?>[limit];
-  var whereClause = '';
+  final conditions = <String>[];
+  final parameters = <Object?>[];
 
   if (normalizedStatus != null && normalizedStatus.isNotEmpty) {
     if (normalizedStatus == 'active') {
-      whereClause = "WHERE status = ANY(\$2::text[])";
       parameters.add(adminOperationalStatuses);
+      conditions.add('status = ANY(\$${parameters.length}::text[])');
     } else if (normalizedStatus == 'queue') {
-      whereClause = "WHERE status IN ('paid', 'preparing')";
-    } else {
-      whereClause = 'WHERE status = \$2';
+      conditions.add("status IN ('paid', 'preparing')");
+    } else if (adminAllStatuses.contains(normalizedStatus)) {
       parameters.add(normalizedStatus);
+      conditions.add('status = \$${parameters.length}');
     }
   }
+
+  final normalizedSearch = search?.trim();
+  if (normalizedSearch != null && normalizedSearch.isNotEmpty) {
+    parameters.add('%$normalizedSearch%');
+    final index = parameters.length;
+    conditions.add('(public_id ILIKE \$$index OR customer_name ILIKE \$$index)');
+  }
+
+  final fromDate = _parseDate(from);
+  final toDate = _parseDate(to);
+  if (fromDate != null || toDate != null) {
+    final start = fromDate ?? DateTime(2000, 1, 1);
+    final end = toDate ?? DateTime.now();
+    if (start.isAfter(end)) {
+      throw AdminOrderException('A data inicial não pode ser depois da final.');
+    }
+    parameters.add(start);
+    conditions.add('created_at >= \$${parameters.length}');
+    parameters.add(end.add(const Duration(days: 1)));
+    conditions.add('created_at < \$${parameters.length}');
+  }
+
+  final whereClause =
+      conditions.isEmpty ? '' : 'WHERE ${conditions.join(' AND ')}';
+  parameters.add(limit);
 
   final result = await connection.execute(
     '''
@@ -56,7 +86,7 @@ Future<List<Map<String, Object?>>> listOrdersForAdmin({
     FROM orders
     $whereClause
     ORDER BY created_at DESC
-    LIMIT \$1;
+    LIMIT \$${parameters.length};
     ''',
     parameters: parameters,
   );
@@ -83,11 +113,11 @@ Future<Map<String, Object?>> updateOrderStatus(
   }
 
   final current = order['status'] as String;
-  if (current == 'pending_payment') {
-    throw AdminOrderException('Aguarde a confirmação do pagamento Pix.');
-  }
   if (current == 'completed') {
     throw AdminOrderException('Este pedido já foi concluído.');
+  }
+  if (current == 'cancelled') {
+    throw AdminOrderException('Este pedido já foi cancelado.');
   }
   if (current == normalized) {
     return orderToAdminJson(order, await _fetchItemsForPublicId(publicId));
@@ -223,6 +253,8 @@ String statusLabel(String status, String deliveryMode) {
       return deliveryMode == 'pickup' ? 'Pronto para retirada' : 'Pronto para entrega';
     case 'completed':
       return deliveryMode == 'pickup' ? 'Retirado' : 'Entregue';
+    case 'cancelled':
+      return 'Cancelado';
     default:
       return status;
   }
@@ -250,12 +282,23 @@ String actionLabel(String status, String deliveryMode) {
           : 'Marcar pronto para entrega';
     case 'completed':
       return deliveryMode == 'pickup' ? 'Confirmar retirada' : 'Confirmar entrega';
+    case 'cancelled':
+      return 'Cancelar pedido';
     default:
       return status;
   }
 }
 
 String whatsappLink(String digits) => 'https://wa.me/55$digits';
+
+DateTime? _parseDate(String? value) {
+  if (value == null || value.trim().isEmpty) return null;
+  final parsed = DateTime.tryParse(value.trim());
+  if (parsed == null) {
+    throw AdminOrderException('Data inválida: use o formato AAAA-MM-DD.');
+  }
+  return DateTime(parsed.year, parsed.month, parsed.day);
+}
 
 double _toDouble(Object? value) => switch (value) {
       final num n => n.toDouble(),

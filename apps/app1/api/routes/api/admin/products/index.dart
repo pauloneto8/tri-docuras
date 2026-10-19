@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dart_frog/dart_frog.dart';
 import 'package:tri_docuras_api/admin_auth.dart';
+import 'package:tri_docuras_api/admin_categories.dart';
 import 'package:tri_docuras_api/admin_products.dart';
 
 Future<Response> onRequest(RequestContext context) async {
@@ -18,10 +19,11 @@ Future<Response> onRequest(RequestContext context) async {
 
   if (context.request.method == HttpMethod.get) {
     final products = await listProductsForAdmin();
+    final categories = await listCategoriesForAdmin();
     return Response.json(
       body: {
         'products': products.map(productToAdminJson).toList(),
-        'categories': adminProductCategories,
+        'categories': categories.map(categoryToAdminJson).toList(),
       },
     );
   }

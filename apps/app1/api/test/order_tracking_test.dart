@@ -23,5 +23,13 @@ void main() {
       expect(timeline.every((step) => step['done'] == true), isTrue);
       expect(timeline.last['current'], isTrue);
     });
+
+    test('cancelled mostra recebido e cancelado', () {
+      final timeline = buildCustomerTimeline('cancelled', 'delivery');
+      expect(timeline, hasLength(2));
+      expect(timeline.first['key'], 'received');
+      expect(timeline.last['key'], 'cancelled');
+      expect(timeline.last['current'], isTrue);
+    });
   });
 }

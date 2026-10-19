@@ -30,5 +30,9 @@ extension StoreConfigFallback on StoreConfig {
         appName: AppConfig.appName,
         storeWhatsApp: AppConfig.storeWhatsApp,
         storeWhatsAppDisplay: AppConfig.storeWhatsAppDisplay,
+        categories: const [
+          StoreCategory(slug: 'brownies', label: 'Brownies'),
+          StoreCategory(slug: 'combos', label: 'Combos'),
+        ],
       );
 }

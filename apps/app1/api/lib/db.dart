@@ -135,6 +135,40 @@ Future<void> ensureSchema(Connection connection) async {
   await connection.execute('''
     CREATE INDEX IF NOT EXISTS idx_orders_mp_payment_id ON orders (mp_payment_id);
   ''');
+  await connection.execute('''
+    CREATE INDEX IF NOT EXISTS idx_orders_paid_at ON orders (paid_at);
+  ''');
+
+  await connection.execute('''
+    CREATE TABLE IF NOT EXISTS product_categories (
+      id SERIAL PRIMARY KEY,
+      slug VARCHAR(50) NOT NULL UNIQUE,
+      label VARCHAR(100) NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  ''');
+
+  await _seedCategories(connection);
+}
+
+Future<void> _seedCategories(Connection connection) async {
+  const defaults = [
+    ['brownies', 'Brownies', 1],
+    ['combos', 'Combos', 2],
+  ];
+
+  for (final category in defaults) {
+    await connection.execute(
+      r'''
+      INSERT INTO product_categories (slug, label, sort_order)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (slug) DO NOTHING;
+      ''',
+      parameters: [category[0], category[1], category[2]],
+    );
+  }
 }
 
 Future<void> seedProducts(Connection connection) async {

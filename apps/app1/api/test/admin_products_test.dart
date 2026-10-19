@@ -37,15 +37,35 @@ void main() {
       );
     });
 
-    test('rejeita categoria desconhecida', () {
+    test('rejeita categoria vazia', () {
       expect(
         () => parseProductInput({
           'name': 'Teste',
           'price': 12,
-          'category': 'doces',
+          'category': '',
         }),
         throwsA(isA<AdminProductException>()),
       );
+    });
+
+    test('rejeita categoria com formato inválido', () {
+      expect(
+        () => parseProductInput({
+          'name': 'Teste',
+          'price': 12,
+          'category': 'Doces Especiais',
+        }),
+        throwsA(isA<AdminProductException>()),
+      );
+    });
+
+    test('aceita slug de categoria novo', () {
+      final input = parseProductInput({
+        'name': 'Teste',
+        'price': 12,
+        'category': 'bolos-caseiros',
+      });
+      expect(input.category, 'bolos-caseiros');
     });
   });
 

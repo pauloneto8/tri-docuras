@@ -2,7 +2,7 @@ import 'package:postgres/postgres.dart';
 import 'package:tri_docuras_api/db.dart';
 import 'package:tri_docuras_api/product_images.dart';
 
-const adminProductCategories = ['brownies', 'combos'];
+final _categorySlugPattern = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
 
 class AdminProductException implements Exception {
   AdminProductException(this.message);
@@ -56,8 +56,11 @@ ProductInput parseProductInput(Map<String, dynamic> body) {
   }
 
   final category = body['category']?.toString().trim() ?? '';
-  if (!adminProductCategories.contains(category)) {
-    throw AdminProductException('Categoria inválida. Use brownies ou combos.');
+  if (category.isEmpty) {
+    throw AdminProductException('Selecione a categoria do produto.');
+  }
+  if (category.length > 50 || !_categorySlugPattern.hasMatch(category)) {
+    throw AdminProductException('Categoria inválida.');
   }
 
   return ProductInput(
@@ -87,16 +90,33 @@ Future<List<Map<String, Object?>>> listProductsForAdmin() async {
   final connection = await getConnection();
   final result = await connection.execute(
     '''
-    SELECT id, name, description, price, featured, category, available, image_url
-    FROM products
-    ORDER BY available DESC, featured DESC, name ASC;
+    SELECT p.id, p.name, p.description, p.price, p.featured, p.category,
+           p.available, p.image_url, c.label
+    FROM products p
+    LEFT JOIN product_categories c ON c.slug = p.category
+    ORDER BY p.available DESC, p.featured DESC, p.name ASC;
     ''',
   );
-  return result.map(_rowToProductMap).toList();
+  return result.map((row) {
+    final map = _rowToProductMap(row);
+    map['category_label'] = row[8]?.toString();
+    return map;
+  }).toList();
+}
+
+Future<void> _ensureCategoryExists(Connection connection, String slug) async {
+  final result = await connection.execute(
+    'SELECT id FROM product_categories WHERE slug = \$1 LIMIT 1;',
+    parameters: [slug],
+  );
+  if (result.isEmpty) {
+    throw AdminProductException('Categoria não encontrada.');
+  }
 }
 
 Future<Map<String, Object?>> createProduct(ProductInput input) async {
   final connection = await getConnection();
+  await _ensureCategoryExists(connection, input.category);
   final result = await connection.execute(
     '''
     INSERT INTO products (name, description, price, featured, category, available)
@@ -126,6 +146,7 @@ Future<Map<String, Object?>> updateProduct(int id, ProductInput input) async {
   }
 
   final connection = await getConnection();
+  await _ensureCategoryExists(connection, input.category);
   final result = await connection.execute(
     '''
     UPDATE products
@@ -221,7 +242,9 @@ Map<String, Object?> productToAdminJson(Map<String, Object?> product) {
     'price': product['price'],
     'featured': product['featured'] == true,
     'category': product['category'],
-    'category_label': categoryLabel(product['category'] as String),
+    'category_label': (product['category_label'] as String?)?.isNotEmpty == true
+        ? product['category_label']
+        : categoryLabel(product['category'] as String),
     'available': available,
     'availability_label': available ? 'No catálogo' : 'Oculto',
     'image_url': product['image_url'],
@@ -235,7 +258,11 @@ String categoryLabel(String category) {
     case 'combos':
       return 'Combos';
     default:
-      return category;
+      return category
+          .split('-')
+          .where((part) => part.isNotEmpty)
+          .map((part) => part[0].toUpperCase() + part.substring(1))
+          .join(' ');
   }
 }
 

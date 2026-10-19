@@ -57,6 +57,7 @@ services:
       APP1_WHATSAPP_CUSTOMER_TEMPLATE: ${APP1_WHATSAPP_CUSTOMER_TEMPLATE:-order_paid}
       APP1_WHATSAPP_CUSTOMER_TEMPLATE_LANG: ${APP1_WHATSAPP_CUSTOMER_TEMPLATE_LANG:-pt_BR}
       APP1_STORE_WHATSAPP_DISPLAY: ${APP1_STORE_WHATSAPP_DISPLAY:-}
+      TZ: America/Recife
     volumes:
       - app1_uploads:/app/uploads
     networks:
@@ -81,6 +82,7 @@ services:
       POSTGRES_USER: ${APP1_DB_USER}
       POSTGRES_PASSWORD: ${APP1_DB_PASSWORD}
       POSTGRES_DB: ${APP1_DB_NAME}
+      TZ: America/Recife
     volumes:
       - app1_db_data:/var/lib/postgresql/data
     networks:

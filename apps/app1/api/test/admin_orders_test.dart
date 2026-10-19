@@ -8,6 +8,7 @@ void main() {
       expect(statusLabel('ready', 'pickup'), 'Pronto para retirada');
       expect(statusLabel('ready', 'delivery'), 'Pronto para entrega');
       expect(statusLabel('completed', 'delivery'), 'Entregue');
+      expect(statusLabel('cancelled', 'delivery'), 'Cancelado');
     });
   });
 
@@ -18,14 +19,24 @@ void main() {
       expect(actions.map((a) => a['status']), contains('ready'));
     });
 
-    test('ready só pode concluir', () {
+    test('ready pode concluir ou cancelar', () {
       final actions = nextActionsFor('ready', 'delivery');
+      expect(actions.map((a) => a['status']), contains('completed'));
+      expect(actions.map((a) => a['status']), contains('cancelled'));
+    });
+
+    test('pending_payment só pode cancelar', () {
+      final actions = nextActionsFor('pending_payment', 'pickup');
       expect(actions, hasLength(1));
-      expect(actions.first['status'], 'completed');
+      expect(actions.first['status'], 'cancelled');
     });
 
     test('completed não tem ações', () {
       expect(nextActionsFor('completed', 'pickup'), isEmpty);
+    });
+
+    test('cancelled não tem ações', () {
+      expect(nextActionsFor('cancelled', 'pickup'), isEmpty);
     });
   });
 
@@ -33,6 +44,13 @@ void main() {
     test('retirada vs entrega', () {
       expect(actionLabel('completed', 'pickup'), 'Confirmar retirada');
       expect(actionLabel('completed', 'delivery'), 'Confirmar entrega');
+      expect(actionLabel('cancelled', 'pickup'), 'Cancelar pedido');
+    });
+  });
+
+  group('adminAllStatuses', () {
+    test('inclui cancelled', () {
+      expect(adminAllStatuses, contains('cancelled'));
     });
   });
 }

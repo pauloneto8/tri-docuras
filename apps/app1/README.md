@@ -35,11 +35,14 @@ Domínio em `/opt/hosting/.env` → `APP1_DOMAIN` (`tridocuras.com.br`). HTTPS v
 | GET | `/api/orders/{id}/tracking` | Timeline de rastreamento (cliente) |
 | GET | `/admin` | Painel web da loja |
 | POST | `/api/admin/session` | Login do painel |
-| GET | `/api/admin/orders` | Lista pedidos (autenticado) |
-| POST | `/api/admin/orders/{id}/status` | Atualiza status do pedido |
-| GET | `/api/admin/products` | Lista produtos (inclui ocultos) |
+| GET | `/api/admin/orders` | Lista pedidos (filtros: `status`, `search`, `from`, `to`) |
+| POST | `/api/admin/orders/{id}/status` | Atualiza status do pedido (inclui `cancelled`) |
+| GET | `/api/admin/products` | Lista produtos (inclui ocultos) + categorias |
 | POST | `/api/admin/products` | Cria produto |
 | PUT | `/api/admin/products/{id}` | Atualiza produto |
+| GET/POST | `/api/admin/categories` | Lista / cria categorias |
+| PUT/DELETE | `/api/admin/categories/{id}` | Edita / remove categoria |
+| GET | `/api/admin/finance/report` | Relatório de faturamento (`from`, `to`) |
 
 ### Catálogo em produção (set/2026)
 
@@ -93,8 +96,9 @@ Carrinho e checkout no Flutter; **Gerar Pix** grava o pedido (`POST /api/orders`
 
 | Seção | Função |
 |-------|--------|
-| **Pedidos** | Fila operacional, filtros por status, WhatsApp do cliente, avanço de status |
-| **Produtos** | Criar, editar preço/descrição, destaque, ocultar do catálogo (`available`) |
+| **Pedidos** | Fila operacional, filtros por status, busca por ID/cliente, filtro por período, WhatsApp do cliente, avanço de status e cancelamento |
+| **Produtos** | Criar, editar preço/descrição, destaque, ocultar do catálogo (`available`) e CRUD de categorias |
+| **Financeiro** | Faturamento do período (dia/7 dias/mês/personalizado): faturamento, nº de pedidos, ticket médio, taxas de entrega, série diária e vendas por produto |
 
 Pix em **produção** (`APP1_MP_USE_TEST=false`); webhook MP configurado em `https://tridocuras.com.br/api/webhooks/mercadopago`.
 
@@ -109,8 +113,9 @@ Pix em **produção** (`APP1_MP_USE_TEST=false`); webhook MP configurado em `htt
 | `preparing` | Painel `/admin` | Em preparo |
 | `ready` | Painel `/admin` | Pronto para retirada/entrega |
 | `completed` | Painel `/admin` | Retirado ou entregue |
+| `cancelled` | Painel `/admin` | Cancelado (fora do faturamento) |
 
-Transições no painel: `paid` → `preparing` → `ready` → `completed` (com atalhos permitidos, ex.: `paid` → `ready`).
+Transições no painel: `paid` → `preparing` → `ready` → `completed` (com atalhos permitidos, ex.: `paid` → `ready`). Qualquer pedido não concluído pode ser cancelado (`cancelled`), de forma irreversível.
 
 ### Variáveis de ambiente (`/opt/hosting/.env`)
 
@@ -244,13 +249,32 @@ CRUD do catálogo sem rebuild do app:
 |-------|-----------|
 | Nome / descrição | Exibidos no app |
 | Preço | Em reais (ex.: `12.00`) |
-| Categoria | `brownies` ou `combos` |
+| Categoria | Escolhida entre as categorias cadastradas |
 | Destaque | Aparece primeiro no catálogo |
 | Visível no app | `available` — desmarque para ocultar sem excluir |
 
+O botão **Categorias** abre o CRUD: nome, ordem e visibilidade. Categorias padrão `brownies` e `combos` são criadas no primeiro start; exclusões exigem mover os produtos antes. As categorias ativas viram os chips do catálogo no app (`GET /api/config`).
+
 Alterações refletem em `GET /api/products` na próxima consulta do app.
 
-**Código:** `api/lib/admin_products.dart`, rotas `/api/admin/products`, UI em `admin_panel_html.dart`.
+**Código:** `api/lib/admin_products.dart`, `api/lib/admin_categories.dart`, rotas `/api/admin/products` e `/api/admin/categories`, UI em `admin_panel_html.dart`.
+
+#### Aba Financeiro
+
+Relatório de leitura sobre os pedidos **pagos** (`paid`, `preparing`, `ready`, `completed`), no fuso `America/Recife`:
+
+| Métrica | Descrição |
+|---------|-----------|
+| Faturamento | Soma de `total` no período |
+| Pedidos pagos | Quantidade no período |
+| Ticket médio | Faturamento ÷ pedidos |
+| Taxas de entrega | Soma de `delivery_fee` |
+| Faturamento por dia | Série diária |
+| Vendas por produto | Quantidade e receita por item |
+
+Períodos: **Hoje**, **7 dias**, **Este mês** ou intervalo personalizado. Pedidos `cancelled` e `pending_payment` ficam fora.
+
+**Código:** `api/lib/finance.dart`, rota `GET /api/admin/finance/report`.
 
 ```bash
 # Trocar senha: edite APP1_ADMIN_PASSWORD no .env e reinicie app1
@@ -325,7 +349,7 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 
 ## Testes
 
-Suíte verde: **44 testes na API** e **33 no frontend**. As duas suítes são
+Suíte verde: **58 testes na API** e **33 no frontend**. As duas suítes são
 herméticas — não dependem de `.env` nem de variáveis do processo.
 
 ### API (`apps/app1/api`)
@@ -348,8 +372,9 @@ para simular "nada configurado" (`Env.override({})`).
 | Arquivo | Cobertura |
 |---------|-----------|
 | `test/admin_auth_test.dart` | Sessão do painel: HMAC do token, expiração, adulteração, senha não configurada |
-| `test/admin_orders_test.dart` | Labels e transições de status |
+| `test/admin_orders_test.dart` | Labels, transições de status e cancelamento |
 | `test/admin_products_test.dart` | Validação do CRUD de produtos |
+| `test/finance_test.dart` | Período do relatório, ticket médio e status de receita |
 | `test/mercado_pago_client_test.dart` | Status de pagamento MP |
 | `test/mercado_pago_webhook_test.dart` | Assinatura do webhook (manifest, HMAC, opt-in da secret) |
 | `test/app_public_config_test.dart` | Config pública da loja e link `wa.me` |

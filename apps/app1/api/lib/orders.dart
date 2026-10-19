@@ -313,6 +313,9 @@ Future<Map<String, Object?>> createPixForOrder(String publicId) async {
   if (status == 'paid') {
     throw OrderValidationException('Este pedido já foi pago.');
   }
+  if (status == 'cancelled') {
+    throw OrderValidationException('Este pedido foi cancelado.');
+  }
 
   final expiresAt = order['pix_expires_at'] as DateTime?;
   final copyCode = order['pix_copy_code'] as String?;
@@ -386,7 +389,7 @@ Future<bool> markOrderPaid(String publicId, {int? paymentId}) async {
     SET status = 'paid',
         paid_at = NOW(),
         mp_payment_id = COALESCE(\$2, mp_payment_id)
-    WHERE public_id = \$1 AND status <> 'paid'
+    WHERE public_id = \$1 AND status <> 'paid' AND status <> 'cancelled'
     RETURNING public_id;
     ''',
     parameters: [publicId, paymentId],

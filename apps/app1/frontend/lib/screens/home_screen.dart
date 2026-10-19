@@ -10,6 +10,7 @@ import 'package:tri_docuras/screens/order_tracking_screen.dart';
 import 'package:tri_docuras/screens/product_screen.dart';
 import 'package:tri_docuras/screens/profile_screen.dart';
 import 'package:tri_docuras/services/api_service.dart';
+import 'package:tri_docuras/store_config_holder.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
 import 'package:tri_docuras/widgets/td_button.dart';
@@ -35,11 +36,20 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Product>> _productsFuture;
   CartAddedResult? _cartAddedNotice;
 
-  static const _categories = [
-    ('todos', 'Todos'),
-    ('brownies', 'Brownies'),
-    ('combos', 'Combos'),
-  ];
+  List<(String, String)> get _categories {
+    final configured = StoreConfigHolder.instance.config.categories;
+    if (configured.isEmpty) {
+      return const [
+        ('todos', 'Todos'),
+        ('brownies', 'Brownies'),
+        ('combos', 'Combos'),
+      ];
+    }
+    return [
+      ('todos', 'Todos'),
+      for (final category in configured) (category.slug, category.label),
+    ];
+  }
 
   @override
   void initState() {

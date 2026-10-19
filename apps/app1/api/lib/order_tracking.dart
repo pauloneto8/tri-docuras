@@ -17,6 +17,7 @@ Future<Map<String, Object?>> getOrderTracking(String publicId) async {
 
   final status = order['status'] as String;
   final deliveryMode = order['delivery_mode'] as String;
+  final isCancelled = status == 'cancelled';
 
   return {
     'order': {
@@ -28,8 +29,9 @@ Future<Map<String, Object?>> getOrderTracking(String publicId) async {
       'total': order['total'],
       'created_at': order['created_at']?.toString(),
       'paid_at': order['paid_at']?.toString(),
-      'is_paid': status != 'pending_payment',
+      'is_paid': !isCancelled && status != 'pending_payment',
       'is_completed': status == 'completed',
+      'is_cancelled': isCancelled,
     },
     'timeline': buildCustomerTimeline(status, deliveryMode),
   };
@@ -39,6 +41,13 @@ List<Map<String, Object?>> buildCustomerTimeline(
   String status,
   String deliveryMode,
 ) {
+  if (status == 'cancelled') {
+    return [
+      {'key': 'received', 'label': 'Pedido recebido', 'done': true, 'current': false},
+      {'key': 'cancelled', 'label': 'Pedido cancelado', 'done': true, 'current': true},
+    ];
+  }
+
   final currentIndex = _statusOrder.indexOf(status);
   final steps = <Map<String, String>>[
     {'key': 'received', 'label': 'Pedido recebido'},

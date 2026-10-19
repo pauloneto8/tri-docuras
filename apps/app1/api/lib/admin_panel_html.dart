@@ -81,6 +81,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     .badge.preparing { background: #b07a4f; }
     .badge.ready { background: var(--pink); }
     .badge.completed { background: var(--disabled); color: var(--brown); }
+    .badge.cancelled { background: #a33; color: #fff; }
     .badge.available { background: var(--success); }
     .badge.hidden-product { background: var(--disabled); color: var(--brown); }
     .order-head, .product-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -117,6 +118,29 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       background: var(--peach);
       display: none;
     }
+    .finance-cards {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      margin-bottom: 12px;
+    }
+    .finance-card {
+      background: var(--card);
+      border: 1px solid rgba(65,36,20,.12);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .finance-card .value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+    table.data { width: 100%; border-collapse: collapse; }
+    table.data th, table.data td {
+      text-align: left;
+      padding: 8px 6px;
+      border-bottom: 1px solid rgba(65,36,20,.08);
+      font-size: 0.9rem;
+    }
+    table.data th { color: var(--brown); font-size: 0.75rem; letter-spacing: .05em; }
+    table.data td.num, table.data th.num { text-align: right; }
+    .category-pill { display: inline-flex; align-items: center; gap: 8px; margin: 4px 0; }
     @media (max-width: 600px) {
       .wrap { padding: 12px; }
       .form-row { grid-template-columns: 1fr; }
@@ -139,7 +163,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       <div class="topbar">
         <div>
           <h1>Tri Doçuras</h1>
-          <p class="sub">Gerencie pedidos e catálogo</p>
+          <p class="sub">Gerencie pedidos, catálogo e financeiro</p>
         </div>
         <button id="logoutBtn" type="button" class="secondary">Sair</button>
       </div>
@@ -147,6 +171,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       <div class="main-tabs" id="mainTabs" style="margin-bottom:16px">
         <button class="main-tab active" data-section="orders">Pedidos</button>
         <button class="main-tab" data-section="products">Produtos</button>
+        <button class="main-tab" data-section="finance">Financeiro</button>
       </div>
 
       <div id="ordersView" class="section-view">
@@ -158,7 +183,20 @@ const adminPanelHtml = r'''<!DOCTYPE html>
             <button class="tab" data-status="ready">Prontos</button>
             <button class="tab" data-status="pending_payment">Aguardando Pix</button>
             <button class="tab" data-status="completed">Concluídos</button>
+            <button class="tab" data-status="cancelled">Cancelados</button>
           </div>
+        </div>
+        <div class="toolbar">
+          <input id="orderSearch" type="search" placeholder="Buscar por ID ou cliente" style="max-width:240px">
+          <label style="margin:0;display:flex;align-items:center;gap:6px">
+            <span>De</span>
+            <input id="orderFrom" type="date" style="width:auto">
+          </label>
+          <label style="margin:0;display:flex;align-items:center;gap:6px">
+            <span>Até</span>
+            <input id="orderTo" type="date" style="width:auto">
+          </label>
+          <button id="clearOrderFiltersBtn" type="button" class="secondary">Limpar</button>
           <button id="refreshBtn" type="button" class="secondary">Atualizar</button>
         </div>
         <div id="orders"></div>
@@ -169,6 +207,33 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         <div class="toolbar">
           <button id="newProductBtn" type="button">Novo produto</button>
           <button id="refreshProductsBtn" type="button" class="secondary">Atualizar</button>
+          <button id="toggleCategoriesBtn" type="button" class="secondary">Categorias</button>
+        </div>
+
+        <div id="categoriesCard" class="card" hidden>
+          <h2>Categorias</h2>
+          <form id="categoryForm" class="form-grid">
+            <input type="hidden" id="categoryId" value="">
+            <div class="form-row">
+              <div>
+                <label for="categoryLabel">NOME</label>
+                <input id="categoryLabel" required maxlength="100" placeholder="Ex.: Bolos">
+              </div>
+              <div>
+                <label for="categorySort">ORDEM</label>
+                <input id="categorySort" type="number" step="1" value="0">
+              </div>
+            </div>
+            <div class="checks">
+              <label><input id="categoryActive" type="checkbox" checked> Ativa no app</label>
+            </div>
+            <div class="actions">
+              <button id="saveCategoryBtn" type="submit">Salvar categoria</button>
+              <button id="cancelCategoryBtn" type="button" class="secondary">Cancelar</button>
+            </div>
+          </form>
+          <div id="categoryFormError" class="error"></div>
+          <div id="categories"></div>
         </div>
 
         <div id="productFormCard" class="card" hidden>
@@ -190,10 +255,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
               </div>
               <div>
                 <label for="productCategory">CATEGORIA</label>
-                <select id="productCategory" required>
-                  <option value="brownies">Brownies</option>
-                  <option value="combos">Combos</option>
-                </select>
+                <select id="productCategory" required></select>
               </div>
             </div>
             <div class="checks">
@@ -217,6 +279,38 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         <div id="products"></div>
         <div id="productsError" class="error"></div>
       </div>
+
+      <div id="financeView" class="section-view" hidden>
+        <div class="toolbar">
+          <div class="tabs" id="financePresets">
+            <button class="tab active" data-period="today">Hoje</button>
+            <button class="tab" data-period="7d">7 dias</button>
+            <button class="tab" data-period="month">Este mês</button>
+          </div>
+        </div>
+        <div class="toolbar">
+          <label style="margin:0;display:flex;align-items:center;gap:6px">
+            <span>De</span>
+            <input id="financeFrom" type="date" style="width:auto">
+          </label>
+          <label style="margin:0;display:flex;align-items:center;gap:6px">
+            <span>Até</span>
+            <input id="financeTo" type="date" style="width:auto">
+          </label>
+          <button id="applyFinanceBtn" type="button">Aplicar</button>
+          <button id="refreshFinanceBtn" type="button" class="secondary">Atualizar</button>
+        </div>
+        <div class="finance-cards" id="financeCards"></div>
+        <div class="card">
+          <h2>Faturamento por dia</h2>
+          <div id="financeDaily"></div>
+        </div>
+        <div class="card">
+          <h2>Vendas por produto</h2>
+          <div id="financeProducts"></div>
+        </div>
+        <div id="financeError" class="error"></div>
+      </div>
     </div>
   </div>
 
@@ -225,6 +319,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     let currentStatus = "active";
     let currentSection = "orders";
     let ordersTimer = null;
+    let categoryList = [];
 
     const loginView = document.getElementById("loginView");
     const panelView = document.getElementById("panelView");
@@ -237,6 +332,25 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     const refreshBtn = document.getElementById("refreshBtn");
     const ordersView = document.getElementById("ordersView");
     const productsView = document.getElementById("productsView");
+    const financeView = document.getElementById("financeView");
+    const orderSearchInput = document.getElementById("orderSearch");
+    const orderFromInput = document.getElementById("orderFrom");
+    const orderToInput = document.getElementById("orderTo");
+    const clearOrderFiltersBtn = document.getElementById("clearOrderFiltersBtn");
+    const financeFromInput = document.getElementById("financeFrom");
+    const financeToInput = document.getElementById("financeTo");
+    const financeCardsEl = document.getElementById("financeCards");
+    const financeDailyEl = document.getElementById("financeDaily");
+    const financeProductsEl = document.getElementById("financeProducts");
+    const financeError = document.getElementById("financeError");
+    const categoriesCard = document.getElementById("categoriesCard");
+    const categoryForm = document.getElementById("categoryForm");
+    const categoryFormError = document.getElementById("categoryFormError");
+    const categoryIdInput = document.getElementById("categoryId");
+    const categoryLabelInput = document.getElementById("categoryLabel");
+    const categorySortInput = document.getElementById("categorySort");
+    const categoryActiveInput = document.getElementById("categoryActive");
+    const categoriesEl = document.getElementById("categories");
     const productsEl = document.getElementById("products");
     const productsError = document.getElementById("productsError");
     const productFormCard = document.getElementById("productFormCard");
@@ -385,8 +499,13 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     async function loadOrders() {
       listError.textContent = "";
       ordersEl.innerHTML = '<div class="empty">Carregando…</div>';
+      const params = new URLSearchParams({ status: currentStatus });
+      const search = orderSearchInput.value.trim();
+      if (search) params.set("search", search);
+      if (orderFromInput.value) params.set("from", orderFromInput.value);
+      if (orderToInput.value) params.set("to", orderToInput.value);
       try {
-        const data = await api("/api/admin/orders?status=" + encodeURIComponent(currentStatus));
+        const data = await api("/api/admin/orders?" + params.toString());
         const orders = data.orders || [];
         if (!orders.length) {
           ordersEl.innerHTML = '<div class="empty">Nenhum pedido nesta aba.</div>';
@@ -433,7 +552,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       productNameInput.value = "";
       productDescriptionInput.value = "";
       productPriceInput.value = "";
-      productCategoryInput.value = "brownies";
+      populateProductCategorySelect();
       productFeaturedInput.checked = false;
       productAvailableInput.checked = true;
       productImageInput.value = "";
@@ -452,7 +571,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         productNameInput.value = product.name;
         productDescriptionInput.value = product.description || "";
         productPriceInput.value = Number(product.price).toFixed(2);
-        productCategoryInput.value = product.category;
+        populateProductCategorySelect(product.category);
         productFeaturedInput.checked = !!product.featured;
         productAvailableInput.checked = !!product.available;
         setProductImagePreview(product.image_url || null);
@@ -477,11 +596,132 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       };
     }
 
+    function populateProductCategorySelect(keepValue) {
+      const current = keepValue !== undefined ? keepValue : productCategoryInput.value;
+      productCategoryInput.innerHTML = categoryList.map(function(category) {
+        const suffix = category.active ? "" : " (oculta)";
+        return '<option value="' + category.slug + '">' + category.label + suffix + '</option>';
+      }).join("");
+      if (current && categoryList.some(function(c) { return c.slug === current; })) {
+        productCategoryInput.value = current;
+      } else if (categoryList.length) {
+        productCategoryInput.value = categoryList[0].slug;
+      }
+    }
+
+    function renderCategories() {
+      if (!categoryList.length) {
+        categoriesEl.innerHTML = '<div class="empty">Nenhuma categoria.</div>';
+        return;
+      }
+      const rows = categoryList.map(function(category) {
+        const status = category.active
+          ? '<span class="badge available">Ativa</span>'
+          : '<span class="badge hidden-product">Oculta</span>';
+        return '<tr>' +
+          '<td>' + category.label + '</td>' +
+          '<td><code>' + category.slug + '</code></td>' +
+          '<td class="num">' + category.sort_order + '</td>' +
+          '<td>' + status + '</td>' +
+          '<td class="num">' +
+            '<button type="button" class="secondary" data-edit-category="' + category.id + '">Editar</button> ' +
+            '<button type="button" class="secondary" data-delete-category="' + category.id + '">Excluir</button>' +
+          '</td>' +
+        '</tr>';
+      }).join("");
+      categoriesEl.innerHTML =
+        '<table class="data"><thead><tr>' +
+        '<th>Nome</th><th>Identificação</th><th class="num">Ordem</th><th>Status</th><th></th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table>';
+      categoriesEl.querySelectorAll("[data-edit-category]").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          const id = Number(btn.getAttribute("data-edit-category"));
+          const category = categoryList.find(function(item) { return item.id === id; });
+          if (category) showCategoryForm(category);
+        });
+      });
+      categoriesEl.querySelectorAll("[data-delete-category]").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          deleteCategory(Number(btn.getAttribute("data-delete-category")));
+        });
+      });
+    }
+
+    function resetCategoryForm() {
+      categoryIdInput.value = "";
+      categoryLabelInput.value = "";
+      categorySortInput.value = "0";
+      categoryActiveInput.checked = true;
+      categoryFormError.textContent = "";
+    }
+
+    function showCategoryForm(category) {
+      categoriesCard.hidden = false;
+      resetCategoryForm();
+      if (category) {
+        categoryIdInput.value = category.id;
+        categoryLabelInput.value = category.label;
+        categorySortInput.value = category.sort_order;
+        categoryActiveInput.checked = !!category.active;
+      }
+      categoryLabelInput.focus();
+    }
+
+    function categoryPayload() {
+      return {
+        label: categoryLabelInput.value.trim(),
+        sort_order: Number(categorySortInput.value) || 0,
+        active: categoryActiveInput.checked
+      };
+    }
+
+    async function saveCategory(event) {
+      event.preventDefault();
+      categoryFormError.textContent = "";
+      const saveBtn = document.getElementById("saveCategoryBtn");
+      saveBtn.disabled = true;
+      try {
+        const editingId = categoryIdInput.value;
+        if (editingId) {
+          await api("/api/admin/categories/" + encodeURIComponent(editingId), {
+            method: "PUT",
+            body: JSON.stringify(categoryPayload())
+          });
+        } else {
+          await api("/api/admin/categories", {
+            method: "POST",
+            body: JSON.stringify(categoryPayload())
+          });
+        }
+        resetCategoryForm();
+        await loadProducts();
+      } catch (error) {
+        categoryFormError.textContent = error.message;
+      } finally {
+        saveBtn.disabled = false;
+      }
+    }
+
+    async function deleteCategory(id) {
+      if (!confirm("Excluir esta categoria?")) return;
+      categoryFormError.textContent = "";
+      try {
+        await api("/api/admin/categories/" + encodeURIComponent(id), { method: "DELETE" });
+        if (Number(categoryIdInput.value) === id) resetCategoryForm();
+        await loadProducts();
+      } catch (error) {
+        categoryFormError.textContent = error.message;
+      }
+    }
+
     async function loadProducts() {
       productsError.textContent = "";
       productsEl.innerHTML = '<div class="empty">Carregando…</div>';
       try {
         const data = await api("/api/admin/products");
+        categoryList = data.categories || [];
+        populateProductCategorySelect();
+        renderCategories();
         const products = data.products || [];
         if (!products.length) {
           productsEl.innerHTML = '<div class="empty">Nenhum produto cadastrado.</div>';
@@ -554,6 +794,87 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       }
     }
 
+    function toDateInput(date) {
+      return date.getFullYear() + "-" +
+        String(date.getMonth() + 1).padStart(2, "0") + "-" +
+        String(date.getDate()).padStart(2, "0");
+    }
+
+    function setFinancePeriod(period) {
+      const today = new Date();
+      let from = new Date(today);
+      if (period === "7d") {
+        from.setDate(today.getDate() - 6);
+      } else if (period === "month") {
+        from = new Date(today.getFullYear(), today.getMonth(), 1);
+      }
+      financeFromInput.value = toDateInput(from);
+      financeToInput.value = toDateInput(today);
+    }
+
+    function renderFinanceCards(totals) {
+      const cards = [
+        { label: "Faturamento", value: formatMoney(totals.revenue || 0) },
+        { label: "Pedidos pagos", value: totals.orders || 0 },
+        { label: "Ticket médio", value: formatMoney(totals.average_ticket || 0) },
+        { label: "Taxas de entrega", value: formatMoney(totals.delivery_fees || 0) }
+      ];
+      financeCardsEl.innerHTML = cards.map(function(card) {
+        return '<div class="finance-card"><div class="meta">' + card.label +
+          '</div><div class="value">' + card.value + '</div></div>';
+      }).join("");
+    }
+
+    function renderFinanceDaily(daily) {
+      if (!daily.length) {
+        financeDailyEl.innerHTML = '<div class="empty">Sem vendas no período.</div>';
+        return;
+      }
+      const rows = daily.map(function(day) {
+        const d = new Date(day.date + "T00:00:00");
+        return '<tr><td>' + d.toLocaleDateString("pt-BR") + '</td>' +
+          '<td class="num">' + day.orders + '</td>' +
+          '<td class="num">' + formatMoney(day.revenue) + '</td></tr>';
+      }).join("");
+      financeDailyEl.innerHTML = '<table class="data"><thead><tr><th>Dia</th>' +
+        '<th class="num">Pedidos</th><th class="num">Faturamento</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table>';
+    }
+
+    function renderFinanceProducts(products) {
+      if (!products.length) {
+        financeProductsEl.innerHTML = '<div class="empty">Sem produtos vendidos no período.</div>';
+        return;
+      }
+      const rows = products.map(function(item) {
+        return '<tr><td>' + item.product_name + '</td>' +
+          '<td class="num">' + item.quantity + '</td>' +
+          '<td class="num">' + formatMoney(item.revenue) + '</td></tr>';
+      }).join("");
+      financeProductsEl.innerHTML = '<table class="data"><thead><tr><th>Produto</th>' +
+        '<th class="num">Qtd</th><th class="num">Receita</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table>';
+    }
+
+    async function loadFinance() {
+      financeError.textContent = "";
+      financeCardsEl.innerHTML = '<div class="empty">Carregando…</div>';
+      financeDailyEl.innerHTML = "";
+      financeProductsEl.innerHTML = "";
+      const params = new URLSearchParams();
+      if (financeFromInput.value) params.set("from", financeFromInput.value);
+      if (financeToInput.value) params.set("to", financeToInput.value);
+      try {
+        const data = await api("/api/admin/finance/report?" + params.toString());
+        renderFinanceCards(data.totals || {});
+        renderFinanceDaily(data.daily || []);
+        renderFinanceProducts(data.by_product || []);
+      } catch (error) {
+        financeCardsEl.innerHTML = "";
+        financeError.textContent = error.message;
+      }
+    }
+
     function showSection(section) {
       currentSection = section;
       document.querySelectorAll(".main-tab").forEach(function(el) {
@@ -561,18 +882,23 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       });
       ordersView.hidden = section !== "orders";
       productsView.hidden = section !== "products";
+      financeView.hidden = section !== "finance";
       if (section === "orders") {
         loadOrders();
         startOrdersTimer();
-      } else {
+      } else if (section === "products") {
         stopOrdersTimer();
         loadProducts();
+      } else {
+        stopOrdersTimer();
+        loadFinance();
       }
     }
 
     async function refreshCurrentSection() {
       if (currentSection === "orders") await loadOrders();
-      else await loadProducts();
+      else if (currentSection === "products") await loadProducts();
+      else await loadFinance();
     }
 
     function startOrdersTimer() {
@@ -604,10 +930,19 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     document.getElementById("tabs").addEventListener("click", function(event) {
       const tab = event.target.closest(".tab");
       if (!tab) return;
-      document.querySelectorAll(".tab").forEach(function(el) { el.classList.remove("active"); });
+      document.querySelectorAll("#tabs .tab").forEach(function(el) { el.classList.remove("active"); });
       tab.classList.add("active");
       currentStatus = tab.dataset.status;
       loadOrders();
+    });
+
+    document.getElementById("financePresets").addEventListener("click", function(event) {
+      const tab = event.target.closest(".tab");
+      if (!tab) return;
+      document.querySelectorAll("#financePresets .tab").forEach(function(el) { el.classList.remove("active"); });
+      tab.classList.add("active");
+      setFinancePeriod(tab.dataset.period);
+      loadFinance();
     });
 
     document.getElementById("mainTabs").addEventListener("click", function(event) {
@@ -625,11 +960,43 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       showLogin();
     });
     refreshBtn.addEventListener("click", loadOrders);
+    let searchTimer = null;
+    orderSearchInput.addEventListener("input", function() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(loadOrders, 400);
+    });
+    orderSearchInput.addEventListener("keydown", function(event) {
+      if (event.key === "Enter") {
+        clearTimeout(searchTimer);
+        loadOrders();
+      }
+    });
+    orderFromInput.addEventListener("change", loadOrders);
+    orderToInput.addEventListener("change", loadOrders);
+    clearOrderFiltersBtn.addEventListener("click", function() {
+      orderSearchInput.value = "";
+      orderFromInput.value = "";
+      orderToInput.value = "";
+      loadOrders();
+    });
+
+    document.getElementById("applyFinanceBtn").addEventListener("click", loadFinance);
+    document.getElementById("refreshFinanceBtn").addEventListener("click", loadFinance);
+
     document.getElementById("refreshProductsBtn").addEventListener("click", loadProducts);
     document.getElementById("newProductBtn").addEventListener("click", function() {
       showProductForm(null);
     });
     document.getElementById("cancelProductBtn").addEventListener("click", hideProductForm);
+    document.getElementById("toggleCategoriesBtn").addEventListener("click", function() {
+      categoriesCard.hidden = !categoriesCard.hidden;
+      if (!categoriesCard.hidden && !categoryList.length) loadProducts();
+    });
+    document.getElementById("cancelCategoryBtn").addEventListener("click", function() {
+      categoriesCard.hidden = true;
+      resetCategoryForm();
+    });
+    categoryForm.addEventListener("submit", saveCategory);
     productForm.addEventListener("submit", saveProduct);
     productImageInput.addEventListener("change", function() {
       const file = productImageInput.files[0];
@@ -643,6 +1010,8 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       };
       reader.readAsDataURL(file);
     });
+
+    setFinancePeriod("today");
 
     if (token()) {
       showPanel();
