@@ -106,7 +106,9 @@ Future<List<Map<String, Object?>>> listOrdersForAdmin({
            delivery_street, delivery_number, delivery_complement,
            delivery_neighborhood, delivery_reference,
            subtotal, delivery_fee, total, paid_at, created_at,
-           refund_status, refunded_at, tracking_token
+           refund_status, refunded_at, tracking_token,
+           orders.customer_id IS NOT NULL AS has_account,
+           (SELECT email FROM customers WHERE id = orders.customer_id) AS customer_email
     FROM orders
     $whereClause
     ORDER BY created_at DESC
@@ -201,7 +203,9 @@ Future<Map<String, Object?>> updateOrderStatus(
                 delivery_street, delivery_number, delivery_complement,
                 delivery_neighborhood, delivery_reference,
                 subtotal, delivery_fee, total, paid_at, created_at,
-                refund_status, refunded_at, tracking_token;
+                refund_status, refunded_at, tracking_token,
+                customer_id IS NOT NULL AS has_account,
+                (SELECT email FROM customers WHERE id = orders.customer_id) AS customer_email;
       ''',
       parameters: [publicId, normalized, refundStatus, mpRefundId],
     );
@@ -309,6 +313,8 @@ Map<String, Object?> _rowToAdminOrderMap(ResultRow row) {
     'refund_status': row[15],
     'refunded_at': row[16],
     'tracking_token': row[17] as String?,
+    'has_account': row[18] == true,
+    'customer_email': row[19] as String?,
   };
 }
 
@@ -344,6 +350,9 @@ Map<String, Object?> orderToAdminJson(
     'whatsapp': order['whatsapp'],
     'whatsapp_link': whatsappLink(order['whatsapp'] as String),
     'tracking_link': _trackingLink(order),
+    'customer_account': order['has_account'] == true
+        ? {'email': order['customer_email']}
+        : null,
     'delivery_mode': deliveryMode,
     'delivery_label': deliveryMode == 'pickup' ? 'Retirada' : 'Entrega',
     'delivery_address': address,

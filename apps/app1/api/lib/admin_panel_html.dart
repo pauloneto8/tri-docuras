@@ -568,6 +568,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         '<div class="meta">' +
           '<strong>' + order.customer_name + '</strong><br>' +
           '<a class="wa" href="' + order.whatsapp_link + '" target="_blank" rel="noopener">WhatsApp ' + formatPhone(order.whatsapp) + '</a><br>' +
+          (order.customer_account ? 'Cliente com conta · ' + escapeHtml(order.customer_account.email) : 'Pedido sem conta (anterior)') + '<br>' +
           (order.tracking_link ? '<a class="wa" href="' + avisarClienteLink(order) + '" target="_blank" rel="noopener">Avisar cliente</a><br>' : '') +
           order.delivery_label + ' · ' + renderAddress(order) + '<br>' +
           (order.refund_label ? '<strong>' + order.refund_label + '</strong><br>' : '') +

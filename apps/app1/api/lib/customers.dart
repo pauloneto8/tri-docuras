@@ -58,6 +58,12 @@ CustomerInput parseCustomerInput(Map<String, dynamic> body) {
   final passwordError = CustomerAuth.passwordProblem(password);
   if (passwordError != null) throw CustomerException(passwordError);
 
+  if (body['accepted_terms'] != true) {
+    throw CustomerException(
+      'Confirme que leu os Termos de Compra e a Política de Privacidade.',
+    );
+  }
+
   final profile = parseProfileFields(body);
   return CustomerInput(
     email: email,
@@ -119,8 +125,8 @@ Future<Map<String, Object?>> createCustomer(CustomerInput input) async {
   final connection = await getConnection();
   final result = await connection.execute(
     r'''
-    INSERT INTO customers (email, password_hash, name, whatsapp)
-    VALUES ($1, $2, $3, $4)
+    INSERT INTO customers (email, password_hash, name, whatsapp, accepted_terms_at)
+    VALUES ($1, $2, $3, $4, NOW())
     ON CONFLICT (email) DO NOTHING
     RETURNING id, email, name, whatsapp;
     ''',
@@ -339,6 +345,75 @@ Future<int> changeCustomerPassword(
     parameters: [customerId, CustomerAuth.hashPassword(newPassword)],
   );
   return (updated.first[0] as num).toInt();
+}
+
+/// Status em que o pedido ainda não foi concluído nem cancelado. Enquanto
+/// houver algum, a conta não pode ser excluída.
+const openOrderStatuses = ['pending_payment', 'paid', 'preparing', 'ready'];
+
+/// Exclui a conta do cliente (LGPD). Os pedidos continuam, porque o
+/// financeiro precisa dos valores, mas ficam sem vínculo e sem dados pessoais.
+Future<void> deleteCustomerAccount(
+  int customerId, {
+  required String password,
+}) async {
+  final connection = await getConnection();
+  final result = await connection.execute(
+    r'''
+    SELECT password_hash FROM customers WHERE id = $1 LIMIT 1;
+    ''',
+    parameters: [customerId],
+  );
+  if (result.isEmpty) {
+    throw CustomerException('Conta não encontrada.');
+  }
+  if (!CustomerAuth.verifyPassword(password, result.first[0] as String)) {
+    throw CustomerException('A senha está incorreta.');
+  }
+
+  final open = await connection.execute(
+    r'''
+    SELECT COUNT(*) FROM orders
+    WHERE customer_id = $1 AND status = ANY($2::text[]);
+    ''',
+    parameters: [customerId, openOrderStatuses],
+  );
+  if ((open.first[0] as num).toInt() > 0) {
+    throw CustomerException(
+      'Você tem pedidos em andamento. Aguarde a conclusão ou fale com a loja antes de excluir a conta.',
+      statusCode: 409,
+    );
+  }
+
+  await connection.runTx((tx) async {
+    await tx.execute(
+      r'''
+      UPDATE orders
+      SET customer_id = NULL,
+          customer_name = 'Cliente excluído',
+          whatsapp = '00000000000',
+          delivery_street = NULL,
+          delivery_number = NULL,
+          delivery_complement = NULL,
+          delivery_neighborhood = NULL,
+          delivery_reference = NULL
+      WHERE customer_id = $1;
+      ''',
+      parameters: [customerId],
+    );
+    await tx.execute(
+      r'DELETE FROM customer_addresses WHERE customer_id = $1;',
+      parameters: [customerId],
+    );
+    await tx.execute(
+      r'DELETE FROM customer_favorites WHERE customer_id = $1;',
+      parameters: [customerId],
+    );
+    await tx.execute(
+      r'DELETE FROM customers WHERE id = $1;',
+      parameters: [customerId],
+    );
+  });
 }
 
 /// Pedidos do cliente, mais recentes primeiro, no mesmo formato do

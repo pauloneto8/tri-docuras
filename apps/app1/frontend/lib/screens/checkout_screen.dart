@@ -15,7 +15,7 @@ import 'package:tri_docuras/orders/order_history_scope.dart';
 import 'package:tri_docuras/screens/pix_screen.dart';
 import 'package:tri_docuras/services/api_service.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
-import 'package:tri_docuras/legal/legal_screen.dart';
+import 'package:tri_docuras/legal/legal_consent.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
 import 'package:tri_docuras/widgets/td_button.dart';
 import 'package:tri_docuras/widgets/td_icon_button.dart';
@@ -472,54 +472,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Checkbox(
-                            value: _acceptedTerms,
-                            onChanged: _submitting
-                                ? null
-                                : (value) => setState(
-                                      () => _acceptedTerms = value ?? false,
-                                    ),
-                          ),
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Li e aceito os Termos de Compra e a Política de Privacidade.',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 14,
-                                      color: AppColors.brown,
-                                    ),
-                                  ),
-                                  Wrap(
-                                    spacing: 4,
-                                    children: [
-                                      TextButton(
-                                        onPressed: () => openLegalPage(
-                                          context,
-                                          LegalPage.terms,
-                                        ),
-                                        child: const Text('Ler os termos'),
-                                      ),
-                                      TextButton(
-                                        onPressed: () => openLegalPage(
-                                          context,
-                                          LegalPage.privacy,
-                                        ),
-                                        child: const Text('Ler a privacidade'),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                      child: LegalConsent(
+                        value: _acceptedTerms,
+                        onChanged: _submitting
+                            ? null
+                            : (value) => setState(() => _acceptedTerms = value),
                       ),
                     ),
                     Padding(

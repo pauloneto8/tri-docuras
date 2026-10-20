@@ -5,6 +5,7 @@ import 'package:tri_docuras/account/account_scope.dart';
 import 'package:tri_docuras/checkout/delivery_address.dart';
 import 'package:tri_docuras/legal/legal_screen.dart';
 import 'package:tri_docuras/screens/account_edit_screen.dart';
+import 'package:tri_docuras/services/api_service.dart';
 import 'package:tri_docuras/config.dart';
 import 'package:tri_docuras/store_config_holder.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
@@ -167,6 +168,12 @@ class _AccountCard extends StatelessWidget {
                   label: 'Sair da conta',
                   variant: TdButtonVariant.outline,
                   onPressed: () => account.logout(),
+                ),
+                const SizedBox(height: 8),
+                TdButton(
+                  label: 'Excluir conta',
+                  variant: TdButtonVariant.outline,
+                  onPressed: () => _confirmDeleteAccount(context),
                 ),
               ],
             ),
@@ -345,6 +352,77 @@ class _MenuTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Pede a senha e, se confirmada, exclui a conta e encerra a sessão.
+Future<void> _confirmDeleteAccount(BuildContext context) async {
+  final password = await showDialog<String>(
+    context: context,
+    builder: (_) => const _DeleteAccountDialog(),
+  );
+  if (password == null || password.isEmpty || !context.mounted) return;
+
+  final account = AccountScope.of(context);
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await account.deleteAccount(password: password);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Sua conta foi excluída.')),
+    );
+  } on ApiException catch (error) {
+    messenger.showSnackBar(SnackBar(content: Text(error.message)));
+  }
+}
+
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _passwordController = TextEditingController();
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Excluir conta?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Seus dados pessoais serão apagados e isso não dá para desfazer. '
+            'Os pedidos continuam no registro da loja, sem seu nome nem seu '
+            'contato. Para confirmar, digite sua senha.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _passwordController,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'Senha'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(_passwordController.text),
+          child: const Text('Excluir conta'),
+        ),
+      ],
     );
   }
 }

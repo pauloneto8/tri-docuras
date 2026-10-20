@@ -162,6 +162,7 @@ class ApiService {
     final response = switch (method) {
       'GET' => await _client.get(uri, headers: headers),
       'PUT' => await _client.put(uri, headers: headers, body: encoded),
+      'DELETE' => await _client.delete(uri, headers: headers, body: encoded),
       _ => await _client.post(uri, headers: headers, body: encoded),
     };
 
@@ -192,6 +193,8 @@ class ApiService {
         'password': password,
         'name': name,
         'whatsapp': whatsapp,
+        // A tela só libera o cadastro com a caixa marcada.
+        'accepted_terms': true,
       },
       fallback: 'Não foi possível criar a conta.',
     );
@@ -238,6 +241,17 @@ class ApiService {
       fallback: 'Não foi possível salvar seus dados.',
     );
     return CustomerProfile.fromJson(body['customer'] as Map<String, dynamic>);
+  }
+
+  /// Exclui a conta do cliente logado. Pede a senha de novo.
+  Future<void> deleteAccount({required String password}) async {
+    await _json(
+      'DELETE',
+      '/customers/me',
+      body: {'password': password},
+      auth: true,
+      fallback: 'Não foi possível excluir a conta.',
+    );
   }
 
   /// Troca a senha e devolve o token novo (o antigo deixa de valer).

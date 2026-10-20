@@ -68,6 +68,11 @@ class AccountController extends ChangeNotifier {
 
   Future<void> logout() => _endSession();
 
+  Future<void> deleteAccount({required String password}) async {
+    await _api.deleteAccount(password: password);
+    await _endSession();
+  }
+
   Future<void> saveProfile({
     required String name,
     required String whatsapp,

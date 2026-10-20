@@ -7,6 +7,7 @@ void main() {
         'password': 'senha-boa-1',
         'name': '  Maria   Souza ',
         'whatsapp': '(81) 99691-8192',
+        'accepted_terms': true,
       };
 
   group('parseCustomerInput', () {
@@ -15,6 +16,17 @@ void main() {
       expect(input.email, 'maria@exemplo.com');
       expect(input.name, 'Maria Souza');
       expect(input.whatsapp, '81996918192');
+    });
+
+    test('recusa cadastro sem o aceite dos termos', () {
+      expect(
+        () => parseCustomerInput(valid()..remove('accepted_terms')),
+        throwsA(isA<CustomerException>()),
+      );
+      expect(
+        () => parseCustomerInput(valid()..['accepted_terms'] = false),
+        throwsA(isA<CustomerException>()),
+      );
     });
 
     test('recusa e-mail inválido', () {

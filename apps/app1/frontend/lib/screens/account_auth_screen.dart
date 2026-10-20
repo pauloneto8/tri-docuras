@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:tri_docuras/account/account_scope.dart';
 import 'package:tri_docuras/checkout/checkout_validators.dart';
 import 'package:tri_docuras/checkout/whatsapp_input_formatter.dart';
+import 'package:tri_docuras/legal/legal_consent.dart';
 import 'package:tri_docuras/services/api_service.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/widgets/td_button.dart';
@@ -29,6 +30,7 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
   bool _registerMode = true;
   bool _submitted = false;
   bool _submitting = false;
+  bool _acceptedTerms = false;
 
   @override
   void dispose() {
@@ -75,7 +77,8 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
         : _passwordController.text.isNotEmpty;
     final registerOk = !_registerMode ||
         (CheckoutValidators.isNameValid(_nameController.text) &&
-            CheckoutValidators.isWhatsAppValid(_whatsappController.text));
+            CheckoutValidators.isWhatsAppValid(_whatsappController.text) &&
+            _acceptedTerms);
     return emailOk && passwordOk && registerOk;
   }
 
@@ -209,6 +212,15 @@ class _AccountAuthScreenState extends State<AccountAuthScreen> {
                   autofillHints: const [AutofillHints.password],
                   onChanged: (_) => setState(() {}),
                 ),
+                if (_registerMode) ...[
+                  const SizedBox(height: 16),
+                  LegalConsent(
+                    value: _acceptedTerms,
+                    onChanged: _submitting
+                        ? null
+                        : (value) => setState(() => _acceptedTerms = value),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 TdButton(
                   label: _submitting

@@ -42,6 +42,26 @@ Future<Response> onRequest(RequestContext context) async {
         );
       }
 
+    case HttpMethod.delete:
+      try {
+        final body = await context.request.json() as Map<String, dynamic>;
+        await deleteCustomerAccount(
+          session.customerId,
+          password: body['password']?.toString() ?? '',
+        );
+        return Response.json(body: {'ok': true});
+      } on CustomerException catch (error) {
+        return Response.json(
+          statusCode: error.statusCode,
+          body: {'error': error.message},
+        );
+      } on FormatException {
+        return Response.json(
+          statusCode: HttpStatus.badRequest,
+          body: {'error': 'Corpo da requisição inválido.'},
+        );
+      }
+
     default:
       return Response(statusCode: HttpStatus.methodNotAllowed);
   }
