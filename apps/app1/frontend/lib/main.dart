@@ -40,20 +40,42 @@ Future<void> main() async {
   await account.load();
 }
 
-/// A loja fica por baixo; quem chega pelo link `/pedido/TD-XXXX?t=<token>`
-/// vê o acompanhamento por cima, e o Voltar leva à loja.
-List<Route<dynamic>> _initialRoutes() {
-  final segments = Uri.base.pathSegments;
-  return [
-    MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
-    if (segments.length == 2 && segments.first == 'pedido')
+/// Tela inicial: a loja. Quem chega pelo link `/pedido/TD-XXXX?t=<token>`
+/// vê o acompanhamento por cima dela, e o Voltar leva à loja.
+///
+/// Usa `home` de propósito: com `onGenerateInitialRoutes` a loja não era
+/// montada (a tela ficava vazia).
+class _StartScreen extends StatefulWidget {
+  const _StartScreen();
+
+  @override
+  State<_StartScreen> createState() => _StartScreenState();
+}
+
+class _StartScreenState extends State<_StartScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openTrackingFromLink());
+  }
+
+  void _openTrackingFromLink() {
+    if (!mounted) return;
+    final segments = Uri.base.pathSegments;
+    if (segments.length != 2 || segments.first != 'pedido') return;
+
+    Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => OrderTrackingScreen(
           orderId: segments.last,
           trackingToken: Uri.base.queryParameters['t'],
         ),
       ),
-  ];
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => const HomeScreen();
 }
 
 class TriDocurasApp extends StatelessWidget {
@@ -84,7 +106,7 @@ class TriDocurasApp extends StatelessWidget {
               title: AppConfig.appName,
               debugShowCheckedModeBanner: false,
               theme: AppTheme.light,
-              onGenerateInitialRoutes: (_) => _initialRoutes(),
+              home: const _StartScreen(),
               builder: (context, child) {
                 return ColoredBox(
                   color: AppColors.cream,

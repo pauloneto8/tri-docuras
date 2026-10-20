@@ -192,7 +192,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         if (snapshot.hasError) {
-          return TdLoadError(onRetry: _retryProducts);
+          return _buildCatalogContent(null, onRetry: _retryProducts);
         }
 
         final products = _filterProducts(snapshot.data ?? const <Product>[]);
@@ -201,7 +201,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildCatalogContent(List<Product>? products) {
+  Widget _buildCatalogContent(
+    List<Product>? products, {
+    VoidCallback? onRetry,
+  }) {
     final notice = StoreConfigHolder.instance.config.notice.trim();
     return ColoredBox(
       color: AppColors.cream,
@@ -254,7 +257,12 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          if (products == null)
+          if (products == null && onRetry != null)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: TdLoadError(onRetry: onRetry),
+            )
+          else if (products == null)
             const _ProductGridSkeleton()
           else if (products.isEmpty)
             SliverFillRemaining(
