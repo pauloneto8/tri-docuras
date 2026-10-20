@@ -9,6 +9,7 @@ class OrderSummary {
     required this.total,
     required this.deliveryMode,
     this.deliveryAddress,
+    this.trackingToken,
   });
 
   final String orderId;
@@ -16,6 +17,7 @@ class OrderSummary {
   final double total;
   final DeliveryMode deliveryMode;
   final DeliveryAddress? deliveryAddress;
+  final String? trackingToken;
 
   String get formattedTotal =>
       'R\$ ${total.toStringAsFixed(2).replaceAll('.', ',')}';

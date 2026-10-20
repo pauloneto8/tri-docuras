@@ -74,8 +74,14 @@ class ApiService {
     throw _apiError(response, body, 'Não foi possível consultar o pedido (${response.statusCode}).');
   }
 
-  Future<OrderTracking> fetchOrderTracking(String orderId) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/orders/$orderId/tracking');
+  Future<OrderTracking> fetchOrderTracking(
+    String orderId, {
+    String? trackingToken,
+  }) async {
+    final url = '${AppConfig.apiBaseUrl}/orders/$orderId/tracking';
+    final uri = trackingToken == null
+        ? Uri.parse(url)
+        : Uri.parse(url).replace(queryParameters: {'t': trackingToken});
     final response = await _client.get(uri, headers: _authHeaders());
 
     Map<String, dynamic> body;

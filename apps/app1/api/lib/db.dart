@@ -5,6 +5,7 @@ import 'package:tri_docuras_api/admin_users.dart';
 import 'package:tri_docuras_api/order_events.dart';
 import 'package:tri_docuras_api/product_options.dart';
 import 'package:tri_docuras_api/store_settings.dart';
+import 'package:tri_docuras_api/tracking_token.dart';
 
 Connection? _connection;
 
@@ -190,6 +191,19 @@ Future<void> ensureSchema(Connection connection) async {
   await connection.execute('''
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_whatsapp_notified_at TIMESTAMP;
   ''');
+  await connection.execute('''
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_token VARCHAR(64);
+  ''');
+  // Pedidos anteriores à coluna ganham token na primeira subida da API.
+  final withoutToken = await connection.execute(
+    'SELECT id FROM orders WHERE tracking_token IS NULL;',
+  );
+  for (final row in withoutToken) {
+    await connection.execute(
+      r'UPDATE orders SET tracking_token = $1 WHERE id = $2 AND tracking_token IS NULL;',
+      parameters: [newTrackingToken(), row[0]],
+    );
+  }
   await connection.execute('''
     CREATE INDEX IF NOT EXISTS idx_orders_mp_payment_id ON orders (mp_payment_id);
   ''');

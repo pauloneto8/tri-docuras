@@ -8,6 +8,7 @@ import 'package:tri_docuras_api/order_events.dart';
 import 'package:tri_docuras_api/payment_check_throttle.dart';
 import 'package:tri_docuras_api/product_options.dart';
 import 'package:tri_docuras_api/store_settings.dart';
+import 'package:tri_docuras_api/tracking_token.dart';
 import 'package:tri_docuras_api/whatsapp_notify.dart';
 
 /// Únicos status a partir dos quais uma confirmação do Mercado Pago pode
@@ -268,16 +269,17 @@ Future<Map<String, Object?>> createOrder(
 
   return connection.runTx((tx) async {
     final tempPublicId = 'TMP-${DateTime.now().microsecondsSinceEpoch}';
+    final trackingToken = newTrackingToken();
     final orderResult = await tx.execute(
       r'''
       INSERT INTO orders (
         public_id, status, customer_name, whatsapp, delivery_mode,
         delivery_street, delivery_number, delivery_complement,
         delivery_neighborhood, delivery_reference,
-        subtotal, delivery_fee, total, customer_id
+        subtotal, delivery_fee, total, customer_id, tracking_token
       ) VALUES (
         $1, 'pending_payment', $2, $3, $4,
-        $5, $6, $7, $8, $9, $10, $11, $12, $13
+        $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
       )
       RETURNING id;
       ''',
@@ -295,6 +297,7 @@ Future<Map<String, Object?>> createOrder(
         input.deliveryFee,
         input.total,
         customerId,
+        trackingToken,
       ],
     );
 
@@ -358,6 +361,7 @@ Future<Map<String, Object?>> createOrder(
       'total': input.total,
       'customer_name': input.customerName,
       'whatsapp': input.whatsapp,
+      'tracking_token': trackingToken,
     };
   });
 }
@@ -370,7 +374,8 @@ Future<Map<String, Object?>> getOrderByPublicId(String publicId) async {
            delivery_street, delivery_number, delivery_complement,
            delivery_neighborhood, delivery_reference,
            subtotal, delivery_fee, total, mp_payment_id, pix_copy_code,
-           pix_qr_base64, pix_expires_at, paid_at, created_at, customer_id
+           pix_qr_base64, pix_expires_at, paid_at, created_at, customer_id,
+           tracking_token
     FROM orders
     WHERE public_id = \$1
     LIMIT 1;
@@ -605,6 +610,7 @@ Map<String, Object?> _rowToOrderMap(ResultRow row) {
     'paid_at': row[17],
     'created_at': row[18],
     'customer_id': row[19] == null ? null : (row[19] as num).toInt(),
+    'tracking_token': row[20] as String?,
   };
 }
 

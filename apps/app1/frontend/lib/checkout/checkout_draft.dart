@@ -29,8 +29,10 @@ class CheckoutDraft {
   String get formattedTotal =>
       'R\$ ${total.toStringAsFixed(2).replaceAll('.', ',')}';
 
-  OrderSummary toOrderSummary(String orderId) => OrderSummary(
+  OrderSummary toOrderSummary(String orderId, {String? trackingToken}) =>
+      OrderSummary(
         orderId: orderId,
+        trackingToken: trackingToken,
         customerName: customerName,
         total: total,
         deliveryMode: deliveryMode,

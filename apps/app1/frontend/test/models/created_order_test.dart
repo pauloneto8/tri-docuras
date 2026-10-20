@@ -25,6 +25,21 @@ void main() {
     expect(order.pix?.hasQrImage, isTrue);
   });
 
+  test('CreatedOrder.fromJson lê o token de acompanhamento', () {
+    final order = CreatedOrder.fromJson({
+      'order': {
+        'id': 'TD-0043',
+        'status': 'pending_payment',
+        'subtotal': 24.0,
+        'delivery_fee': 0.0,
+        'total': 24.0,
+        'tracking_token': 'tok_123',
+      },
+    });
+
+    expect(order.trackingToken, 'tok_123');
+  });
+
   test('OrderStatus.isPaid', () {
     final paid = OrderStatus.fromJson({
       'order': {'id': 'TD-0001', 'status': 'paid'},

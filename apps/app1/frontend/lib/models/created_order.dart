@@ -39,6 +39,7 @@ class CreatedOrder {
     required this.total,
     this.pix,
     this.pixError,
+    this.trackingToken,
   });
 
   factory CreatedOrder.fromJson(Map<String, dynamic> json) {
@@ -54,6 +55,7 @@ class CreatedOrder {
           ? PixPayment.fromJson(pixRaw)
           : null,
       pixError: json['pix_error'] as String?,
+      trackingToken: order['tracking_token'] as String?,
     );
   }
 
@@ -64,6 +66,7 @@ class CreatedOrder {
   final double total;
   final PixPayment? pix;
   final String? pixError;
+  final String? trackingToken;
 }
 
 class OrderStatus {

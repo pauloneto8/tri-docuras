@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tri_docuras/checkout/delivery_address.dart';
 import 'package:tri_docuras/checkout/order_summary.dart';
+import 'package:tri_docuras/orders/tracking_link.dart';
 import 'package:tri_docuras/screens/order_tracking_screen.dart';
 import 'package:tri_docuras/store_config_holder.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
@@ -20,6 +22,26 @@ class ConfirmationScreen extends StatelessWidget {
         customerName: summary.customerName,
         formattedTotal: summary.formattedTotal,
       );
+
+  Future<void> _copyTrackingLink(BuildContext context) async {
+    final token = summary.trackingToken;
+    if (token == null) return;
+
+    final link = trackingLink(orderId: summary.orderId, trackingToken: token);
+    await Clipboard.setData(ClipboardData(text: link.toString()));
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Link copiado. Guarde para acompanhar o pedido.',
+          style: GoogleFonts.poppins(fontSize: 13),
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.dark,
+      ),
+    );
+  }
 
   Future<void> _openWhatsApp(BuildContext context) async {
     final url = _whatsappUrl;
@@ -158,12 +180,22 @@ class ConfirmationScreen extends StatelessWidget {
                             MaterialPageRoute<void>(
                               builder: (_) => OrderTrackingScreen(
                                 orderId: summary.orderId,
+                                trackingToken: summary.trackingToken,
                               ),
                             ),
                           );
                         },
                       ),
                     ),
+                    if (summary.trackingToken != null)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: TdButton(
+                          label: 'Copiar link de acompanhamento',
+                          variant: TdButtonVariant.soft,
+                          onPressed: () => _copyTrackingLink(context),
+                        ),
+                      ),
                     if (_whatsappUrl.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),

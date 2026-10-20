@@ -9,6 +9,7 @@ import 'package:tri_docuras/favorites/favorites_scope.dart';
 import 'package:tri_docuras/orders/order_history_controller.dart';
 import 'package:tri_docuras/orders/order_history_scope.dart';
 import 'package:tri_docuras/screens/home_screen.dart';
+import 'package:tri_docuras/screens/order_tracking_screen.dart';
 import 'package:tri_docuras/store_config_holder.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
@@ -39,6 +40,22 @@ Future<void> main() async {
   await account.load();
 }
 
+/// A loja fica por baixo; quem chega pelo link `/pedido/TD-XXXX?t=<token>`
+/// vê o acompanhamento por cima, e o Voltar leva à loja.
+List<Route<dynamic>> _initialRoutes() {
+  final segments = Uri.base.pathSegments;
+  return [
+    MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
+    if (segments.length == 2 && segments.first == 'pedido')
+      MaterialPageRoute<void>(
+        builder: (_) => OrderTrackingScreen(
+          orderId: segments.last,
+          trackingToken: Uri.base.queryParameters['t'],
+        ),
+      ),
+  ];
+}
+
 class TriDocurasApp extends StatelessWidget {
   const TriDocurasApp({
     super.key,
@@ -67,7 +84,7 @@ class TriDocurasApp extends StatelessWidget {
               title: AppConfig.appName,
               debugShowCheckedModeBanner: false,
               theme: AppTheme.light,
-              home: const HomeScreen(),
+              onGenerateInitialRoutes: (_) => _initialRoutes(),
               builder: (context, child) {
                 return ColoredBox(
                   color: AppColors.cream,

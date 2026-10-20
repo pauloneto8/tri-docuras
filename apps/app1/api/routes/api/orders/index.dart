@@ -49,7 +49,10 @@ Future<Response> onRequest(RequestContext context) async {
     return Response.json(
       statusCode: HttpStatus.created,
       body: {
-        'order': orderToPublicJson(order),
+        'order': {
+          ...orderToPublicJson(order),
+          'tracking_token': order['tracking_token'],
+        },
         if (pix != null) 'pix': pix,
         if (pixError != null) 'pix_error': pixError,
       },

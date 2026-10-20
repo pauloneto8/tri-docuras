@@ -21,11 +21,13 @@ class OrderTrackingScreen extends StatefulWidget {
     required this.orderId,
     this.api,
     this.showBack = true,
+    this.trackingToken,
   });
 
   final String orderId;
   final ApiService? api;
   final bool showBack;
+  final String? trackingToken;
 
   @override
   State<OrderTrackingScreen> createState() => _OrderTrackingScreenState();
@@ -54,7 +56,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
   Future<void> _loadTracking() async {
     try {
-      final tracking = await _api.fetchOrderTracking(widget.orderId);
+      final tracking = await _api.fetchOrderTracking(
+        widget.orderId,
+        trackingToken: widget.trackingToken,
+      );
       if (!mounted) return;
       setState(() {
         _tracking = tracking;

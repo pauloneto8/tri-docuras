@@ -139,7 +139,10 @@ class _PixScreenState extends State<PixScreen> {
   }
 
   void _goToConfirmation() {
-    final summary = widget.draft.toOrderSummary(widget.order.id);
+    final summary = widget.draft.toOrderSummary(
+      widget.order.id,
+      trackingToken: widget.order.trackingToken,
+    );
     CartScope.of(context).clear();
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
