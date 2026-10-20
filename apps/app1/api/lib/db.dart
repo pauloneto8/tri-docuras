@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:postgres/postgres.dart';
 import 'package:tri_docuras_api/admin_users.dart';
 import 'package:tri_docuras_api/order_events.dart';
+import 'package:tri_docuras_api/product_options.dart';
 import 'package:tri_docuras_api/store_settings.dart';
 
 Connection? _connection;
@@ -211,6 +212,7 @@ Future<void> ensureSchema(Connection connection) async {
   await ensureStoreSettingsSchema(connection);
   await ensureAdminUsersSchema(connection);
   await ensureOrderEventsSchema(connection);
+  await ensureProductOptionsSchema(connection);
 }
 
 Future<void> _seedCategories(Connection connection) async {
@@ -277,6 +279,7 @@ Future<void> _insertCatalog(Connection connection) async {
       true,
     ],
   );
+  await seedDefaultBrownieOptions(connection);
 }
 
 Future<void> closeConnection() async {
@@ -321,6 +324,11 @@ Future<List<Map<String, Object?>>> fetchProducts() async {
     ''',
   );
 
+  final optionsByProduct = await fetchActiveOptionsByProduct(
+    connection,
+    [for (final row in result) (row[0] as num).toInt()],
+  );
+
   return result
       .map(
         (row) => {
@@ -337,6 +345,15 @@ Future<List<Map<String, Object?>>> fetchProducts() async {
           'available': row[6],
           'image_url': row[7],
           'stock': row[8],
+          'options': [
+            for (final option in optionsByProduct[(row[0] as num).toInt()] ?? const <ProductOptionRow>[])
+              {
+                'id': option.id,
+                'kind': option.kind,
+                'label': option.label,
+                'price_delta': option.priceDelta,
+              },
+          ],
         },
       )
       .toList();

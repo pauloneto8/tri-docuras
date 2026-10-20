@@ -264,7 +264,7 @@ Future<List<Map<String, Object?>>> _fetchItemsForPublicId(
   final result = await connection.execute(
     '''
     SELECT oi.product_name, oi.quantity, oi.unit_price, oi.size,
-           oi.lactose_free, oi.line_total
+           oi.lactose_free, oi.line_total, oi.options
     FROM order_items oi
     JOIN orders o ON o.id = oi.order_id
     WHERE o.public_id = \$1
@@ -282,6 +282,7 @@ Future<List<Map<String, Object?>>> _fetchItemsForPublicId(
           'size': row[3],
           'lactose_free': row[4] == true,
           'line_total': _toDouble(row[5]),
+          'options': row[6],
         },
       )
       .toList();

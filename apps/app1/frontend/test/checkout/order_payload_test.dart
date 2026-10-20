@@ -5,6 +5,7 @@ import 'package:tri_docuras/checkout/checkout_draft.dart';
 import 'package:tri_docuras/checkout/delivery_address.dart';
 import 'package:tri_docuras/checkout/order_payload.dart';
 import 'package:tri_docuras/models/product.dart';
+import 'package:tri_docuras/models/product_option.dart';
 
 void main() {
   test('buildCreateOrderPayload inclui itens e entrega', () {
@@ -32,7 +33,14 @@ void main() {
     final payload = buildCreateOrderPayload(
       draft: draft,
       items: [
-        CartItem(product: product, quantity: 2, size: '9x9cm', lactoseFree: true),
+        CartItem(
+          product: product,
+          quantity: 2,
+          options: const [
+            ProductOption(id: 10, kind: 'size', label: '9x9cm'),
+            ProductOption(id: 12, kind: 'addon', label: 'Sem lactose', priceDelta: 3),
+          ],
+        ),
       ],
     );
 
@@ -44,8 +52,9 @@ void main() {
     expect(items, hasLength(1));
     expect(items.first['product_id'], 4);
     expect(items.first['quantity'], 2);
-    expect(items.first['size'], '9x9cm');
-    expect(items.first['lactose_free'], isTrue);
+    expect(items.first['option_ids'], [10, 12]);
+    expect(items.first.containsKey('size'), isFalse);
+    expect(items.first.containsKey('lactose_free'), isFalse);
   });
 
   test('buildCreateOrderPayload omite endereço na retirada', () {

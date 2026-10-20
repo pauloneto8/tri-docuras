@@ -182,7 +182,8 @@ concluído aparece como pendente.
 | Fase 2.2 (usuários do painel) | ✅ No ar (20/10) | Tabela `admin_users` (bcrypt), login por e-mail, papéis dono e atendente, revogação por versão de sessão, aba "Usuários". Dono inicial criado de `APP1_ADMIN_EMAIL`. `APP1_ADMIN_SECRET` gerada no `.env`. |
 | Fase 2.3 (histórico de status) | ✅ No ar (20/10) | Tabela `order_events` gravada na mesma transação de cada mudança (cliente, Mercado Pago, sistema, usuário do painel). Botão "Histórico" no pedido. Pedidos antigos sem registros. |
 | Fase 2.5 (estoque) | ✅ No ar (20/10) | `products.stock` (vazio = sem controle; os 7 produtos atuais estão assim). Reserva na criação do pedido, devolve no cancelamento e na expiração. Premissa: vale para pronta entrega e encomenda, até o dono decidir. Catálogo do app ainda não mostra "Esgotado". |
-| Fase 2.4 e 2.6 | ⏸️ Pausada | Pronta entrega × encomenda (depende das respostas do dono) e variações por produto. Pausa solicitada em 20/10. |
+| Fase 2.6 (variações por produto) | ✅ Feito (20/10, sem deploy ainda) | Tabela `product_options` (tamanhos e adicionais com preço, no painel). Carrinho envia `option_ids` e o servidor calcula o preço. Brownies receberam as opções antigas (9x9cm, Fatia grande, sem lactose +R\$3). Carrinho antigo com `size`/`lactose_free` pede para atualizar a página. |
+| Fase 2.4 (pronta entrega × encomenda) | ⏸️ Pausada | Depende das respostas do dono (horários, antecedência, limite por faixa). |
 | Fase 3 (3.1 a 3.6) | ⏸️ Pausada | Não iniciada. Sem `sitemap.xml`/`robots.txt`; PWA, status para o cliente, páginas legais e UX pendentes. |
 | Fase 4 (4.1 a 4.6) | ⏸️ Pausada | Parte da 4.4 (docs) feita em 20/10: `README.md` da raiz, `apps/app1/README.md` e `docs/`. Restante não iniciado. |
 | Contas de cliente, Fases A e B | ✅ Feito | Ver [`CONTAS.md`](CONTAS.md). |

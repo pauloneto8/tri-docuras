@@ -97,6 +97,13 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     a.wa { color: var(--pink); text-decoration: none; font-weight: 600; }
     .form-grid { display: grid; gap: 12px; }
     .form-row { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+    .option-row { display: grid; gap: 8px; grid-template-columns: 1fr; padding: 10px; border-radius: 8px; background: var(--peach); margin-bottom: 8px; }
+    .option-row label { font-size: 0.75rem; letter-spacing: 0; margin: 0; }
+    .option-row .option-active { display: flex; align-items: center; gap: 6px; }
+    .option-row .option-active input { width: auto; }
+    @media (min-width: 640px) {
+      .option-row { grid-template-columns: 110px 1fr 110px auto auto; align-items: end; }
+    }
     .checks { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
     .not-owner .owner-only { display: none !important; }
     .checks label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.9rem; letter-spacing: 0; }
@@ -273,6 +280,12 @@ const adminPanelHtml = r'''<!DOCTYPE html>
                 <label for="productCategory">CATEGORIA</label>
                 <select id="productCategory" required></select>
               </div>
+            </div>
+            <div>
+              <label>TAMANHOS E ADICIONAIS</label>
+              <div id="productOptionsList"></div>
+              <button id="addOptionBtn" type="button" class="secondary">+ Adicionar variação</button>
+              <div class="meta" style="margin-top:6px">Tamanho: o cliente escolhe um. Adicional: opcional, com preço extra. Sem variações, o produto não mostra opções.</div>
             </div>
             <div class="checks">
               <label><input id="productFeatured" type="checkbox"> Destaque no catálogo</label>
@@ -479,6 +492,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     const productAvailableInput = document.getElementById("productAvailable");
     const productImageInput = document.getElementById("productImage");
     const productImagePreview = document.getElementById("productImagePreview");
+    const productOptionsList = document.getElementById("productOptionsList");
 
     function token() { return sessionStorage.getItem(TOKEN_KEY); }
     function setToken(value) {
@@ -520,6 +534,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     function renderOrder(order) {
       const items = (order.items || []).map(function(item) {
         const extras = [];
+        if (item.options) extras.push(item.options);
         if (item.size) extras.push(item.size);
         if (item.lactose_free) extras.push("sem lactose");
         const suffix = extras.length ? " (" + extras.join(", ") + ")" : "";
@@ -719,9 +734,88 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       productAvailableInput.checked = true;
       productImageInput.value = "";
       setProductImagePreview(null);
+      renderOptionRows([]);
       productFormError.textContent = "";
       productFormTitle.textContent = "Novo produto";
     }
+
+    function optionRow(option) {
+      const row = document.createElement("div");
+      row.className = "option-row";
+      if (option && option.id !== undefined) row.dataset.optionId = option.id;
+
+      const kind = document.createElement("select");
+      kind.dataset.field = "kind";
+      [["size", "Tamanho"], ["addon", "Adicional"]].forEach(function(pair) {
+        const choice = document.createElement("option");
+        choice.value = pair[0];
+        choice.textContent = pair[1];
+        kind.appendChild(choice);
+      });
+      kind.value = option && option.kind === "size" ? "size" : "addon";
+
+      const label = document.createElement("input");
+      label.dataset.field = "label";
+      label.maxLength = 80;
+      label.placeholder = "Ex.: 9x9cm ou Sem lactose";
+      label.value = option ? option.label : "";
+
+      const price = document.createElement("input");
+      price.dataset.field = "price_delta";
+      price.type = "number";
+      price.min = "0";
+      price.max = "999.99";
+      price.step = "0.01";
+      price.placeholder = "Acréscimo R$";
+      price.value = option && Number(option.price_delta) > 0 ? String(option.price_delta) : "";
+
+      const activeWrap = document.createElement("label");
+      activeWrap.className = "option-active";
+      const active = document.createElement("input");
+      active.dataset.field = "active";
+      active.type = "checkbox";
+      active.checked = option ? option.active !== false : true;
+      activeWrap.appendChild(active);
+      activeWrap.appendChild(document.createTextNode(" Ativo"));
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "secondary";
+      remove.dataset.removeOption = "";
+      remove.textContent = "Remover";
+
+      row.append(kind, label, price, activeWrap, remove);
+      return row;
+    }
+
+    function renderOptionRows(options) {
+      productOptionsList.textContent = "";
+      (options || []).forEach(function(option) {
+        productOptionsList.appendChild(optionRow(option));
+      });
+    }
+
+    function readOptionRows() {
+      return Array.prototype.map.call(productOptionsList.querySelectorAll(".option-row"), function(row) {
+        const option = {
+          kind: row.querySelector('[data-field="kind"]').value,
+          label: row.querySelector('[data-field="label"]').value.trim(),
+          price_delta: row.querySelector('[data-field="price_delta"]').value,
+          active: row.querySelector('[data-field="active"]').checked
+        };
+        if (row.dataset.optionId) option.id = Number(row.dataset.optionId);
+        return option;
+      });
+    }
+
+    productOptionsList.addEventListener("click", function(event) {
+      const button = event.target.closest("[data-remove-option]");
+      if (button) button.closest(".option-row").remove();
+    });
+
+    document.getElementById("addOptionBtn").addEventListener("click", function() {
+      productOptionsList.appendChild(optionRow(null));
+    });
 
     function showProductForm(product) {
       productFormCard.hidden = false;
@@ -738,6 +832,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         productFeaturedInput.checked = !!product.featured;
         productAvailableInput.checked = !!product.available;
         setProductImagePreview(product.image_url || null);
+        renderOptionRows(product.options);
       } else {
         resetProductForm();
       }
@@ -756,7 +851,8 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         stock: productStockInput.value.trim() === "" ? null : Number(productStockInput.value),
         category: productCategoryInput.value,
         featured: productFeaturedInput.checked,
-        available: productAvailableInput.checked
+        available: productAvailableInput.checked,
+        options: readOptionRows()
       };
     }
 

@@ -1,6 +1,7 @@
 import 'package:postgres/postgres.dart';
 import 'package:tri_docuras_api/db.dart';
 import 'package:tri_docuras_api/product_images.dart';
+import 'package:tri_docuras_api/product_options.dart';
 
 final _categorySlugPattern = RegExp(r'^[a-z0-9]+(-[a-z0-9]+)*$');
 
@@ -22,6 +23,7 @@ class ProductInput {
     required this.category,
     required this.available,
     this.stock,
+    this.options,
   });
 
   final String name;
@@ -33,6 +35,91 @@ class ProductInput {
 
   /// `null` = estoque ilimitado (padrão para produtos sem controle).
   final int? stock;
+
+  /// `null` = não mexer nas variações (clientes antigos do painel não as enviam).
+  final List<ProductOptionInput>? options;
+}
+
+class ProductOptionInput {
+  ProductOptionInput({
+    this.id,
+    required this.kind,
+    required this.label,
+    required this.priceDelta,
+    required this.active,
+    required this.sortOrder,
+  });
+
+  /// Nulo para uma variação nova. Existentes voltam com o id, para que
+  /// carrinhos abertos continuem válidos depois de salvar o produto.
+  final int? id;
+  final String kind;
+  final String label;
+  final double priceDelta;
+  final bool active;
+  final int sortOrder;
+}
+
+List<ProductOptionInput>? _parseOptions(Object? raw) {
+  if (raw == null) return null;
+  if (raw is! List) {
+    throw AdminProductException('Variações inválidas.');
+  }
+  if (raw.length > maxProductOptions) {
+    throw AdminProductException(
+      'Use no máximo $maxProductOptions variações por produto.',
+    );
+  }
+
+  final options = <ProductOptionInput>[];
+  for (var index = 0; index < raw.length; index++) {
+    final entry = raw[index];
+    if (entry is! Map) {
+      throw AdminProductException('Variação inválida.');
+    }
+    final kind = entry['kind']?.toString().trim() ?? '';
+    if (!productOptionKinds.contains(kind)) {
+      throw AdminProductException('Tipo de variação inválido.');
+    }
+    final label = entry['label']?.toString().trim() ?? '';
+    if (label.isEmpty) {
+      throw AdminProductException('Informe o nome de cada variação.');
+    }
+    if (label.length > maxOptionLabelLength) {
+      throw AdminProductException(
+        'Nome de variação muito longo (máx. $maxOptionLabelLength caracteres).',
+      );
+    }
+    final priceRaw = entry['price_delta'];
+    final priceDelta = switch (priceRaw) {
+      null => 0.0,
+      final num value => value.toDouble(),
+      final String value when value.trim().isEmpty => 0.0,
+      final String value => double.tryParse(value.replaceAll(',', '.')),
+      _ => null,
+    };
+    if (priceDelta == null || priceDelta < 0 || priceDelta > maxOptionPrice) {
+      throw AdminProductException(
+        'Preço da variação "$label" inválido (use de 0 a $maxOptionPrice).',
+      );
+    }
+    final idRaw = entry['id'];
+    options.add(
+      ProductOptionInput(
+        id: idRaw == null
+            ? null
+            : idRaw is num
+                ? idRaw.toInt()
+                : throw AdminProductException('Variação inválida.'),
+        kind: kind,
+        label: label,
+        priceDelta: double.parse(priceDelta.toStringAsFixed(2)),
+        active: _parseBool(entry['active'], fallback: true),
+        sortOrder: index + 1,
+      ),
+    );
+  }
+  return options;
 }
 
 const maxStock = 100000;
@@ -90,6 +177,7 @@ ProductInput parseProductInput(Map<String, dynamic> body) {
     category: category,
     available: _parseBool(body['available'], fallback: true),
     stock: _parseStock(body['stock']),
+    options: _parseOptions(body['options']),
   );
 }
 
@@ -117,11 +205,114 @@ Future<List<Map<String, Object?>>> listProductsForAdmin() async {
     ORDER BY p.available DESC, p.featured DESC, p.name ASC;
     ''',
   );
-  return result.map((row) {
+  final products = result.map((row) {
     final map = _rowToProductMap(row);
     map['category_label'] = row[9]?.toString();
     return map;
   }).toList();
+
+  final optionsByProduct = await _loadAdminOptions(
+    connection,
+    [for (final product in products) product['id']! as int],
+  );
+  for (final product in products) {
+    product['options'] = optionsByProduct[product['id']] ?? const [];
+  }
+  return products;
+}
+
+/// Todas as variações (ativas e ocultas) dos produtos, para o painel.
+Future<Map<int, List<Map<String, Object?>>>> _loadAdminOptions(
+  Session session,
+  List<int> productIds,
+) async {
+  final result = await session.execute(
+    r'''
+    SELECT id, product_id, kind, label, price_delta, active, sort_order
+    FROM product_options
+    WHERE product_id = ANY($1::int[])
+    ORDER BY sort_order ASC, id ASC;
+    ''',
+    parameters: [productIds],
+  );
+
+  final byProduct = <int, List<Map<String, Object?>>>{};
+  for (final row in result) {
+    final productId = (row[1] as num).toInt();
+    byProduct.putIfAbsent(productId, () => []).add({
+      'id': (row[0] as num).toInt(),
+      'kind': row[2],
+      'label': row[3],
+      'price_delta': _toDouble(row[4]),
+      'active': row[5] == true,
+      'sort_order': (row[6] as num).toInt(),
+    });
+  }
+  return byProduct;
+}
+
+/// Grava as variações do produto. Existentes são atualizadas pelo id; as que
+/// sumiram da lista são apagadas; as sem id são criadas.
+Future<void> _saveOptions(
+  Session session,
+  int productId,
+  List<ProductOptionInput> options,
+) async {
+  final existing = await session.execute(
+    r'SELECT id FROM product_options WHERE product_id = $1;',
+    parameters: [productId],
+  );
+  final existingIds = {for (final row in existing) (row[0] as num).toInt()};
+  final keptIds = {
+    for (final option in options)
+      if (option.id != null) option.id!,
+  };
+  if (!existingIds.containsAll(keptIds)) {
+    throw AdminProductException('Variação não encontrada. Recarregue o painel.');
+  }
+
+  for (final id in existingIds.difference(keptIds)) {
+    await session.execute(
+      r'DELETE FROM product_options WHERE id = $1;',
+      parameters: [id],
+    );
+  }
+
+  for (final option in options) {
+    if (option.id == null) {
+      await session.execute(
+        r'''
+        INSERT INTO product_options (product_id, kind, label, price_delta, active, sort_order)
+        VALUES ($1, $2, $3, $4, $5, $6);
+        ''',
+        parameters: [
+          productId,
+          option.kind,
+          option.label,
+          option.priceDelta,
+          option.active,
+          option.sortOrder,
+        ],
+      );
+    } else {
+      await session.execute(
+        r'''
+        UPDATE product_options
+        SET kind = $3, label = $4, price_delta = $5, active = $6, sort_order = $7
+        WHERE id = $1 AND product_id = $2;
+        ''',
+        parameters: [
+          option.id,
+          productId,
+          option.kind,
+          option.label,
+          option.priceDelta,
+          option.active,
+          option.sortOrder,
+        ],
+      );
+    }
+  }
 }
 
 Future<void> _ensureCategoryExists(Connection connection, String slug) async {
@@ -137,28 +328,43 @@ Future<void> _ensureCategoryExists(Connection connection, String slug) async {
 Future<Map<String, Object?>> createProduct(ProductInput input) async {
   final connection = await getConnection();
   await _ensureCategoryExists(connection, input.category);
-  final result = await connection.execute(
-    '''
-    INSERT INTO products (name, description, price, featured, category, available, stock)
-    VALUES (\$1, \$2, \$3, \$4, \$5, \$6, \$7)
-    RETURNING id, name, description, price, featured, category, available, image_url, stock;
-    ''',
-    parameters: [
-      input.name,
-      input.description,
-      input.price,
-      input.featured,
-      input.category,
-      input.available,
-      input.stock,
-    ],
-  );
+  return connection.runTx((tx) async {
+    final result = await tx.execute(
+      '''
+      INSERT INTO products (name, description, price, featured, category, available, stock)
+      VALUES (\$1, \$2, \$3, \$4, \$5, \$6, \$7)
+      RETURNING id, name, description, price, featured, category, available, image_url, stock;
+      ''',
+      parameters: [
+        input.name,
+        input.description,
+        input.price,
+        input.featured,
+        input.category,
+        input.available,
+        input.stock,
+      ],
+    );
 
-  if (result.isEmpty) {
-    throw AdminProductException('Não foi possível criar o produto.');
-  }
+    if (result.isEmpty) {
+      throw AdminProductException('Não foi possível criar o produto.');
+    }
 
-  return productToAdminJson(_rowToProductMap(result.first));
+    final product = _rowToProductMap(result.first);
+    final id = product['id']! as int;
+    await _saveOptions(tx, id, input.options ?? const []);
+    return _withOptions(tx, product);
+  });
+}
+
+Future<Map<String, Object?>> _withOptions(
+  Session session,
+  Map<String, Object?> product,
+) async {
+  final id = product['id']! as int;
+  final options = await _loadAdminOptions(session, [id]);
+  product['options'] = options[id] ?? const [];
+  return productToAdminJson(product);
 }
 
 Future<Map<String, Object?>> updateProduct(int id, ProductInput input) async {
@@ -168,36 +374,42 @@ Future<Map<String, Object?>> updateProduct(int id, ProductInput input) async {
 
   final connection = await getConnection();
   await _ensureCategoryExists(connection, input.category);
-  final result = await connection.execute(
-    '''
-    UPDATE products
-    SET name = \$2,
-        description = \$3,
-        price = \$4,
-        featured = \$5,
-        category = \$6,
-        available = \$7,
-        stock = \$8
-    WHERE id = \$1
-    RETURNING id, name, description, price, featured, category, available, image_url, stock;
-    ''',
-    parameters: [
-      id,
-      input.name,
-      input.description,
-      input.price,
-      input.featured,
-      input.category,
-      input.available,
-      input.stock,
-    ],
-  );
+  return connection.runTx((tx) async {
+    final result = await tx.execute(
+      '''
+      UPDATE products
+      SET name = \$2,
+          description = \$3,
+          price = \$4,
+          featured = \$5,
+          category = \$6,
+          available = \$7,
+          stock = \$8
+      WHERE id = \$1
+      RETURNING id, name, description, price, featured, category, available, image_url, stock;
+      ''',
+      parameters: [
+        id,
+        input.name,
+        input.description,
+        input.price,
+        input.featured,
+        input.category,
+        input.available,
+        input.stock,
+      ],
+    );
 
-  if (result.isEmpty) {
-    throw AdminProductException('Produto não encontrado.');
-  }
+    if (result.isEmpty) {
+      throw AdminProductException('Produto não encontrado.');
+    }
 
-  return productToAdminJson(_rowToProductMap(result.first));
+    final options = input.options;
+    if (options != null) {
+      await _saveOptions(tx, id, options);
+    }
+    return _withOptions(tx, _rowToProductMap(result.first));
+  });
 }
 
 Map<String, Object?> _rowToProductMap(ResultRow row) {
@@ -234,7 +446,7 @@ Future<Map<String, Object?>> updateProductImage(int id, String imageUrl) async {
     throw AdminProductException('Produto não encontrado.');
   }
 
-  return productToAdminJson(_rowToProductMap(result.first));
+  return _withOptions(connection, _rowToProductMap(result.first));
 }
 
 Future<Map<String, Object?>> uploadProductImage({
@@ -273,6 +485,7 @@ Map<String, Object?> productToAdminJson(Map<String, Object?> product) {
     'availability_label': available ? 'No catálogo' : 'Oculto',
     'image_url': product['image_url'],
     'stock': product['stock'],
+    'options': product['options'] ?? const [],
   };
 }
 

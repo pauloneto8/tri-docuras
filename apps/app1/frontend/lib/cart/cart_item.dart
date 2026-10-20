@@ -1,23 +1,32 @@
 import 'package:tri_docuras/models/product.dart';
+import 'package:tri_docuras/models/product_option.dart';
 
 class CartItem {
   const CartItem({
     required this.product,
     required this.quantity,
-    this.size,
-    this.lactoseFree = false,
+    this.options = const [],
   });
 
   final Product product;
   final int quantity;
-  final String? size;
-  final bool lactoseFree;
 
-  static const lactoseExtraPrice = 3.0;
+  /// Tamanho e adicionais escolhidos, na ordem do cadastro.
+  final List<ProductOption> options;
 
-  double get unitPrice => product.price + (lactoseFree ? lactoseExtraPrice : 0);
+  double get extraPrice =>
+      options.fold<double>(0, (sum, option) => sum + option.priceDelta);
+
+  double get unitPrice => product.price + extraPrice;
 
   double get lineTotal => unitPrice * quantity;
+
+  List<int> get optionIds => [for (final option in options) option.id];
+
+  /// Texto das escolhas, ex.: `9x9cm · Sem lactose`; nulo sem escolhas.
+  String? get optionsLabel => options.isEmpty
+      ? null
+      : options.map((option) => option.label).join(' · ');
 
   String get formattedUnitPrice =>
       'R\$ ${unitPrice.toStringAsFixed(2).replaceAll('.', ',')}';
@@ -29,8 +38,7 @@ class CartItem {
     return CartItem(
       product: product,
       quantity: quantity ?? this.quantity,
-      size: size,
-      lactoseFree: lactoseFree,
+      options: options,
     );
   }
 }

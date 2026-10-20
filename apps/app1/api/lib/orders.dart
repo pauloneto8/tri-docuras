@@ -6,10 +6,9 @@ import 'package:tri_docuras_api/mercado_pago_client.dart';
 import 'package:tri_docuras_api/mercado_pago_config.dart';
 import 'package:tri_docuras_api/order_events.dart';
 import 'package:tri_docuras_api/payment_check_throttle.dart';
+import 'package:tri_docuras_api/product_options.dart';
 import 'package:tri_docuras_api/store_settings.dart';
 import 'package:tri_docuras_api/whatsapp_notify.dart';
-
-const lactoseExtraPrice = 3.0;
 
 /// Únicos status a partir dos quais uma confirmação do Mercado Pago pode
 /// marcar o pedido como pago. Notificações repetidas sobre pedidos já
@@ -33,16 +32,16 @@ class OrderItemInput {
     required this.quantity,
     required this.unitPrice,
     required this.productName,
-    this.size,
-    this.lactoseFree = false,
+    this.options,
   });
 
   final int productId;
   final int quantity;
   final double unitPrice;
   final String productName;
-  final String? size;
-  final bool lactoseFree;
+
+  /// Opções escolhidas em texto (ex.: `9x9cm · Sem lactose`), para o pedido.
+  final String? options;
 
   double get lineTotal => unitPrice * quantity;
 }
@@ -75,6 +74,28 @@ class CreateOrderInput {
   final String? deliveryComplement;
   final String? deliveryNeighborhood;
   final String? deliveryReference;
+}
+
+/// Carrinho salvo antes das variações cadastráveis: mandava `size` e
+/// `lactose_free` em vez de `option_ids`. Recusamos para o cliente recarregar
+/// a página, em vez de cobrar um preço diferente do que ele viu.
+bool _usesLegacyOptions(Map<dynamic, dynamic> entry) {
+  final size = entry['size']?.toString().trim() ?? '';
+  return entry['lactose_free'] == true || size.isNotEmpty;
+}
+
+List<int> _parseOptionIds(Object? raw) {
+  if (raw == null) return const [];
+  if (raw is! List) {
+    throw OrderValidationException('Opções inválidas no carrinho.');
+  }
+  return [
+    for (final id in raw)
+      if (id is num)
+        id.toInt()
+      else
+        throw OrderValidationException('Opções inválidas no carrinho.'),
+  ];
 }
 
 Future<CreateOrderInput> parseCreateOrderInput(Map<String, dynamic> body) async {
@@ -138,14 +159,13 @@ Future<CreateOrderInput> parseCreateOrderInput(Map<String, dynamic> body) async 
     if (quantity is! num || quantity < 1) {
       throw OrderValidationException('Quantidade inválida.');
     }
-    final lactoseFree = entry['lactose_free'] == true;
-    final sizeRaw = entry['size'];
-    final size = sizeRaw == null ? null : sizeRaw.toString().trim();
+    if (entry['option_ids'] == null && _usesLegacyOptions(entry)) {
+      throw OrderValidationException('Atualize a página e refaça o carrinho.');
+    }
     parsedItems.add({
       'product_id': productId.toInt(),
       'quantity': quantity.toInt(),
-      'lactose_free': lactoseFree,
-      'size': size != null && size.isNotEmpty ? size : null,
+      'option_ids': _parseOptionIds(entry['option_ids']),
     });
     productIds.add(productId.toInt());
   }
@@ -181,21 +201,34 @@ Future<CreateOrderInput> parseCreateOrderInput(Map<String, dynamic> body) async 
     };
   }
 
+  final optionsByProduct = await fetchActiveOptionsByProduct(
+    connection,
+    productIds.toList(),
+  );
+
   final items = <OrderItemInput>[];
   for (final entry in parsedItems) {
     final productId = entry['product_id'] as int;
     final product = productsById[productId]!;
     final basePrice = product['price']! as double;
-    final lactoseFree = entry['lactose_free'] as bool;
-    final unitPrice = basePrice + (lactoseFree ? lactoseExtraPrice : 0);
+    final productName = product['name']! as String;
+    final ResolvedOptions resolved;
+    try {
+      resolved = resolveProductOptions(
+        productName: productName,
+        selectedIds: entry['option_ids'] as List<int>,
+        available: optionsByProduct[productId] ?? const [],
+      );
+    } on ProductOptionException catch (error) {
+      throw OrderValidationException(error.message);
+    }
     items.add(
       OrderItemInput(
         productId: productId,
         quantity: entry['quantity'] as int,
-        unitPrice: unitPrice,
-        productName: product['name']! as String,
-        size: entry['size'] as String?,
-        lactoseFree: lactoseFree,
+        unitPrice: basePrice + resolved.extraPrice,
+        productName: productName,
+        options: resolved.label,
       ),
     );
   }
@@ -302,8 +335,8 @@ Future<Map<String, Object?>> createOrder(
         r'''
         INSERT INTO order_items (
           order_id, product_id, product_name, quantity,
-          unit_price, size, lactose_free, line_total
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+          unit_price, options, line_total
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7);
         ''',
         parameters: [
           orderId,
@@ -311,8 +344,7 @@ Future<Map<String, Object?>> createOrder(
           item.productName,
           item.quantity,
           item.unitPrice,
-          item.size,
-          item.lactoseFree,
+          item.options,
           item.lineTotal,
         ],
       );

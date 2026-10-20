@@ -4,6 +4,7 @@ import 'package:tri_docuras/cart/cart_item.dart';
 import 'package:tri_docuras/cart/cart_scope.dart';
 import 'package:tri_docuras/favorites/favorites_scope.dart';
 import 'package:tri_docuras/models/product.dart';
+import 'package:tri_docuras/models/product_option.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
 import 'package:tri_docuras/widgets/td_button.dart';
@@ -22,22 +23,23 @@ class ProductScreen extends StatefulWidget {
 }
 
 class _ProductScreenState extends State<ProductScreen> {
-  static const _sizeOptions = ['9x9cm', 'Fatia grande'];
-  static const _lactoseExtra = 3.0;
-
   late int _quantity;
-  late String _size;
-  late bool _lactoseFree;
+  int? _sizeId;
+  final Set<int> _addonIds = {};
   late bool _favorited;
 
-  bool get _isCombo => widget.product.category == 'combos';
+  /// Opções marcadas, na ordem do cadastro do produto.
+  List<ProductOption> get _selectedOptions => [
+        for (final option in widget.product.options)
+          if (option.id == _sizeId || _addonIds.contains(option.id)) option,
+      ];
 
   @override
   void initState() {
     super.initState();
     _quantity = 2;
-    _size = _sizeOptions.first;
-    _lactoseFree = false;
+    final sizes = widget.product.sizeOptions;
+    _sizeId = sizes.isEmpty ? null : sizes.first.id;
     final favorites = FavoritesScope.of(context);
     _favorited = favorites.isFavorite(widget.product.id);
     favorites.load().then((_) {
@@ -48,7 +50,8 @@ class _ProductScreenState extends State<ProductScreen> {
     });
   }
 
-  double get _unitPrice => widget.product.price + (_lactoseFree ? _lactoseExtra : 0);
+  double get _unitPrice => widget.product.price +
+      _selectedOptions.fold<double>(0, (sum, option) => sum + option.priceDelta);
 
   double get _totalPrice => _unitPrice * _quantity;
 
@@ -60,8 +63,7 @@ class _ProductScreenState extends State<ProductScreen> {
       CartItem(
         product: widget.product,
         quantity: _quantity,
-        size: _isCombo ? null : _size,
-        lactoseFree: _isCombo ? false : _lactoseFree,
+        options: _selectedOptions,
       ),
     );
     Navigator.of(context).pop(
@@ -131,29 +133,42 @@ class _ProductScreenState extends State<ProductScreen> {
                               style: Theme.of(context).textTheme.bodyMedium,
                               textAlign: TextAlign.center,
                             ),
-                            if (!_isCombo) ...[
+                            if (widget.product.sizeOptions.isNotEmpty) ...[
                               const SizedBox(height: 20),
                               Wrap(
                                 alignment: WrapAlignment.center,
                                 spacing: 0,
                                 runSpacing: 8,
-                                children: _sizeOptions
+                                children: widget.product.sizeOptions
                                     .map(
                                       (option) => TdChip(
-                                        label: option,
-                                        selected: _size == option,
-                                        onTap: () => setState(() => _size = option),
+                                        label: option.label,
+                                        selected: _sizeId == option.id,
+                                        onTap: () => setState(() => _sizeId = option.id),
                                       ),
                                     )
                                     .toList(),
                               ),
+                            ],
+                            if (widget.product.addonOptions.isNotEmpty) ...[
                               const SizedBox(height: 8),
-                              Center(
-                                child: TdChip(
-                                  label: 'Sem lactose +R\$3',
-                                  selected: _lactoseFree,
-                                  onTap: () => setState(() => _lactoseFree = !_lactoseFree),
-                                ),
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 0,
+                                runSpacing: 8,
+                                children: widget.product.addonOptions
+                                    .map(
+                                      (option) => TdChip(
+                                        label: option.chipLabel,
+                                        selected: _addonIds.contains(option.id),
+                                        onTap: () => setState(() {
+                                          if (!_addonIds.remove(option.id)) {
+                                            _addonIds.add(option.id);
+                                          }
+                                        }),
+                                      ),
+                                    )
+                                    .toList(),
                               ),
                             ],
                             const SizedBox(height: 24),

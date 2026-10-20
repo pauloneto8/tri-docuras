@@ -27,8 +27,7 @@ Map<String, dynamic> buildCreateOrderPayload({
           (item) => {
             'product_id': item.product.id,
             'quantity': item.quantity,
-            if (item.size != null && item.size!.isNotEmpty) 'size': item.size,
-            'lactose_free': item.lactoseFree,
+            'option_ids': item.optionIds,
           },
         )
         .toList(),

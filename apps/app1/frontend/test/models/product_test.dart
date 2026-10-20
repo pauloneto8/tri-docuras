@@ -30,6 +30,23 @@ void main() {
     expect(product.canBuy, isTrue);
   });
 
+  test('lê as variações e separa tamanhos de adicionais', () {
+    final product = Product.fromJson({
+      ..._json(),
+      'options': [
+        {'id': 10, 'kind': 'size', 'label': '9x9cm', 'price_delta': 0},
+        {'id': 12, 'kind': 'addon', 'label': 'Sem lactose', 'price_delta': 3},
+      ],
+    });
+    expect(product.options.length, 2);
+    expect(product.sizeOptions.map((o) => o.id), [10]);
+    expect(product.addonOptions.map((o) => o.id), [12]);
+  });
+
+  test('produto sem a chave options não tem variações', () {
+    expect(Product.fromJson(_json()).options, isEmpty);
+  });
+
   test('indisponível continua sem compra, mesmo com estoque', () {
     final product = Product.fromJson(_json(stock: 5, available: false));
     expect(product.soldOut, isFalse);

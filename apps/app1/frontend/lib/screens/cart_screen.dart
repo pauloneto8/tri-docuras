@@ -218,6 +218,13 @@ class _CartLineCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (item.optionsLabel != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      item.optionsLabel!,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ],
                   const SizedBox(height: 4),
                   Text(
                     item.formattedUnitPrice,

@@ -1,3 +1,5 @@
+import 'package:tri_docuras/models/product_option.dart';
+
 class Product {
   const Product({
     required this.id,
@@ -9,6 +11,7 @@ class Product {
     this.available = true,
     this.imageUrl,
     this.stock,
+    this.options = const [],
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -22,7 +25,16 @@ class Product {
       available: json['available'] != false,
       imageUrl: json['image_url'] as String?,
       stock: (json['stock'] as num?)?.toInt(),
+      options: _parseOptions(json['options']),
     );
+  }
+
+  static List<ProductOption> _parseOptions(Object? raw) {
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(ProductOption.fromJson)
+        .toList();
   }
 
   final int id;
@@ -36,6 +48,15 @@ class Product {
 
   /// Unidades em estoque; nulo significa sem controle de estoque.
   final int? stock;
+
+  /// Tamanhos e adicionais cadastrados no painel (vazio = sem variações).
+  final List<ProductOption> options;
+
+  List<ProductOption> get sizeOptions =>
+      options.where((option) => option.isSize).toList();
+
+  List<ProductOption> get addonOptions =>
+      options.where((option) => !option.isSize).toList();
 
   /// Esgotado: há controle de estoque e nada sobrou.
   bool get soldOut => stock != null && stock! <= 0;
