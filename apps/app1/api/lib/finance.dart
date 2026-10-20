@@ -69,6 +69,12 @@ double averageTicket(double revenue, int orders) {
   return revenue / orders;
 }
 
+/// Parte sobre total, arredondada em 4 casas. Sem total, devolve 0.
+double ratio(int part, int whole) {
+  if (whole <= 0) return 0;
+  return double.parse((part / whole).toStringAsFixed(4));
+}
+
 Future<Map<String, Object?>> buildFinanceReport({DateRange? range}) async {
   final period = range ?? resolveDateRange();
   final connection = await getConnection();
@@ -147,8 +153,33 @@ Future<Map<String, Object?>> buildFinanceReport({DateRange? range}) async {
     };
   }
 
+  // Funil dos pedidos criados no período: quantos foram pagos e quantos
+  // venceram o Pix sem pagamento.
+  final funnelResult = await connection.execute(
+    '''
+    SELECT COUNT(*),
+           COUNT(paid_at),
+           COUNT(*) FILTER (WHERE status = 'expired')
+    FROM orders
+    WHERE created_at >= \$1 AND created_at < \$2;
+    ''',
+    parameters: [period.from, period.toExclusive],
+  );
+  final created = funnelResult.isEmpty ? 0 : (funnelResult.first[0] as num).toInt();
+  final paid = funnelResult.isEmpty ? 0 : (funnelResult.first[1] as num).toInt();
+  final expired = funnelResult.isEmpty ? 0 : (funnelResult.first[2] as num).toInt();
+
   return {
     'period': {'from': period.fromIso, 'to': period.toIso},
+    'funnel': {
+      'created': created,
+      'paid': paid,
+      'expired': expired,
+      // Pedidos pagos sobre os criados no período.
+      'conversion_rate': ratio(paid, created),
+      // Pix vencido sobre os que já tiveram desfecho (pagos ou vencidos).
+      'expiration_rate': ratio(expired, paid + expired),
+    },
     'totals': {
       'revenue': revenue,
       'orders': ordersCount,

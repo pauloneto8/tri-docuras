@@ -2,6 +2,18 @@ import 'package:test/test.dart';
 import 'package:tri_docuras_api/finance.dart';
 
 void main() {
+  group('ratio', () {
+    test('divide e arredonda em 4 casas', () {
+      expect(ratio(1, 3), 0.3333);
+      expect(ratio(2, 4), 0.5);
+    });
+
+    test('sem total devolve 0 em vez de dividir por zero', () {
+      expect(ratio(0, 0), 0);
+      expect(ratio(3, 0), 0);
+    });
+  });
+
   group('resolveDateRange', () {
     final now = DateTime(2026, 10, 19);
 

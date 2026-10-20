@@ -1244,12 +1244,19 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       financeToInput.value = toDateInput(today);
     }
 
-    function renderFinanceCards(totals) {
+    function formatPercent(rate) {
+      return (Number(rate || 0) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "%";
+    }
+
+    function renderFinanceCards(totals, funnel) {
       const cards = [
         { label: "Faturamento", value: formatMoney(totals.revenue || 0) },
         { label: "Pedidos pagos", value: totals.orders || 0 },
         { label: "Ticket médio", value: formatMoney(totals.average_ticket || 0) },
-        { label: "Taxas de entrega", value: formatMoney(totals.delivery_fees || 0) }
+        { label: "Taxas de entrega", value: formatMoney(totals.delivery_fees || 0) },
+        { label: "Pedidos criados", value: (funnel && funnel.created) || 0 },
+        { label: "Conversão (pagos / criados)", value: formatPercent(funnel && funnel.conversion_rate) },
+        { label: "Pix vencido (sem pagamento)", value: formatPercent(funnel && funnel.expiration_rate) }
       ];
       financeCardsEl.innerHTML = cards.map(function(card) {
         return '<div class="finance-card"><div class="meta">' + card.label +
@@ -1299,7 +1306,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       try {
         const data = await api("/api/admin/finance/report?" + params.toString());
         lastFinanceReport = data;
-        renderFinanceCards(data.totals || {});
+        renderFinanceCards(data.totals || {}, data.funnel || {});
         renderFinanceDaily(data.daily || []);
         renderFinanceProducts(data.by_product || []);
       } catch (error) {
