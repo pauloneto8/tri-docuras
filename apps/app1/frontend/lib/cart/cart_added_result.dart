@@ -90,9 +90,9 @@ class CartAddedBanner extends StatelessWidget {
                         style: GoogleFonts.poppins(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.sky,
+                          color: AppColors.brown,
                           decoration: TextDecoration.underline,
-                          decorationColor: AppColors.sky,
+                          decorationColor: AppColors.brown,
                         ),
                       ),
                     ),

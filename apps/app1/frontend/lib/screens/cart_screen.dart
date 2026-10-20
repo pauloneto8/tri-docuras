@@ -170,6 +170,7 @@ class _CartHeader extends StatelessWidget {
       child: Row(
         children: [
           TdIconButton(
+            label: 'Voltar',
             icon: Icons.arrow_back,
             onPressed: onBack,
             tint: AppColors.peach,

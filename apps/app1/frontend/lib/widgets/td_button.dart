@@ -31,7 +31,8 @@ class TdButton extends StatelessWidget {
     switch (variant) {
       case TdButtonVariant.primary:
         background = AppColors.pinkDeep;
-        foreground = AppColors.white;
+        // Branco sobre o rosa dá 2,9:1; o marrom escuro dá 4,8:1.
+        foreground = AppColors.dark;
         border = null;
       case TdButtonVariant.outline:
         background = Colors.transparent;

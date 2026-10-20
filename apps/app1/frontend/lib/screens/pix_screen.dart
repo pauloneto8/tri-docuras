@@ -398,7 +398,7 @@ class _PixHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
       child: Row(
         children: [
-          TdIconButton(icon: Icons.arrow_back, onPressed: onBack, tint: AppColors.peach),
+          TdIconButton(label: 'Voltar', icon: Icons.arrow_back, onPressed: onBack, tint: AppColors.peach),
           Expanded(
             child: Text(
               'Pagar com Pix',

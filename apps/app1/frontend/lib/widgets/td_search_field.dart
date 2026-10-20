@@ -44,7 +44,7 @@ class TdSearchField extends StatelessWidget {
               fontSize: 15,
               color: AppColors.brown.withValues(alpha: 0.5),
             ),
-            prefixIcon: const Icon(Icons.search, color: AppColors.sky, size: 22),
+            prefixIcon: const Icon(Icons.search, color: AppColors.tan, size: 22),
             filled: true,
             fillColor: Colors.transparent,
             contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),

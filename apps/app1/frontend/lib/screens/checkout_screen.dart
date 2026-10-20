@@ -519,6 +519,7 @@ class _CheckoutHeader extends StatelessWidget {
       child: Row(
         children: [
           TdIconButton(
+            label: 'Voltar',
             icon: Icons.arrow_back,
             onPressed: () => Navigator.of(context).pop(),
             tint: AppColors.peach,

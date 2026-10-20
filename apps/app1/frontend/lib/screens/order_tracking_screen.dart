@@ -561,7 +561,7 @@ class _TrackingHeader extends StatelessWidget {
       child: Row(
         children: [
           if (showBack)
-            TdIconButton(icon: Icons.arrow_back, onPressed: onBack, tint: AppColors.peach)
+            TdIconButton(label: 'Voltar', icon: Icons.arrow_back, onPressed: onBack, tint: AppColors.peach)
           else
             const SizedBox(width: 48),
           Expanded(

@@ -221,6 +221,7 @@ class _FavoriteCard extends StatelessWidget {
                   ),
                 ),
                 TdIconButton(
+                  label: 'Remover da lista',
                   icon: Icons.favorite,
                   onPressed: onRemove,
                   tint: AppColors.peach,

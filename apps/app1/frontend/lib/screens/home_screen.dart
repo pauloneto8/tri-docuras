@@ -316,6 +316,7 @@ class _CatalogHeader extends StatelessWidget {
         child: Row(
           children: [
             TdIconButton(
+              label: 'Menu',
               icon: Icons.menu,
               onPressed: onMenuTap,
               tint: AppColors.peach,
@@ -331,6 +332,7 @@ class _CatalogHeader extends StatelessWidget {
               clipBehavior: Clip.none,
               children: [
                 TdIconButton(
+                  label: 'Abrir carrinho',
                   icon: Icons.shopping_cart_outlined,
                   onPressed: onCartTap,
                   tint: AppColors.peach,

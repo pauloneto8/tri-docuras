@@ -221,11 +221,15 @@ class _ProductHeader extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           TdIconButton(
+            label: 'Voltar',
             icon: Icons.arrow_back,
             onPressed: onBack,
             tint: AppColors.peach,
           ),
           TdIconButton(
+            label: favorited
+                ? 'Remover dos favoritos'
+                : 'Adicionar aos favoritos',
             icon: favorited ? Icons.favorite : Icons.favorite_border,
             onPressed: onFavorite,
             tint: AppColors.peach,
