@@ -16,6 +16,7 @@ import 'package:tri_docuras/theme/app_theme.dart';
 import 'package:tri_docuras/widgets/td_button.dart';
 import 'package:tri_docuras/widgets/td_chip.dart';
 import 'package:tri_docuras/widgets/td_icon_button.dart';
+import 'package:tri_docuras/widgets/td_load_error.dart';
 import 'package:tri_docuras/widgets/td_photo_frame.dart';
 import 'package:tri_docuras/widgets/td_search_field.dart';
 
@@ -63,12 +64,12 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Future<List<Product>> _loadProducts() async {
-    try {
-      return await _api.fetchProducts();
-    } catch (_) {
-      return _api.fallbackProducts();
-    }
+  Future<List<Product>> _loadProducts() => _api.fetchProducts();
+
+  void _retryProducts() {
+    setState(() {
+      _productsFuture = _loadProducts();
+    });
   }
 
   List<Product> _filterProducts(List<Product> products) {
@@ -195,8 +196,11 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        final source = snapshot.data ?? _api.fallbackProducts();
-        final products = _filterProducts(source);
+        if (snapshot.hasError) {
+          return TdLoadError(onRetry: _retryProducts);
+        }
+
+        final products = _filterProducts(snapshot.data ?? const <Product>[]);
         return _buildCatalogContent(products);
       },
     );

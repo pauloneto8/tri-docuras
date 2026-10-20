@@ -4,6 +4,7 @@ import 'package:tri_docuras/cart/cart_item.dart';
 import 'package:tri_docuras/cart/cart_scope.dart';
 import 'package:tri_docuras/cart/delivery_mode.dart';
 import 'package:tri_docuras/screens/checkout_screen.dart';
+import 'package:tri_docuras/store_config_holder.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
 import 'package:tri_docuras/theme/app_theme.dart';
 import 'package:tri_docuras/widgets/td_button.dart';
@@ -116,13 +117,28 @@ class CartScreen extends StatelessWidget {
                           ),
                         ),
                       ),
+                    if (cart.items.isNotEmpty &&
+                        !StoreConfigHolder.instance.config.storeOpen)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: Text(
+                          'A loja está fechada para pedidos no momento. '
+                          'Volte em breve para finalizar.',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: AppColors.brown,
+                          ),
+                        ),
+                      ),
                     if (cart.items.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                         child: TdButton(
                           label: 'Finalizar pedido',
                           trailing: Text(cart.formattedTotal),
-                          onPressed: () {
+                          onPressed: !StoreConfigHolder.instance.config.storeOpen
+                              ? null
+                              : () {
                             Navigator.of(context).push(
                               MaterialPageRoute<void>(
                                 builder: (_) => const CheckoutScreen(),

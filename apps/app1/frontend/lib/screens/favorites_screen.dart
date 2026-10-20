@@ -5,6 +5,7 @@ import 'package:tri_docuras/models/product.dart';
 import 'package:tri_docuras/screens/product_screen.dart';
 import 'package:tri_docuras/services/api_service.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
+import 'package:tri_docuras/widgets/td_load_error.dart';
 import 'package:tri_docuras/widgets/td_button.dart';
 import 'package:tri_docuras/widgets/td_icon_button.dart';
 import 'package:tri_docuras/widgets/td_photo_frame.dart';
@@ -38,12 +39,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     });
   }
 
-  Future<List<Product>> _loadProducts() async {
-    try {
-      return await _api.fetchProducts();
-    } catch (_) {
-      return _api.fallbackProducts();
-    }
+  Future<List<Product>> _loadProducts() => _api.fetchProducts();
+
+  void _retryProducts() {
+    setState(() {
+      _productsFuture = _loadProducts();
+    });
   }
 
   void _openProduct(Product product) {
@@ -68,7 +69,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             );
           }
 
-          final all = snapshot.data ?? _api.fallbackProducts();
+          if (snapshot.hasError) {
+            return TdLoadError(onRetry: _retryProducts);
+          }
+
+          final all = snapshot.data ?? const <Product>[];
           final items = all.where((p) => favorites.isFavorite(p.id)).toList();
 
           if (items.isEmpty) {

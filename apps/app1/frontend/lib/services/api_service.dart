@@ -290,43 +290,6 @@ class ApiService {
       fallback: 'Não foi possível salvar seus favoritos.',
     );
   }
-
-  List<Product> fallbackProducts() {
-    return const [
-      Product(
-        id: 1,
-        name: 'Brownie Tradicional',
-        description: 'Brownie amanteigado clássico, macio por dentro.',
-        price: 12.0,
-        featured: true,
-        category: 'brownies',
-      ),
-      Product(
-        id: 2,
-        name: 'Ninho c/ Nutella',
-        description: 'Recheado e coberto com Nutella derretida e leite Ninho.',
-        price: 15.0,
-        featured: true,
-        category: 'brownies',
-      ),
-      Product(
-        id: 3,
-        name: 'Brownie c/ Nozes',
-        description: 'Chocolate intenso com nozes caramelizadas.',
-        price: 14.0,
-        featured: false,
-        category: 'brownies',
-      ),
-      Product(
-        id: 4,
-        name: 'Caixa Presente (4un)',
-        description: 'Seleção especial de 4 brownies para presentear.',
-        price: 48.0,
-        featured: false,
-        category: 'combos',
-      ),
-    ];
-  }
 }
 
 class ApiException implements Exception {
