@@ -99,7 +99,18 @@ List<int> _parseOptionIds(Object? raw) {
   ];
 }
 
+/// O cliente precisa aceitar os Termos de Compra e a Política de Privacidade
+/// antes de pagar. Sem o aceite, o pedido não é criado.
+void requireAcceptedTerms(Object? accepted) {
+  if (accepted != true) {
+    throw OrderValidationException(
+      'Confirme que leu os Termos de Compra e a Política de Privacidade.',
+    );
+  }
+}
+
 Future<CreateOrderInput> parseCreateOrderInput(Map<String, dynamic> body) async {
+  requireAcceptedTerms(body['accepted_terms']);
   final customerName = _normalizeName(body['customer_name']);
   if (customerName.length < 2) {
     throw OrderValidationException('Informe o nome completo.');
@@ -276,10 +287,11 @@ Future<Map<String, Object?>> createOrder(
         public_id, status, customer_name, whatsapp, delivery_mode,
         delivery_street, delivery_number, delivery_complement,
         delivery_neighborhood, delivery_reference,
-        subtotal, delivery_fee, total, customer_id, tracking_token
+        subtotal, delivery_fee, total, customer_id, tracking_token,
+        accepted_terms_at
       ) VALUES (
         $1, 'pending_payment', $2, $3, $4,
-        $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+        $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()
       )
       RETURNING id;
       ''',

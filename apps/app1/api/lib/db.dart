@@ -194,6 +194,9 @@ Future<void> ensureSchema(Connection connection) async {
   await connection.execute('''
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_token VARCHAR(64);
   ''');
+  await connection.execute('''
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS accepted_terms_at TIMESTAMP;
+  ''');
   // Pedidos anteriores à coluna ganham token na primeira subida da API.
   final withoutToken = await connection.execute(
     'SELECT id FROM orders WHERE tracking_token IS NULL;',

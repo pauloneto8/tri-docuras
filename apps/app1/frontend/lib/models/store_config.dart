@@ -21,6 +21,8 @@ class StoreConfig {
     this.deliveryFee = 6.0,
     this.storeOpen = true,
     this.notice = '',
+    this.sellerName,
+    this.sellerDocument,
   });
 
   factory StoreConfig.fromJson(Map<String, dynamic> json) {
@@ -40,6 +42,8 @@ class StoreConfig {
       deliveryFee: _parseMoney(json['delivery_fee']) ?? 6.0,
       storeOpen: json['store_open'] as bool? ?? true,
       notice: json['notice'] as String? ?? '',
+      sellerName: json['seller_name'] as String?,
+      sellerDocument: json['seller_document'] as String?,
     );
   }
 
@@ -62,6 +66,12 @@ class StoreConfig {
 
   /// Aviso exibido no app (vazio = nenhum).
   final String notice;
+
+  /// Quem vende (nos Termos de Compra). Nulo até o dono configurar.
+  final String? sellerName;
+
+  /// CNPJ ou CPF de quem vende. Nulo até o dono configurar.
+  final String? sellerDocument;
 
   String? get whatsappForLink => storeWhatsApp;
 }

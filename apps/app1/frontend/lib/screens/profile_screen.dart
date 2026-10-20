@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:tri_docuras/account/account_login_prompt.dart';
 import 'package:tri_docuras/account/account_scope.dart';
 import 'package:tri_docuras/checkout/delivery_address.dart';
+import 'package:tri_docuras/legal/legal_screen.dart';
 import 'package:tri_docuras/screens/account_edit_screen.dart';
 import 'package:tri_docuras/config.dart';
 import 'package:tri_docuras/store_config_holder.dart';
@@ -148,6 +149,18 @@ class _AccountCard extends StatelessWidget {
                       builder: (_) => AccountEditScreen(profile: profile),
                     ),
                   ),
+                ),
+                const SizedBox(height: 8),
+                TdButton(
+                  label: 'Termos de Compra',
+                  variant: TdButtonVariant.soft,
+                  onPressed: () => openLegalPage(context, LegalPage.terms),
+                ),
+                const SizedBox(height: 8),
+                TdButton(
+                  label: 'Política de Privacidade',
+                  variant: TdButtonVariant.soft,
+                  onPressed: () => openLegalPage(context, LegalPage.privacy),
                 ),
                 const SizedBox(height: 8),
                 TdButton(

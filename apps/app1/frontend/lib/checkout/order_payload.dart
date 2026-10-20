@@ -7,6 +7,8 @@ Map<String, dynamic> buildCreateOrderPayload({
   required List<CartItem> items,
 }) {
   return {
+    // Só é montado depois que o cliente marca o aceite no checkout.
+    'accepted_terms': true,
     'customer_name': draft.customerName,
     'whatsapp': draft.whatsappDigits,
     'delivery_mode': draft.deliveryMode == DeliveryMode.pickup

@@ -44,6 +44,7 @@ void main() {
       ],
     );
 
+    expect(payload['accepted_terms'], isTrue);
     expect(payload['customer_name'], 'Maria Silva');
     expect(payload['whatsapp'], '81991234567');
     expect(payload['delivery_mode'], 'delivery');
