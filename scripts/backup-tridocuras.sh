@@ -13,11 +13,11 @@ SEMANAL="$DEST/semanal"
 mkdir -p "$DIARIO" "$SEMANAL"
 
 PGPASSWORD="$DB_PASSWORD" pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" \
-  -d "$DB_NAME" -Fc > "$DIARIO/db-$STAMP.dump.tmp"
-mv "$DIARIO/db-$STAMP.dump.tmp" "$DIARIO/db-$STAMP.dump"
+  -d "$DB_NAME" -Fc > "$DIARIO/db-$STAMP.$$.tmp"
+mv "$DIARIO/db-$STAMP.$$.tmp" "$DIARIO/db-$STAMP.dump"
 
-tar czf "$DIARIO/uploads-$STAMP.tgz.tmp" -C "$UPLOADS" .
-mv "$DIARIO/uploads-$STAMP.tgz.tmp" "$DIARIO/uploads-$STAMP.tgz"
+tar czf "$DIARIO/uploads-$STAMP.$$.tmp" -C "$UPLOADS" .
+mv "$DIARIO/uploads-$STAMP.$$.tmp" "$DIARIO/uploads-$STAMP.tgz"
 
 if [ "$(date +%u)" = "7" ]; then
   cp "$DIARIO/db-$STAMP.dump" "$SEMANAL/db-$STAMP.dump"
@@ -25,9 +25,9 @@ if [ "$(date +%u)" = "7" ]; then
 fi
 
 # Mantém os 14 backups diários e os 8 semanais mais recentes.
-ls -1 "$DIARIO"/db-*.dump | sort -r | tail -n +15 | xargs -r rm -f
-ls -1 "$DIARIO"/uploads-*.tgz | sort -r | tail -n +15 | xargs -r rm -f
-ls -1 "$SEMANAL"/db-*.dump | sort -r | tail -n +9 | xargs -r rm -f
-ls -1 "$SEMANAL"/uploads-*.tgz | sort -r | tail -n +9 | xargs -r rm -f
+ls -1 "$DIARIO"/db-*.dump 2>/dev/null | sort -r | tail -n +15 | xargs -r rm -f
+ls -1 "$DIARIO"/uploads-*.tgz 2>/dev/null | sort -r | tail -n +15 | xargs -r rm -f
+ls -1 "$SEMANAL"/db-*.dump 2>/dev/null | sort -r | tail -n +9 | xargs -r rm -f
+ls -1 "$SEMANAL"/uploads-*.tgz 2>/dev/null | sort -r | tail -n +9 | xargs -r rm -f
 
 echo "$(date -Is) backup ok ($STAMP)"
