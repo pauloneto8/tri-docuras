@@ -188,12 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
       future: _productsFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const ColoredBox(
-            color: AppColors.cream,
-            child: Center(
-              child: CircularProgressIndicator(color: AppColors.pinkDeep),
-            ),
-          );
+          return _buildCatalogContent(null);
         }
 
         if (snapshot.hasError) {
@@ -206,7 +201,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildCatalogContent(List<Product> products) {
+  Widget _buildCatalogContent(List<Product>? products) {
     final notice = StoreConfigHolder.instance.config.notice.trim();
     return ColoredBox(
       color: AppColors.cream,
@@ -259,7 +254,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          if (products.isEmpty)
+          if (products == null)
+            const _ProductGridSkeleton()
+          else if (products.isEmpty)
             SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
@@ -433,6 +430,126 @@ class _ProductGridCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Grade de cards enquanto a API responde. Mesma altura dos cards reais,
+/// para o catálogo não pular quando os produtos chegam.
+class _ProductGridSkeleton extends StatefulWidget {
+  const _ProductGridSkeleton();
+
+  @override
+  State<_ProductGridSkeleton> createState() => _ProductGridSkeletonState();
+}
+
+class _ProductGridSkeletonState extends State<_ProductGridSkeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, _) {
+        final opacity = reduceMotion ? 0.7 : 0.4 + 0.4 * _pulse.value;
+        return SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              mainAxisExtent: 268,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _ProductCardSkeleton(opacity: opacity),
+              childCount: 6,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ProductCardSkeleton extends StatelessWidget {
+  const _ProductCardSkeleton({required this.opacity});
+
+  final double opacity;
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.dark.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+          child: Opacity(
+            opacity: opacity,
+            child: Column(
+              children: [
+                Expanded(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppColors.peach,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const _SkeletonBar(width: 120, height: 14),
+                const SizedBox(height: 8),
+                const _SkeletonBar(width: 64, height: 14),
+                const SizedBox(height: 12),
+                const _SkeletonBar(width: double.infinity, height: 36),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SkeletonBar extends StatelessWidget {
+  const _SkeletonBar({required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.peach,
+          borderRadius: BorderRadius.circular(height / 2),
         ),
       ),
     );
