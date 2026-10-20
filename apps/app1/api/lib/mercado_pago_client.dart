@@ -53,9 +53,12 @@ class PixChargeResult {
 }
 
 class MercadoPagoClient {
-  MercadoPagoClient({http.Client? client}) : _client = client ?? http.Client();
+  MercadoPagoClient({http.Client? client, String? accessToken})
+      : _client = client ?? http.Client(),
+        _accessToken = accessToken;
 
   final http.Client _client;
+  final String? _accessToken;
 
   static const _baseUrl = 'https://api.mercadopago.com';
 
@@ -126,6 +129,38 @@ class MercadoPagoClient {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw MercadoPagoException(
         'Não foi possível consultar pagamento $paymentId.',
+        statusCode: response.statusCode,
+      );
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// Estorno total do pagamento. [idempotencyKey] faz uma nova tentativa do
+  /// mesmo pedido devolver o resultado do estorno já feito, sem estornar 2x.
+  Future<Map<String, dynamic>> refundPayment(
+    int paymentId, {
+    required String idempotencyKey,
+  }) async {
+    final token = _accessToken ?? MercadoPagoConfig.accessToken;
+    if (token == null) {
+      throw MercadoPagoException('Credencial Mercado Pago não configurada.');
+    }
+
+    final response = await _client.post(
+      Uri.parse('$_baseUrl/v1/payments/$paymentId/refunds'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': idempotencyKey,
+      },
+      body: '{}',
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw MercadoPagoException(
+        _parseErrorMessage(response.body) ??
+            'Mercado Pago retornou erro ${response.statusCode} no estorno.',
         statusCode: response.statusCode,
       );
     }

@@ -30,7 +30,12 @@ Future<Response> onRequest(RequestContext context, String id) async {
       );
     }
 
-    final order = await updateOrderStatus(id, status);
+    final refundValue = body['refund'];
+    final order = await updateOrderStatus(
+      id,
+      status,
+      refund: refundValue is bool ? refundValue : null,
+    );
     return Response.json(body: {'order': order});
   } on AdminOrderException catch (error) {
     return Response.json(

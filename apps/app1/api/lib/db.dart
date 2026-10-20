@@ -127,6 +127,15 @@ Future<void> ensureSchema(Connection connection) async {
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP;
   ''');
   await connection.execute('''
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_status VARCHAR(30);
+  ''');
+  await connection.execute('''
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP;
+  ''');
+  await connection.execute('''
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS mp_refund_id TEXT;
+  ''');
+  await connection.execute('''
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS whatsapp_notified_at TIMESTAMP;
   ''');
   await connection.execute('''

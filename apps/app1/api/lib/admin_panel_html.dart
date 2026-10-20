@@ -421,7 +421,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       }).join("");
 
       const actions = (order.next_actions || []).map(function(action) {
-        return '<button type="button" data-id="' + order.id + '" data-status="' + action.status + '">' + action.label + '</button>';
+        return '<button type="button" data-id="' + order.id + '" data-status="' + action.status + '" data-current="' + order.status + '" data-total="' + order.total + '">' + action.label + '</button>';
       }).join("");
 
       return '<article class="card">' +
@@ -433,6 +433,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
           '<strong>' + order.customer_name + '</strong><br>' +
           '<a class="wa" href="' + order.whatsapp_link + '" target="_blank" rel="noopener">WhatsApp ' + formatPhone(order.whatsapp) + '</a><br>' +
           order.delivery_label + ' · ' + renderAddress(order) + '<br>' +
+          (order.refund_label ? '<strong>' + order.refund_label + '</strong><br>' : '') +
           'Total ' + formatMoney(order.total) + ' · ' + formatDate(order.created_at) +
         '</div>' +
         '<ul class="items">' + items + '</ul>' +
@@ -521,7 +522,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         ordersEl.innerHTML = orders.map(renderOrder).join("");
         ordersEl.querySelectorAll("button[data-status]").forEach(function(btn) {
           btn.addEventListener("click", function() {
-            updateStatus(btn.dataset.id, btn.dataset.status, btn);
+            updateStatus(btn.dataset.id, btn.dataset.status, btn, btn.dataset);
           });
         });
       } catch (error) {
@@ -530,12 +531,19 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       }
     }
 
-    async function updateStatus(id, status, button) {
+    async function updateStatus(id, status, button, dataset) {
+      let refund;
+      if (status === "cancelled") {
+        if (!confirm("Cancelar o pedido " + id + "?")) return;
+        if (["paid", "preparing", "ready"].indexOf(dataset.current) !== -1) {
+          refund = confirm("Estornar " + formatMoney(Number(dataset.total)) + " ao cliente via Pix?\n\nOK = estornar\nCancelar = cancelar sem estorno");
+        }
+      }
       button.disabled = true;
       try {
         await api("/api/admin/orders/" + encodeURIComponent(id) + "/status", {
           method: "POST",
-          body: JSON.stringify({ status })
+          body: JSON.stringify({ status, refund })
         });
         await loadOrders();
       } catch (error) {

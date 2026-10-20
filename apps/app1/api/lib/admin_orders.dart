@@ -1,5 +1,6 @@
 import 'package:postgres/postgres.dart';
 import 'package:tri_docuras_api/db.dart';
+import 'package:tri_docuras_api/mercado_pago_client.dart';
 import 'package:tri_docuras_api/orders.dart';
 
 const adminOperationalStatuses = ['paid', 'preparing', 'ready'];
@@ -19,6 +20,21 @@ const _statusTransitions = <String, List<String>>{
   'preparing': ['ready', 'completed', 'cancelled'],
   'ready': ['completed', 'cancelled'],
 };
+
+enum CancelRefundPlan { notNeeded, refund, skipRefund }
+
+/// Decide o que fazer com o dinheiro ao cancelar um pedido. Pedido já pago
+/// (ou em preparo/pronto) exige escolha explícita: estornar ou não.
+CancelRefundPlan cancelRefundPlan(String current, bool? refund) {
+  const paidStatuses = {'paid', 'preparing', 'ready'};
+  if (!paidStatuses.contains(current)) return CancelRefundPlan.notNeeded;
+  if (refund == null) {
+    throw AdminOrderException(
+      'Pedido já pago: informe se o valor deve ser estornado ao cliente.',
+    );
+  }
+  return refund ? CancelRefundPlan.refund : CancelRefundPlan.skipRefund;
+}
 
 class AdminOrderException implements Exception {
   AdminOrderException(this.message);
@@ -85,7 +101,8 @@ Future<List<Map<String, Object?>>> listOrdersForAdmin({
     SELECT public_id, status, customer_name, whatsapp, delivery_mode,
            delivery_street, delivery_number, delivery_complement,
            delivery_neighborhood, delivery_reference,
-           subtotal, delivery_fee, total, paid_at, created_at
+           subtotal, delivery_fee, total, paid_at, created_at,
+           refund_status, refunded_at
     FROM orders
     $whereClause
     ORDER BY created_at DESC
@@ -103,8 +120,9 @@ Future<List<Map<String, Object?>>> listOrdersForAdmin({
 
 Future<Map<String, Object?>> updateOrderStatus(
   String publicId,
-  String nextStatus,
-) async {
+  String nextStatus, {
+  bool? refund,
+}) async {
   final normalized = nextStatus.trim();
   if (!adminAllStatuses.contains(normalized)) {
     throw AdminOrderException('Status inválido.');
@@ -136,18 +154,42 @@ Future<Map<String, Object?>> updateOrderStatus(
     );
   }
 
+  final plan = normalized == 'cancelled'
+      ? cancelRefundPlan(current, refund)
+      : CancelRefundPlan.notNeeded;
+
+  String? refundStatus;
+  String? mpRefundId;
+  if (plan == CancelRefundPlan.refund) {
+    final paymentId = order['mp_payment_id'] as int?;
+    if (paymentId == null) {
+      throw AdminOrderException(
+        'Pedido sem pagamento Mercado Pago registrado: não há o que estornar.',
+      );
+    }
+    final refunded = await _refundPix(publicId, paymentId);
+    refundStatus = refunded.status;
+    mpRefundId = refunded.id;
+  } else if (plan == CancelRefundPlan.skipRefund) {
+    refundStatus = 'not_refunded';
+  }
+
   final connection = await getConnection();
   final result = await connection.execute(
     '''
     UPDATE orders
-    SET status = \$2
+    SET status = \$2,
+        refund_status = COALESCE(\$3::text, refund_status),
+        refunded_at = CASE WHEN \$3::text = 'refunded' THEN NOW() ELSE refunded_at END,
+        mp_refund_id = COALESCE(\$4::text, mp_refund_id)
     WHERE public_id = \$1
     RETURNING public_id, status, customer_name, whatsapp, delivery_mode,
               delivery_street, delivery_number, delivery_complement,
               delivery_neighborhood, delivery_reference,
-              subtotal, delivery_fee, total, paid_at, created_at;
+              subtotal, delivery_fee, total, paid_at, created_at,
+              refund_status, refunded_at;
     ''',
-    parameters: [publicId, normalized],
+    parameters: [publicId, normalized, refundStatus, mpRefundId],
   );
 
   if (result.isEmpty) {
@@ -157,6 +199,34 @@ Future<Map<String, Object?>> updateOrderStatus(
   final updated = _rowToAdminOrderMap(result.first);
   final items = await _fetchItemsForPublicId(publicId);
   return orderToAdminJson(updated, items);
+}
+
+/// Estorna o Pix no Mercado Pago. Se o MP recusar, lança e o pedido não é
+/// cancelado. Pode devolver `pending_refund` (estorno em análise).
+Future<({String status, String id})> _refundPix(
+  String publicId,
+  int paymentId,
+) async {
+  try {
+    final data = await MercadoPagoClient().refundPayment(
+      paymentId,
+      idempotencyKey: 'refund-$publicId',
+    );
+    final mpStatus = data['status']?.toString();
+    if (mpStatus == 'approved') {
+      return (status: 'refunded', id: '${data['id']}');
+    }
+    if (mpStatus == 'pending') {
+      return (status: 'pending_refund', id: '${data['id']}');
+    }
+    throw AdminOrderException(
+      'O Mercado Pago recusou o estorno ($mpStatus). O pedido não foi cancelado.',
+    );
+  } on MercadoPagoException catch (error) {
+    throw AdminOrderException(
+      'Não foi possível estornar: ${error.message} O pedido não foi cancelado.',
+    );
+  }
 }
 
 Future<List<Map<String, Object?>>> _fetchItemsForPublicId(
@@ -206,6 +276,8 @@ Map<String, Object?> _rowToAdminOrderMap(ResultRow row) {
     'total': _toDouble(row[12]),
     'paid_at': row[13],
     'created_at': row[14],
+    'refund_status': row[15],
+    'refunded_at': row[16],
   };
 }
 
@@ -228,6 +300,8 @@ Map<String, Object?> orderToAdminJson(
     'id': order['id'],
     'status': order['status'],
     'status_label': statusLabel(order['status'] as String, deliveryMode),
+    'refund_status': order['refund_status'],
+    'refund_label': refundLabel(order['refund_status'] as String?),
     'customer_name': order['customer_name'],
     'whatsapp': order['whatsapp'],
     'whatsapp_link': whatsappLink(order['whatsapp'] as String),
@@ -294,6 +368,19 @@ String actionLabel(String status, String deliveryMode) {
       return 'Cancelar pedido';
     default:
       return status;
+  }
+}
+
+String? refundLabel(String? refundStatus) {
+  switch (refundStatus) {
+    case 'refunded':
+      return 'Estornado';
+    case 'pending_refund':
+      return 'Estorno em análise';
+    case 'not_refunded':
+      return 'Cancelado sem estorno';
+    default:
+      return null;
   }
 }
 
