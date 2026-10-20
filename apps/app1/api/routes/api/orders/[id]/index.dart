@@ -1,11 +1,22 @@
 import 'dart:io';
 
 import 'package:dart_frog/dart_frog.dart';
+import 'package:tri_docuras_api/customers.dart';
 import 'package:tri_docuras_api/orders.dart';
 
 Future<Response> onRequest(RequestContext context, String id) async {
   if (context.request.method != HttpMethod.get) {
     return Response(statusCode: HttpStatus.methodNotAllowed);
+  }
+
+  if (!await customerMayViewOrder(
+    id,
+    context.request.headers['authorization'],
+  )) {
+    return Response.json(
+      statusCode: HttpStatus.notFound,
+      body: {'error': 'Pedido não encontrado.'},
+    );
   }
 
   var order = await getOrderByPublicId(id);

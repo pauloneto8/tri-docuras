@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dart_frog/dart_frog.dart';
+import 'package:tri_docuras_api/customers.dart';
 import 'package:tri_docuras_api/mercado_pago_client.dart';
 import 'package:tri_docuras_api/orders.dart';
 import 'package:tri_docuras_api/rate_limiter.dart';
@@ -12,6 +13,16 @@ Future<Response> onRequest(RequestContext context, String id) async {
 
   final limited = rateLimitResponse(pixCreateLimiter, clientIp(context));
   if (limited != null) return limited;
+
+  if (!await customerMayViewOrder(
+    id,
+    context.request.headers['authorization'],
+  )) {
+    return Response.json(
+      statusCode: HttpStatus.notFound,
+      body: {'error': 'Pedido não encontrado.'},
+    );
+  }
 
   try {
     final pix = await createPixForOrder(id);

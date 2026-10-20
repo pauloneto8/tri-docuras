@@ -135,6 +135,39 @@ Future<void> ensureSchema(Connection connection) async {
   await connection.execute('''
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS mp_refund_id TEXT;
   ''');
+
+  await connection.execute('''
+    CREATE TABLE IF NOT EXISTS customers (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(254) NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      name VARCHAR(200) NOT NULL,
+      whatsapp VARCHAR(20) NOT NULL,
+      session_version INTEGER NOT NULL DEFAULT 0,
+      accepted_terms_at TIMESTAMP,
+      email_verified_at TIMESTAMP,
+      disabled_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  ''');
+  await connection.execute('''
+    CREATE TABLE IF NOT EXISTS customer_addresses (
+      id SERIAL PRIMARY KEY,
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      label VARCHAR(50) NOT NULL,
+      street VARCHAR(200) NOT NULL,
+      number VARCHAR(50) NOT NULL,
+      complement VARCHAR(100),
+      neighborhood VARCHAR(100) NOT NULL,
+      reference VARCHAR(200)
+    );
+  ''');
+  await connection.execute('''
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL;
+  ''');
+  await connection.execute('''
+    CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders (customer_id);
+  ''');
   await connection.execute('''
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS whatsapp_notified_at TIMESTAMP;
   ''');

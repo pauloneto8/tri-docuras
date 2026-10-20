@@ -57,3 +57,8 @@ final orderCreateLimiter =
     RateLimiter(maxHits: 10, window: const Duration(hours: 1));
 final pixCreateLimiter =
     RateLimiter(maxHits: 10, window: const Duration(hours: 1));
+
+final customerLoginLimiter =
+    RateLimiter(maxHits: 5, window: const Duration(minutes: 15));
+final customerCreateLimiter =
+    RateLimiter(maxHits: 5, window: const Duration(hours: 1));

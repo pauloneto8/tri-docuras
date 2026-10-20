@@ -219,7 +219,12 @@ Future<CreateOrderInput> parseCreateOrderInput(Map<String, dynamic> body) async 
   );
 }
 
-Future<Map<String, Object?>> createOrder(CreateOrderInput input) async {
+/// [customerId] é obrigatório para pedidos novos: a rota só chama aqui
+/// depois de validar a sessão do cliente.
+Future<Map<String, Object?>> createOrder(
+  CreateOrderInput input, {
+  required int customerId,
+}) async {
   final connection = await getConnection();
 
   return connection.runTx((tx) async {
@@ -230,10 +235,10 @@ Future<Map<String, Object?>> createOrder(CreateOrderInput input) async {
         public_id, status, customer_name, whatsapp, delivery_mode,
         delivery_street, delivery_number, delivery_complement,
         delivery_neighborhood, delivery_reference,
-        subtotal, delivery_fee, total
+        subtotal, delivery_fee, total, customer_id
       ) VALUES (
         $1, 'pending_payment', $2, $3, $4,
-        $5, $6, $7, $8, $9, $10, $11, $12
+        $5, $6, $7, $8, $9, $10, $11, $12, $13
       )
       RETURNING id;
       ''',
@@ -250,6 +255,7 @@ Future<Map<String, Object?>> createOrder(CreateOrderInput input) async {
         input.subtotal,
         input.deliveryFee,
         input.total,
+        customerId,
       ],
     );
 
@@ -302,7 +308,7 @@ Future<Map<String, Object?>> getOrderByPublicId(String publicId) async {
            delivery_street, delivery_number, delivery_complement,
            delivery_neighborhood, delivery_reference,
            subtotal, delivery_fee, total, mp_payment_id, pix_copy_code,
-           pix_qr_base64, pix_expires_at, paid_at, created_at
+           pix_qr_base64, pix_expires_at, paid_at, created_at, customer_id
     FROM orders
     WHERE public_id = \$1
     LIMIT 1;
@@ -492,6 +498,7 @@ Map<String, Object?> _rowToOrderMap(ResultRow row) {
     'pix_expires_at': row[16],
     'paid_at': row[17],
     'created_at': row[18],
+    'customer_id': row[19] == null ? null : (row[19] as num).toInt(),
   };
 }
 
