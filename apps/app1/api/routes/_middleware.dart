@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dart_frog/dart_frog.dart';
 import 'package:tri_docuras_api/db.dart';
 import 'package:tri_docuras_api/env.dart';
+import 'package:tri_docuras_api/orders.dart';
 
 Handler middleware(Handler handler) {
   return (context) async {
@@ -19,9 +20,25 @@ Handler middleware(Handler handler) {
       // Database may be unavailable during startup; routes handle errors.
     }
 
+    _expireStaleOrdersSometimes();
+
     final response = await handler(context);
     return _withCors(context, response);
   };
+}
+
+DateTime _lastExpiryRun = DateTime.fromMillisecondsSinceEpoch(0);
+
+/// Expira pedidos não pagos no máximo a cada 10 min, sem atrasar a resposta.
+void _expireStaleOrdersSometimes() {
+  final now = DateTime.now();
+  if (now.difference(_lastExpiryRun) < const Duration(minutes: 10)) return;
+  _lastExpiryRun = now;
+  expireStaleOrders().then((count) {
+    if (count > 0) stderr.writeln('[orders] $count pedido(s) expirado(s)');
+  }).catchError((Object e) {
+    stderr.writeln('[orders] falha ao expirar pedidos: $e');
+  });
 }
 
 final RegExp _devHosts = RegExp(r'^(localhost|127\.0\.0\.1|::1)$');

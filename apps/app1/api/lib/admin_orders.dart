@@ -10,6 +10,7 @@ const adminAllStatuses = [
   'ready',
   'completed',
   'cancelled',
+  'expired',
 ];
 
 const _statusTransitions = <String, List<String>>{
@@ -120,6 +121,9 @@ Future<Map<String, Object?>> updateOrderStatus(
   }
   if (current == 'cancelled') {
     throw AdminOrderException('Este pedido já foi cancelado.');
+  }
+  if (current == 'expired') {
+    throw AdminOrderException('Este pedido expirou por falta de pagamento.');
   }
   if (current == normalized) {
     return orderToAdminJson(order, await _fetchItemsForPublicId(publicId));
@@ -257,6 +261,8 @@ String statusLabel(String status, String deliveryMode) {
       return deliveryMode == 'pickup' ? 'Retirado' : 'Entregue';
     case 'cancelled':
       return 'Cancelado';
+    case 'expired':
+      return 'Expirado';
     default:
       return status;
   }

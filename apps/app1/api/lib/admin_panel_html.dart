@@ -82,6 +82,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     .badge.ready { background: var(--pink); }
     .badge.completed { background: var(--disabled); color: var(--brown); }
     .badge.cancelled { background: #a33; color: #fff; }
+    .badge.expired { background: #888; color: #fff; }
     .badge.available { background: var(--success); }
     .badge.hidden-product { background: var(--disabled); color: var(--brown); }
     .order-head, .product-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -184,6 +185,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
             <button class="tab" data-status="pending_payment">Aguardando Pix</button>
             <button class="tab" data-status="completed">Concluídos</button>
             <button class="tab" data-status="cancelled">Cancelados</button>
+            <button class="tab" data-status="expired">Expirados</button>
           </div>
         </div>
         <div class="toolbar">

@@ -326,6 +326,11 @@ Future<Map<String, Object?>> createPixForOrder(String publicId) async {
   if (status == 'cancelled') {
     throw OrderValidationException('Este pedido foi cancelado.');
   }
+  if (status == 'expired') {
+    throw OrderValidationException(
+      'Este pedido expirou por falta de pagamento. Faça um novo pedido.',
+    );
+  }
 
   final expiresAt = order['pix_expires_at'] as DateTime?;
   final copyCode = order['pix_copy_code'] as String?;
@@ -412,6 +417,28 @@ Future<Map<String, Object?>> refreshOrderPaymentIfStale(
     stderr.writeln('[mp] reconsulta do pedido $publicId falhou: $e');
   }
   return order;
+}
+
+/// Carência após o vencimento do Pix antes de o pedido virar `expired`.
+const expiredOrderGrace = Duration(hours: 24);
+
+/// Marca como `expired` os pedidos `pending_payment` cujo Pix venceu há mais
+/// de [expiredOrderGrace] (sem Pix gerado, conta a partir da criação).
+/// Devolve quantos pedidos foram expirados.
+Future<int> expireStaleOrders() async {
+  final connection = await getConnection();
+  final result = await connection.execute(
+    '''
+    UPDATE orders
+    SET status = 'expired'
+    WHERE status = 'pending_payment'
+      AND COALESCE(pix_expires_at, created_at)
+          < (NOW() AT TIME ZONE 'UTC') - make_interval(secs => \$1)
+    RETURNING public_id;
+    ''',
+    parameters: [expiredOrderGrace.inSeconds.toDouble()],
+  );
+  return result.length;
 }
 
 Future<bool> markOrderPaid(String publicId, {int? paymentId}) async {

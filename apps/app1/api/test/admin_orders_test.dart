@@ -1,7 +1,9 @@
 import 'package:test/test.dart';
 import 'package:tri_docuras_api/admin_orders.dart';
+import 'package:tri_docuras_api/order_tracking.dart';
 
 void main() {
+  expiredStatusTests();
   group('statusLabel', () {
     test('labels em português', () {
       expect(statusLabel('paid', 'pickup'), 'Pago — na fila');
@@ -51,6 +53,20 @@ void main() {
   group('adminAllStatuses', () {
     test('inclui cancelled', () {
       expect(adminAllStatuses, contains('cancelled'));
+    });
+  });
+}
+
+void expiredStatusTests() {
+  group('status expired', () {
+    test('rótulo e sem ações', () {
+      expect(statusLabel('expired', 'pickup'), 'Expirado');
+      expect(nextActionsFor('expired', 'pickup'), isEmpty);
+    });
+    test('timeline do cliente mostra pedido expirado', () {
+      final t = buildCustomerTimeline('expired', 'pickup');
+      expect(t.last['key'], 'expired');
+      expect(t.last['current'], isTrue);
     });
   });
 }

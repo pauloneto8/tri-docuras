@@ -17,7 +17,7 @@ Future<Map<String, Object?>> getOrderTracking(String publicId) async {
 
   final status = order['status'] as String;
   final deliveryMode = order['delivery_mode'] as String;
-  final isCancelled = status == 'cancelled';
+  final isCancelled = status == 'cancelled' || status == 'expired';
 
   return {
     'order': {
@@ -41,6 +41,12 @@ List<Map<String, Object?>> buildCustomerTimeline(
   String status,
   String deliveryMode,
 ) {
+  if (status == 'expired') {
+    return [
+      {'key': 'received', 'label': 'Pedido recebido', 'done': true, 'current': false},
+      {'key': 'expired', 'label': 'Pedido expirado (sem pagamento)', 'done': true, 'current': true},
+    ];
+  }
   if (status == 'cancelled') {
     return [
       {'key': 'received', 'label': 'Pedido recebido', 'done': true, 'current': false},
