@@ -296,7 +296,7 @@ api/
 
 Tabelas criadas em `ensureSchema` no startup (idempotente).
 
-Credenciais via variáveis de ambiente (`docker-compose.yml` → `APP1_DB_*` em `/opt/hosting/.env`).
+Credenciais via variáveis de ambiente (`docker-compose.tridocuras.yml` → `APP1_DB_*` em `/opt/tridocuras/.env`).
 
 O `entrypoint.sh` aguarda o Postgres, aplica schema/seed e inicia o servidor.
 
@@ -327,15 +327,15 @@ Fluxo de status após pagamento: `paid` → `preparing` → `ready` → `complet
 
 **Configuração:**
 
-1. Defina `APP1_ADMIN_PASSWORD` no `/opt/hosting/.env` (não commitar).
-2. `docker compose up -d app1` após alterar a senha.
+1. Defina `APP1_ADMIN_PASSWORD` no `/opt/tridocuras/.env` (não commitar).
+2. `docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras` após alterar a senha.
 3. Nginx deve rotear `/admin` para `app1:8080` (já configurado em `nginx/ssl/app1.conf`).
 
 O login (`POST /api/admin/session`) retorna um token Bearer válido enquanto a senha não mudar.
 
 ## Mercado Pago (Pix)
 
-Variáveis no `/opt/hosting/.env` (repassadas ao container `app1`):
+Variáveis no `/opt/tridocuras/.env` (repassadas ao container `app1`):
 
 | Variável no `.env` | Variável no container | Uso |
 |--------------------|----------------------|-----|
@@ -358,7 +358,7 @@ A resposta Pix inclui `mp_mode`: `test` ou `production` (o app exibe aviso em mo
 ## Desenvolvimento local
 
 ```bash
-cd /opt/hosting/apps/app1/api
+cd /opt/tridocuras/apps/app1/api
 dart pub get
 dart pub global activate dart_frog_cli
 dart_frog dev
@@ -370,12 +370,12 @@ Requer PostgreSQL acessível ou variáveis `DB_*` / `DATABASE_URL`.
 ## Deploy
 
 ```bash
-cd /opt/hosting
-docker compose build app1
-docker compose up -d app1
+cd /opt/tridocuras
+docker compose -f docker-compose.tridocuras.yml build app-tridocuras
+docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras
 ```
 
-Container: `hosting-app1` — porta interna 8080, rede `proxy` + `app1_internal`.
+Container: `app-tridocuras` — porta interna 8080, rede `proxy` + `app1_internal`.
 
 Após mudança no frontend, rebuild também `app1-web` e use hard refresh no navegador.
 
@@ -383,8 +383,8 @@ Após mudança no frontend, rebuild também `app1-web` e use hard refresh no nav
 
 ```bash
 curl -s https://tridocuras.com.br/api/health
-docker compose logs --tail=50 app1
-docker compose exec app1-db psql -U "$APP1_DB_USER" -d "$APP1_DB_NAME" -c "SELECT public_id, status, total FROM orders ORDER BY id DESC LIMIT 5;"
+docker compose -f docker-compose.tridocuras.yml logs --tail=50 app-tridocuras
+docker compose -f docker-compose.tridocuras.yml exec app-tridocuras-db psql -U "$APP1_DB_USER" -d "$APP1_DB_NAME" -c "SELECT public_id, status, total FROM orders ORDER BY id DESC LIMIT 5;"
 ```
 
 ## CORS

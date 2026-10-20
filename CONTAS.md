@@ -1,5 +1,8 @@
 # Tri Doçuras — contas de cliente e perfil
 
+**Situação em 20/10/2026:** Fases A e B feitas (commits `d9edf4c`, `48e795d`,
+`5fb9d99`). Fases C e D pendentes. Detalhe em `PLANO.md`, seção 5.
+
 Gravado em 20/10/2026. Plano para outro agente implementar. Não está no escopo
 do `PLANO.md` original, e deve ser executado **depois da Fase 0** (a loja precisa
 vender antes de exigir cadastro).

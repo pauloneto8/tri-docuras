@@ -4,11 +4,12 @@ Doceria online especializada em brownies. Cliente multiplataforma (Android, iOS,
 
 **Produção:** https://tridocuras.com.br
 
-> **Atualizado em 20/10/2026 (Fase 0 e Fase 1 parcial).** As seções de
-> infraestrutura abaixo que ainda citam `/opt/hosting`, `hosting-*` e Nginx
-> estão desatualizadas. O estado real é descrito aqui e em
-> [`../../docs/MONITORAMENTO.md`](../../docs/MONITORAMENTO.md). A reescrita
-> completa é a Fase 4.4 do [`PLANO.md`](../../PLANO.md).
+> **Atualizado em 20/10/2026.** Fases 0 e 1 do [`PLANO.md`](../../PLANO.md)
+> concluídas, exceto os itens que dependem do dono (ver [Pendente](#pendente)).
+> Contas de cliente: Fases A e B feitas; C e D pendentes
+> ([`CONTAS.md`](../../CONTAS.md)). Monitoramento e operação:
+> [`docs/MONITORAMENTO.md`](../../docs/MONITORAMENTO.md) e
+> [`docs/OPERACAO.md`](../../docs/OPERACAO.md).
 
 ## Componentes
 
@@ -55,6 +56,12 @@ Domínio em `.env` → `APP1_DOMAIN` (`tridocuras.com.br`).
 | GET/POST | `/api/admin/categories` | Lista / cria categorias |
 | PUT/DELETE | `/api/admin/categories/{id}` | Edita / remove categoria |
 | GET | `/api/admin/finance/report` | Relatório de faturamento (`from`, `to`) |
+| POST | `/api/customers` | Cadastro de cliente (e-mail e senha) |
+| POST | `/api/customers/session` | Login do cliente |
+| GET/PUT | `/api/customers/me` | Perfil do cliente logado |
+| GET | `/api/customers/me/orders` | Pedidos do cliente logado |
+| GET/PUT | `/api/customers/me/favorites` | Favoritos do cliente logado |
+| POST | `/api/customers/me/password` | Trocar a senha do cliente |
 
 ### Catálogo em produção (set/2026)
 
@@ -89,7 +96,7 @@ Categorias: `brownies`, `combos`.
 |-----|------|--------|
 | Início | Catálogo | Grade de produtos |
 | Pedidos | `OrderLookupScreen` | Consulta `TD-0001` + timeline |
-| Favoritos | `FavoritesScreen` | Lista persistida (`shared_preferences`) |
+| Favoritos | `FavoritesScreen` | Sem conta: no aparelho. Com conta: no servidor |
 | Perfil | `ProfileScreen` | Info da loja, entrega, WhatsApp |
 
 **Menu ☰** (catálogo): bottom sheet `StoreMenuSheet` com horário, entrega e sobre a loja.
@@ -98,7 +105,7 @@ Categorias: `brownies`, `combos`.
 
 **Navegação compra:** catálogo → produto → carrinho → checkout → Pix → confirmação → (opcional) rastreamento.
 
-**Favoritos:** coração na tela do produto; IDs salvos localmente no dispositivo/navegador.
+**Favoritos:** coração na tela do produto. Sem conta, os IDs ficam no dispositivo/navegador. Logado, ficam na conta (`/api/customers/me/favorites`).
 
 **Contato da loja:** vem de `GET /api/config` (`APP1_STORE_WHATSAPP` no `.env`); o app não embute número e esconde os botões de WhatsApp se a API não informar.
 
@@ -129,7 +136,7 @@ Pix em **produção** (`APP1_MP_USE_TEST=false`); webhook MP configurado em `htt
 
 Transições no painel: `paid` → `preparing` → `ready` → `completed` (com atalhos permitidos, ex.: `paid` → `ready`). Qualquer pedido não concluído pode ser cancelado (`cancelled`), de forma irreversível.
 
-### Variáveis de ambiente (`/opt/hosting/.env`)
+### Variáveis de ambiente (`/opt/tridocuras/.env`)
 
 | Variável | Obrigatória | Uso |
 |----------|-------------|-----|
@@ -143,11 +150,11 @@ Transições no painel: `paid` → `preparing` → `ready` → `completed` (com 
 
 WhatsApp exibido no Perfil do app: `frontend/lib/config.dart` → `storeWhatsApp` (não é variável de `.env`).
 
-Modelo completo: [`../../.env.example`](../../.env.example) na raiz do hosting.
+Modelo completo: [`../../.env.example`](../../.env.example) na raiz deste repositório.
 
 ### Mercado Pago (Pix)
 
-Credenciais em `/opt/hosting/.env` (não versionar):
+Credenciais em `/opt/tridocuras/.env` (não versionar):
 
 ```env
 # Produção — pagamentos reais (apps bancários)
@@ -180,15 +187,22 @@ No painel [Suas integrações](https://www.mercadopago.com.br/developers/panel/a
 Documentação MP: [Credenciais](https://www.mercadopago.com.br/developers/pt/docs/your-integrations/credentials)
 
 ```bash
-cd /opt/hosting
-docker compose build app1 app1-web && docker compose up -d app1 app1-web
+cd /opt/tridocuras
+docker compose -f docker-compose.tridocuras.yml build app-tridocuras app-tridocuras-web && docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras app-tridocuras-web
 ```
 
 **Importante:** credenciais de teste geram Pix simulado — **não** são aceitos em apps bancários reais. Para pagar de verdade, use `APP1_MP_USE_TEST=false` com token de produção.
 
 ### Pendente
 
-Nenhum item crítico no roadmap imediato. Melhorias futuras: templates WhatsApp adicionais, PWA, app mobile nativo.
+Estado em 20/10/2026. Detalhe no [`PLANO.md`](../../PLANO.md) (seção 5) e no [`FASE0.md`](../../FASE0.md) (seção 4).
+
+- **Depende do dono:** conferir o WhatsApp no app (Perfil → WhatsApp); chave CallMeBot para o aviso à loja; fotos dos produtos (`image_url`); teste ponta a ponta com dinheiro real (FASE0 0.8 a 0.10).
+- **Monitoramento:** uptime externo ([`MONITORAMENTO.md`](../../docs/MONITORAMENTO.md)); cópia dos backups fora da VPS ([`OPERACAO.md`](../../docs/OPERACAO.md)).
+- **Fase 2, operação:** configurações da loja no banco, usuários do painel, histórico de status, pronta entrega ou encomenda, estoque, variações por produto.
+- **Fase 3, cliente e marca:** PWA, SEO, status para o cliente, páginas legais e LGPD, acabamento de UX, painel responsivo.
+- **Contas de cliente:** Fase C (painel) e Fase D (LGPD).
+- **Fase 4:** migrações versionadas, testes de integração com Postgres, métricas.
 
 ### Contato da loja no app
 
@@ -196,12 +210,15 @@ O número do WhatsApp vem de `GET /api/config` (variável `APP1_STORE_WHATSAPP` 
 
 ### Notificação WhatsApp (loja)
 
+> **Status (20/10/2026):** não ativada em produção. Falta a chave do CallMeBot,
+> que é do dono (FASE0 0.7 e 0.8).
+
 Quando um Pix é confirmado, a API pode avisar automaticamente o WhatsApp da loja.
 
 **CallMeBot** (mais simples — recomendado para começar):
 
 1. Adicione o contato CallMeBot no WhatsApp e obtenha sua API key em [callmebot.com](https://www.callmebot.com/)
-2. Configure no `/opt/hosting/.env`:
+2. Configure no `/opt/tridocuras/.env`:
 
 ```env
 APP1_WHATSAPP_NOTIFY_ENABLED=true
@@ -210,7 +227,7 @@ APP1_STORE_WHATSAPP=5581999999999   # WhatsApp da loja (DDI 55 + DDD)
 APP1_CALLMEBOT_API_KEY=sua-chave
 ```
 
-3. `docker compose up -d app1`
+3. `docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras`
 
 **Meta WhatsApp Cloud API** (alternativa):
 
@@ -243,8 +260,8 @@ Template com 3 parâmetros no corpo: nome do cliente, ID do pedido, total format
 
 **URL:** https://tridocuras.com.br/admin
 
-1. Defina `APP1_ADMIN_PASSWORD` no `/opt/hosting/.env` (senha forte; não versionar).
-2. Reinicie a API: `docker compose up -d app1`.
+1. Defina `APP1_ADMIN_PASSWORD` no `/opt/tridocuras/.env` (senha forte; não versionar).
+2. Reinicie a API: `docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras`.
 3. Acesse `/admin`, informe a senha e gerencie pedidos e produtos.
 
 #### Aba Pedidos
@@ -290,7 +307,7 @@ Períodos: **Hoje**, **7 dias**, **Este mês** ou intervalo personalizado. Pedid
 
 ```bash
 # Trocar senha: edite APP1_ADMIN_PASSWORD no .env e reinicie app1
-cd /opt/hosting && docker compose up -d app1
+cd /opt/tridocuras && docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras
 ```
 
 ### Rastreamento (cliente)
@@ -306,23 +323,23 @@ A timeline reflete os mesmos status do painel da loja (polling a cada 15 s no ap
 ## Operações
 
 ```bash
-cd /opt/hosting
+cd /opt/tridocuras
 
 # Status
-docker compose ps app1 app1-web app1-db
+docker compose -f docker-compose.tridocuras.yml ps app-tridocuras app-tridocuras-web app-tridocuras-db
 
 # Health (produção)
 curl -s https://tridocuras.com.br/api/health
 curl -s https://tridocuras.com.br/api/products | head -c 200
 
 # Logs
-docker compose logs -f app1 app1-web
+docker compose -f docker-compose.tridocuras.yml logs -f app-tridocuras app-tridocuras-web
 
 # Rebuild após mudança no frontend
-docker compose build app1-web && docker compose up -d app1-web
+docker compose -f docker-compose.tridocuras.yml build app-tridocuras-web && docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras-web
 
 # Rebuild após mudança na API
-docker compose build app1 && docker compose up -d app1
+docker compose -f docker-compose.tridocuras.yml build app-tridocuras && docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras
 ```
 
 Após deploy do frontend, use hard refresh no navegador (`Ctrl+Shift+R`).
@@ -331,12 +348,12 @@ Após deploy do frontend, use hard refresh no navegador (`Ctrl+Shift+R`).
 
 ```bash
 # API (hot reload)
-cd /opt/hosting/apps/app1/api
+cd /opt/tridocuras/apps/app1/api
 dart pub global activate dart_frog_cli
 dart_frog dev
 
 # Flutter web
-cd /opt/hosting/apps/app1/frontend
+cd /opt/tridocuras/apps/app1/frontend
 flutter pub get
 flutter analyze
 flutter test
@@ -361,13 +378,13 @@ Paleta cream/chocolate/rosa, fontes Lora + Poppins.
 
 ## Testes
 
-Suíte verde: **58 testes na API** e **33 no frontend**. As duas suítes são
-herméticas — não dependem de `.env` nem de variáveis do processo.
+As duas suítes rodam no CI (push na `main` e pull requests) e são herméticas:
+não dependem de `.env` nem de variáveis do processo.
 
 ### API (`apps/app1/api`)
 
 ```bash
-docker run --rm -v /opt/hosting/apps/app1/api:/app -w /app dart:stable sh -c "dart pub get && dart test"
+docker run --rm -v /opt/tridocuras/apps/app1/api:/app -w /app dart:stable sh -c "dart pub get && dart test"
 ```
 
 Variáveis de ambiente que a API lê (`APP1_ADMIN_PASSWORD`, `APP1_MP_*`,
@@ -426,7 +443,7 @@ Rodam em push na `main` e em pull request, restritos aos caminhos do app1.
 
 - **Android:** build de release assinado com a keystore própria (`android/app/tridocuras-release.jks`, alias `tridocuras`; senha em `android/key.properties` — ambos **ignorados** pelo git).
   ```bash
-  cd /opt/hosting/apps/app1/frontend
+  cd /opt/tridocuras/apps/app1/frontend
   flutter build apk --release          # APK assinado
   flutter build appbundle --release    # AAB para a Play Store
   ```

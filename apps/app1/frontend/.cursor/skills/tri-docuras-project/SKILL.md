@@ -8,11 +8,11 @@ paths: lib/**,web/**,pubspec.yaml,android/**,ios/**
 
 ## Stack
 
-- App: `/opt/hosting/apps/app1/frontend` (`tri_docuras` v1.0.0+1)
-- API: Dart Frog em `/opt/hosting/apps/app1/api`
+- App: `/opt/tridocuras/apps/app1/frontend` (`tri_docuras` v1.0.0+1)
+- API: Dart Frog em `/opt/tridocuras/apps/app1/api`
 - Produção: https://tridocuras.com.br
-- Painel loja: https://tridocuras.com.br/admin (`APP1_ADMIN_PASSWORD` em `/opt/hosting/.env`)
-- Web deploy: `docker compose build app1 app1-web && docker compose up -d app1 app1-web` em `/opt/hosting`
+- Painel loja: https://tridocuras.com.br/admin (`APP1_ADMIN_PASSWORD` em `/opt/tridocuras/.env`)
+- Web deploy: `docker compose -f docker-compose.tridocuras.yml build app-tridocuras app-tridocuras-web && docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras app-tridocuras-web` em `/opt/hosting`
 - Design system PDF: `/root/.cursor/docs/tri-docuras/design-system-tri-docuras.pdf`
 
 ## API (endpoints usados pelo app)
@@ -39,7 +39,7 @@ Admin (fora do Flutter): `POST /api/admin/session`, pedidos (`GET/POST /api/admi
 ## Painel da loja
 
 - URL: https://tridocuras.com.br/admin
-- Senha: `APP1_ADMIN_PASSWORD` no `/opt/hosting/.env` (reiniciar `app1` após alterar)
+- Senha: `APP1_ADMIN_PASSWORD` no `/opt/tridocuras/.env` (reiniciar `app1` após alterar)
 - **Pedidos:** status `paid` → `preparing` → `ready` → `completed`
 - **Produtos:** CRUD em `/api/admin/products` — nome, preço, categoria, destaque, visível (`available`)
 - Código API: `admin_products.dart`, `admin_orders.dart`, `admin_panel_html.dart`
@@ -113,14 +113,14 @@ Dark `#412414`, Brown `#6A3A23`, Tan `#A4653C`, Cream `#FDEFE2`, Pink `#E6A6A4`,
 ## Deploy e verificação
 
 ```bash
-cd /opt/hosting && docker compose up -d --build app1 app1-web
+cd /opt/tridocuras && docker compose -f docker-compose.tridocuras.yml up -d --build app-tridocuras app-tridocuras-web
 curl -s https://tridocuras.com.br/api/health
 ```
 
 ## Testes
 
 ```bash
-cd /opt/hosting/apps/app1/frontend && flutter test
+cd /opt/tridocuras/apps/app1/frontend && flutter test
 ```
 
 ## Pendente

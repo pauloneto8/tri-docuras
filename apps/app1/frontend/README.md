@@ -223,7 +223,7 @@ PWA (service worker/offline); publicação na Play Store (AAB + ficha); app iOS.
 ## Testes
 
 ```bash
-cd /opt/hosting/apps/app1/frontend
+cd /opt/tridocuras/apps/app1/frontend
 flutter analyze   # gate no CI: --fatal-infos
 flutter test      # 33 testes
 ```
@@ -243,7 +243,7 @@ flutter test      # 33 testes
 ## Desenvolvimento
 
 ```bash
-cd /opt/hosting/apps/app1/frontend
+cd /opt/tridocuras/apps/app1/frontend
 flutter pub get
 flutter analyze
 flutter test
@@ -271,9 +271,9 @@ Altere `lib/config.dart` para API de dev e o WhatsApp da loja (`storeWhatsApp`).
 ## Deploy web (VPS)
 
 ```bash
-cd /opt/hosting
-docker compose build app1-web
-docker compose up -d app1-web
+cd /opt/tridocuras
+docker compose -f docker-compose.tridocuras.yml build app-tridocuras-web
+docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras-web
 ```
 
 O build usa `ghcr.io/cirruslabs/flutter:stable` e serve em Nginx interno.

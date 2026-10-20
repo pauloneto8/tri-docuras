@@ -1,146 +1,89 @@
-# Hosting — VPS
+# Tri Doçuras — repositório da VPS
 
-Infraestrutura Docker para hospedar duas aplicações isoladas, com Nginx como proxy reverso por domínio.
+Repositório da loja **Tri Doçuras** (app1: Flutter web + API Dart Frog +
+PostgreSQL, com painel da loja em `/admin`). Atualizado em 20/10/2026.
+
+- **Produção:** https://tridocuras.com.br
+- **Escopo do plano atual:** [`PLANO.md`](PLANO.md) (estado na seção 5)
+- **Operação:** [`docs/OPERACAO.md`](docs/OPERACAO.md) (backup, restore, rollback, credenciais)
+- **Monitoramento:** [`docs/MONITORAMENTO.md`](docs/MONITORAMENTO.md)
+- **Documentação do app:** [`apps/app1/README.md`](apps/app1/README.md)
+
+O AssistFin (finanças pessoais) roda em `/opt/assistfin`, com o Caddy desse
+projeto como proxy. A pasta `apps/app2` deste repositório é uma cópia antiga
+do AssistFin e está fora do escopo deste repositório (ver `PLANO.md`).
 
 ## Arquitetura
 
 ```
 Internet :80/:443
-    └── nginx (hosting-nginx)
-            ├── tridocuras.com.br
-            │     ├── /        → app1-web (Flutter)
-            │     ├── /api/*   → app1 (Dart Frog)
-            │     └── /admin   → app1 (painel: pedidos + produtos + financeiro)
-            └── assistfin.com.br → app2 (AssistFin + agente IA)
+    └── Caddy do AssistFin (/opt/assistfin/Caddyfile)
+            └── tridocuras.com.br
+                  ├── /        → app-tridocuras-web  (Flutter web + Nginx interno, CSP)
+                  ├── /api/*   → app-tridocuras      (Dart Frog :8080)
+                  └── /admin   → app-tridocuras      (painel da loja)
+
+app-tridocuras ── app-tridocuras-db   (PostgreSQL 16, rede interna)
+backup-tridocuras                      (pg_dump + tar dos uploads, 03:30)
 ```
 
-Cada app tem stack isolada: container web/API, PostgreSQL dedicado, rede interna e volume de dados próprios.
+## Compose ativo
+
+O único compose em uso é `docker-compose.tridocuras.yml`, sempre a partir de
+`/opt/tridocuras`:
+
+```bash
+cd /opt/tridocuras
+docker compose -f docker-compose.tridocuras.yml ps
+docker compose -f docker-compose.tridocuras.yml build app-tridocuras && \
+  docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras
+```
+
+| Serviço | Container | Função |
+|---------|-----------|--------|
+| `app-tridocuras-web` | `app-tridocuras-web` | Front Flutter web |
+| `app-tridocuras` | `app-tridocuras` | API e painel |
+| `app-tridocuras-db` | `app-tridocuras-db` | PostgreSQL 16 |
+| `backup-tridocuras` | `backup-tridocuras` | Backup diário |
+
+O `docker-compose.yml` da raiz é **antigo** (stack `hosting-*`, já desligada)
+e não deve ser usado. Não rode `docker compose down -v`.
+
+## Segredos
+
+Credenciais ficam em `/opt/tridocuras/.env`, que não é versionado. Para
+conferir as variáveis sem mostrar os valores:
+
+```bash
+sed 's/=.*/=<set>/' .env
+```
+
+O modelo sem valores está em [`.env.example`](.env.example).
 
 ## Estrutura
 
 ```
-/opt/hosting/
-├── .env                    # domínios, credenciais de banco, e-mail Certbot
-├── docker-compose.yml
-├── nginx/                  # templates e SSL
+/opt/tridocuras/
+├── docker-compose.tridocuras.yml   # compose ativo
+├── .env                            # segredos (não versionar)
 ├── apps/
-│   ├── app1/               # Tri Doçuras (Flutter + Dart Frog)
-│   └── app2/               # AssistFin (FastAPI + agente IA)
-├── certs/                  # Let's Encrypt
-├── scripts/
-│   ├── reload-nginx.sh
-│   └── issue-certs.sh
-└── README.md
+│   ├── app1/                       # Tri Doçuras: api/, frontend/, README.md
+│   └── app2/                       # cópia antiga do AssistFin (fora do escopo)
+├── scripts/                        # backup-tridocuras.sh e utilitários
+├── docs/                           # OPERACAO.md e MONITORAMENTO.md
+├── backups/                        # backups locais (ignorados pelo git)
+├── nginx/ (antigo)                 # remover, ver PLANO.md, seção 4.4
+├── PLANO.md, FASE0.md, CONTAS.md   # planos e registro de execução
+└── .github/workflows/              # CI do app1
 ```
 
-## Domínios (`.env`)
+## Testes e CI
 
-| Variável | Valor | Uso |
-|----------|-------|-----|
-| `APP1_DOMAIN` | `tridocuras.com.br` | Tri Doçuras |
-| `APP2_DOMAIN` | `assistfin.com.br` | AssistFin |
+Os workflows `app1-tests.yml` (API) e `app1-frontend-tests.yml` (front) rodam
+em push na `main` e em pull requests que mexem no app1. Detalhes e comandos
+locais estão em [`apps/app1/README.md`](apps/app1/README.md#testes).
 
-Variáveis adicionais do App 1 (Pix, painel admin): ver [`apps/app1/README.md`](apps/app1/README.md) e [`.env.example`](.env.example).
+## Domínio
 
-## Comandos úteis
-
-```bash
-cd /opt/hosting
-
-# Status de todos os serviços
-docker compose ps
-
-# Subir tudo
-docker compose up -d
-
-# Health rápido
-curl -s https://tridocuras.com.br/api/health
-curl -s https://assistfin.com.br/health
-
-# Rebuild Tri Doçuras
-docker compose build app1 app1-web && docker compose up -d app1 app1-web
-
-# Rebuild AssistFin
-docker compose build app2 && docker compose up -d app2
-
-# Logs
-docker compose logs -f app1 app1-web app2 nginx
-
-# Recarregar Nginx após mudar domínio no .env
-./scripts/reload-nginx.sh
-```
-
-## HTTPS
-
-Certificados Let's Encrypt em `/opt/hosting/certs`. Renovação via profile `certbot` ou scripts em `scripts/`.
-
-1. Edite `APP1_DOMAIN` / `APP2_DOMAIN` e `CERTBOT_EMAIL` no `.env`
-2. Aponte os registros **A** dos domínios ao IP do servidor
-3. `./scripts/reload-nginx.sh`
-4. `./scripts/issue-certs.sh` (quando aplicável)
-
-## Firewall (UFW)
-
-Expor apenas `80`, `443` e SSH conforme a política do provedor.
-
----
-
-## Tri Doçuras (App 1)
-
-**URL:** https://tridocuras.com.br
-
-| Container | Função |
-|-----------|--------|
-| `hosting-app1-web` | Flutter web (Nginx estático) |
-| `hosting-app1` | API Dart Frog (`/api/*`) |
-| `hosting-app1-db` | PostgreSQL 16 |
-
-Fluxo completo: catálogo → checkout → Pix (Mercado Pago) → confirmação → rastreamento. App com 4 abas: Início, Pedidos, Favoritos e Perfil.
-
-| URL | Função |
-|-----|--------|
-| https://tridocuras.com.br | Loja (Flutter web) |
-| https://tridocuras.com.br/admin | Painel da loja (pedidos + catálogo + financeiro) |
-| https://tridocuras.com.br/api/health | Health da API |
-
-Credenciais em `/opt/hosting/.env`: `APP1_MP_*` (Pix), `APP1_ADMIN_PASSWORD` (painel). WhatsApp da loja no app: `apps/app1/frontend/lib/config.dart` (`storeWhatsApp`). **Não commitar** o `.env`.
-
-```bash
-docker compose build app1-web && docker compose up -d app1-web   # só frontend
-docker compose build app1 && docker compose up -d app1           # só API
-```
-
-Documentação: [apps/app1/README.md](apps/app1/README.md)
-
----
-
-## AssistFin (App 2)
-
-**URL:** https://assistfin.com.br
-
-| Container | Função |
-|-----------|--------|
-| `hosting-app2` | FastAPI + agente Groq |
-| `hosting-app2-db` | PostgreSQL 16 |
-
-Finanças pessoais multiusuário: contas, cartões, faturas, movimentos, orçamentos, importação OFX/CSV/PDF, assistente com wizards e confirmação de escritas.
-
-```bash
-docker compose build app1 app1-web && docker compose up -d app1 app1-web
-```
-
-Testes da API: `docker run --rm -v ./apps/app1/api:/app -w /app dart:stable sh -c "dart pub get && dart test"` · Frontend: `flutter test` em `apps/app1/frontend`. CI: `.github/workflows/app1-tests.yml` e `app1-frontend-tests.yml`. Detalhes em [apps/app1/README.md](apps/app1/README.md#testes).
-
-
-Documentação: [apps/app2/README.md](apps/app2/README.md) · [AGENTS.md](apps/app2/AGENTS.md)
-
----
-
-## Documentação por app
-
-| App | README | Outros |
-|-----|--------|--------|
-| Tri Doçuras | [apps/app1/README.md](apps/app1/README.md) | [Frontend](apps/app1/frontend/README.md) · [API](apps/app1/api/README.md) |
-| AssistFin | [apps/app2/README.md](apps/app2/README.md) | [ARCHITECTURE](apps/app2/docs/ARCHITECTURE.md) · [OPERATIONS](apps/app2/docs/OPERATIONS.md) · [CHANGELOG](apps/app2/docs/CHANGELOG.md) |
-
-Design system Tri Doçuras: `/root/.cursor/docs/tri-docuras/design-system-tri-docuras.pdf`
+`APP1_DOMAIN` no `.env` (`tridocuras.com.br`). O webhook do Mercado Pago aponta
+para `https://tridocuras.com.br/api/webhooks/mercadopago`.
