@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:postgres/postgres.dart';
+import 'package:tri_docuras_api/store_settings.dart';
 
 Connection? _connection;
 
@@ -201,6 +202,7 @@ Future<void> ensureSchema(Connection connection) async {
   ''');
 
   await _seedCategories(connection);
+  await ensureStoreSettingsSchema(connection);
 }
 
 Future<void> _seedCategories(Connection connection) async {

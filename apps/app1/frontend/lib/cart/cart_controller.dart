@@ -3,7 +3,11 @@ import 'package:tri_docuras/cart/cart_item.dart';
 import 'package:tri_docuras/cart/delivery_mode.dart';
 
 class CartController extends ChangeNotifier {
-  static const deliveryFeeAmount = 6.0;
+  CartController({this.deliveryFeeAmount = defaultDeliveryFee});
+
+  static const defaultDeliveryFee = 6.0;
+
+  final double deliveryFeeAmount;
 
   final List<CartItem> _items = [];
   DeliveryMode _deliveryMode = DeliveryMode.pickup;

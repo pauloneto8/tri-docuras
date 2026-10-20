@@ -178,7 +178,8 @@ concluído aparece como pendente.
 | Fase 1.1 a 1.4, 1.6, 1.7 | ✅ Feito | Backup diário, limites de requisição, expiração do Pix, estorno, CSP e headers, CORS e lint no CI. |
 | Fase 1.5 (monitoramento) | ⚠️ Parcial | Logs com ID do pedido e `/api/health` prontos. Falta o uptime externo (`docs/MONITORAMENTO.md`). |
 | Cópia do backup fora da VPS (1.1) | ⏳ Pendente | Destino ainda não definido (pergunta da seção 3). |
-| Fase 2 (2.1 a 2.6) | ⏳ Não iniciada | Nenhum código encontrado para `store_settings`, `admin_users`, `order_events`, estoque ou variações. |
+| Fase 2.1 (configurações da loja) | 🟡 Em andamento | Feito: tabela `store_settings` (taxa de entrega, loja aberta, aviso), API e aba "Loja" no painel. Pedidos recusam quando a loja está fechada. Valores iniciais iguais aos antigos (R$ 6,00, aberta). Falta: horários, CEPs, aviso exibido no app e a fila de decisões do dono. |
+| Fase 2.2 a 2.6 | ⏳ Não iniciada | Nenhum código para `admin_users`, `order_events`, pronta entrega × encomenda, estoque ou variações. |
 | Fase 3 (3.1 a 3.6) | ⏳ Não iniciada | Sem `sitemap.xml`/`robots.txt`; PWA, status para o cliente, páginas legais e UX pendentes. |
 | Fase 4 (4.1 a 4.6) | ⏳ Não iniciada | Parte da 4.4 (docs) feita nesta data: `README.md` raiz, `apps/app1/README.md` e `docs/`. |
 | Contas de cliente, Fases A e B | ✅ Feito | Ver [`CONTAS.md`](CONTAS.md). |

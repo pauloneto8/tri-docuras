@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dart_frog/dart_frog.dart';
 import 'package:tri_docuras_api/admin_categories.dart';
 import 'package:tri_docuras_api/app_public_config.dart';
+import 'package:tri_docuras_api/store_settings.dart';
 
 Future<Response> onRequest(RequestContext context) async {
   if (context.request.method != HttpMethod.get) {
@@ -10,6 +11,12 @@ Future<Response> onRequest(RequestContext context) async {
   }
 
   final config = AppPublicConfig.toJson();
+  try {
+    config.addAll((await getStoreSettings()).toJson());
+  } catch (_) {
+    config.addAll(StoreSettings.defaults.toJson());
+  }
+
   try {
     final categories = await listActiveCategories();
     config['categories'] = categories

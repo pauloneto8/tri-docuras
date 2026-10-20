@@ -5,10 +5,10 @@ import 'package:tri_docuras_api/db.dart';
 import 'package:tri_docuras_api/mercado_pago_client.dart';
 import 'package:tri_docuras_api/mercado_pago_config.dart';
 import 'package:tri_docuras_api/payment_check_throttle.dart';
+import 'package:tri_docuras_api/store_settings.dart';
 import 'package:tri_docuras_api/whatsapp_notify.dart';
 
 const lactoseExtraPrice = 3.0;
-const deliveryFeeAmount = 6.0;
 
 /// Únicos status a partir dos quais uma confirmação do Mercado Pago pode
 /// marcar o pedido como pago. Notificações repetidas sobre pedidos já
@@ -199,8 +199,13 @@ Future<CreateOrderInput> parseCreateOrderInput(Map<String, dynamic> body) async 
     );
   }
 
+  final settings = await getStoreSettings();
+  if (!settings.storeOpen) {
+    throw OrderValidationException('A loja está fechada no momento.');
+  }
+
   final subtotal = items.fold<double>(0, (sum, item) => sum + item.lineTotal);
-  final deliveryFee = deliveryMode == 'delivery' ? deliveryFeeAmount : 0.0;
+  final deliveryFee = deliveryMode == 'delivery' ? settings.deliveryFee : 0.0;
   final total = subtotal + deliveryFee;
 
   return CreateOrderInput(

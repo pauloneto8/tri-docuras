@@ -18,8 +18,14 @@ void main() {
 
     test('receber em casa com taxa de R\$ 6,00', () {
       cart.setDeliveryMode(DeliveryMode.delivery);
-      expect(cart.deliveryFee, CartController.deliveryFeeAmount);
+      expect(cart.deliveryFee, CartController.defaultDeliveryFee);
       expect(cart.deliveryFeeLabel, 'R\$ 6,00');
+    });
+
+    test('usa a taxa configurada pela loja', () {
+      final custom = CartController(deliveryFeeAmount: 8.5);
+      custom.setDeliveryMode(DeliveryMode.delivery);
+      expect(custom.deliveryFee, 8.5);
     });
 
     test('total inclui taxa de entrega', () {

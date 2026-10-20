@@ -56,6 +56,7 @@ Domínio em `.env` → `APP1_DOMAIN` (`tridocuras.com.br`).
 | GET/POST | `/api/admin/categories` | Lista / cria categorias |
 | PUT/DELETE | `/api/admin/categories/{id}` | Edita / remove categoria |
 | GET | `/api/admin/finance/report` | Relatório de faturamento (`from`, `to`) |
+| GET/PUT | `/api/admin/settings` | Configurações da loja: taxa de entrega, loja aberta e aviso (tabela `store_settings`, linha única) |
 | POST | `/api/customers` | Cadastro de cliente (e-mail e senha) |
 | POST | `/api/customers/session` | Login do cliente |
 | GET/PUT | `/api/customers/me` | Perfil do cliente logado |

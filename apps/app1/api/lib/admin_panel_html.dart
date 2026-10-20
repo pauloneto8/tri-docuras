@@ -173,6 +173,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         <button class="main-tab active" data-section="orders">Pedidos</button>
         <button class="main-tab" data-section="products">Produtos</button>
         <button class="main-tab" data-section="finance">Financeiro</button>
+        <button class="main-tab" data-section="settings">Loja</button>
       </div>
 
       <div id="ordersView" class="section-view">
@@ -286,6 +287,30 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         <div id="productsError" class="error"></div>
       </div>
 
+      <div id="settingsView" class="section-view" hidden>
+        <div class="card">
+          <h2>Loja</h2>
+          <form id="settingsForm" class="form-grid">
+            <div class="form-row">
+              <div>
+                <label for="settingsFee">TAXA DE ENTREGA (R$)</label>
+                <input id="settingsFee" type="number" min="0" max="100" step="0.01" required>
+              </div>
+              <div class="checks" style="align-self:end">
+                <label><input id="settingsOpen" type="checkbox"> Loja aberta (aceita pedidos)</label>
+              </div>
+            </div>
+            <div>
+              <label for="settingsNotice">AVISO NO APP</label>
+              <textarea id="settingsNotice" maxlength="300" placeholder="Ex.: Fechado no feriado. Voltamos dia 2."></textarea>
+            </div>
+            <div class="actions">
+              <button id="saveSettingsBtn" type="submit">Salvar configurações</button>
+            </div>
+            <div id="settingsError" class="error"></div>
+          </form>
+        </div>
+      </div>
       <div id="financeView" class="section-view" hidden>
         <div class="toolbar">
           <div class="tabs" id="financePresets">
@@ -339,6 +364,12 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     const ordersView = document.getElementById("ordersView");
     const productsView = document.getElementById("productsView");
     const financeView = document.getElementById("financeView");
+    const settingsView = document.getElementById("settingsView");
+    const settingsForm = document.getElementById("settingsForm");
+    const settingsFee = document.getElementById("settingsFee");
+    const settingsOpen = document.getElementById("settingsOpen");
+    const settingsNotice = document.getElementById("settingsNotice");
+    const settingsError = document.getElementById("settingsError");
     const orderSearchInput = document.getElementById("orderSearch");
     const orderFromInput = document.getElementById("orderFrom");
     const orderToInput = document.getElementById("orderTo");
@@ -738,6 +769,40 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       }
     }
 
+    async function loadSettings() {
+      settingsError.textContent = "";
+      try {
+        const data = await api("/api/admin/settings");
+        settingsFee.value = Number(data.settings.delivery_fee).toFixed(2);
+        settingsOpen.checked = data.settings.store_open;
+        settingsNotice.value = data.settings.notice;
+      } catch (error) {
+        settingsError.textContent = error.message;
+      }
+    }
+
+    async function saveSettings(event) {
+      event.preventDefault();
+      settingsError.textContent = "";
+      const saveBtn = document.getElementById("saveSettingsBtn");
+      saveBtn.disabled = true;
+      try {
+        await api("/api/admin/settings", {
+          method: "PUT",
+          body: JSON.stringify({
+            delivery_fee: settingsFee.value,
+            store_open: settingsOpen.checked,
+            notice: settingsNotice.value
+          })
+        });
+        await loadSettings();
+      } catch (error) {
+        settingsError.textContent = error.message;
+      } finally {
+        saveBtn.disabled = false;
+      }
+    }
+
     async function loadProducts() {
       productsError.textContent = "";
       productsEl.innerHTML = '<div class="empty">Carregando…</div>';
@@ -907,12 +972,16 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       ordersView.hidden = section !== "orders";
       productsView.hidden = section !== "products";
       financeView.hidden = section !== "finance";
+      settingsView.hidden = section !== "settings";
       if (section === "orders") {
         loadOrders();
         startOrdersTimer();
       } else if (section === "products") {
         stopOrdersTimer();
         loadProducts();
+      } else if (section === "settings") {
+        stopOrdersTimer();
+        loadSettings();
       } else {
         stopOrdersTimer();
         loadFinance();
@@ -922,6 +991,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     async function refreshCurrentSection() {
       if (currentSection === "orders") await loadOrders();
       else if (currentSection === "products") await loadProducts();
+      else if (currentSection === "settings") await loadSettings();
       else await loadFinance();
     }
 
@@ -1021,6 +1091,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       resetCategoryForm();
     });
     categoryForm.addEventListener("submit", saveCategory);
+    settingsForm.addEventListener("submit", saveSettings);
     productForm.addEventListener("submit", saveProduct);
     productImageInput.addEventListener("change", function() {
       const file = productImageInput.files[0];

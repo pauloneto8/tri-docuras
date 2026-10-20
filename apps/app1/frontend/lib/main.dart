@@ -28,7 +28,9 @@ Future<void> main() async {
 
   runApp(
     TriDocurasApp(
-      cart: CartController(),
+      cart: CartController(
+        deliveryFeeAmount: StoreConfigHolder.instance.config.deliveryFee,
+      ),
       favorites: favorites,
       orderHistory: orderHistory,
       account: account,
