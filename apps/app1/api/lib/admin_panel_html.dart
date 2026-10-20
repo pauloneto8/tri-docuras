@@ -153,6 +153,10 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     @media (max-width: 600px) {
       .wrap { padding: 12px; }
       .form-row { grid-template-columns: 1fr; }
+      .tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+      .tabs .tab { flex: 0 0 auto; min-height: 40px; }
+      .actions button { flex: 1 1 100%; min-height: 44px; }
+      #financeDaily, #financeProducts { overflow-x: auto; }
     }
   </style>
 </head>
@@ -410,6 +414,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
           <h2>Vendas por produto</h2>
           <div id="financeProducts"></div>
         </div>
+        <button id="financeCsvBtn" type="button" class="secondary" style="margin-bottom:12px">Exportar CSV</button>
         <div id="financeError" class="error"></div>
       </div>
     </div>
@@ -420,6 +425,10 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     let currentStatus = "active";
     let currentSection = "orders";
     let ordersTimer = null;
+    let ordersById = new Map();
+    let seenPaidIds = new Set();
+    let seenPaidReady = false;
+    let lastFinanceReport = null;
     let categoryList = [];
 
     const loginView = document.getElementById("loginView");
@@ -566,6 +575,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         '</div>' +
         '<ul class="items">' + items + '</ul>' +
         '<div class="actions">' + actions +
+          '<button type="button" class="secondary" data-print="' + order.id + '">Comanda</button>' +
           '<button type="button" class="secondary" data-history="' + order.id + '">Histórico</button>' +
         '</div>' +
         '<div class="history" data-history-box="' + order.id + '" hidden></div>' +
@@ -687,6 +697,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
           ordersEl.innerHTML = '<div class="empty">Nenhum pedido nesta aba.</div>';
           return;
         }
+        ordersById = new Map(orders.map(function(order) { return [order.id, order]; }));
         ordersEl.innerHTML = orders.map(renderOrder).join("");
         ordersEl.querySelectorAll("button[data-status]").forEach(function(btn) {
           btn.addEventListener("click", function() {
@@ -1287,6 +1298,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       if (financeToInput.value) params.set("to", financeToInput.value);
       try {
         const data = await api("/api/admin/finance/report?" + params.toString());
+        lastFinanceReport = data;
         renderFinanceCards(data.totals || {});
         renderFinanceDaily(data.daily || []);
         renderFinanceProducts(data.by_product || []);
@@ -1296,9 +1308,112 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       }
     }
 
+    function escapeHtml(text) {
+      return String(text == null ? "" : text).replace(/[&<>"']/g, function(ch) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+      });
+    }
+
+    function alertNewPaidOrder() {
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = 880;
+        gain.gain.value = 0.2;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.4);
+      } catch (_) {
+        // Sem áudio liberado pelo navegador: o pedido continua na fila.
+      }
+    }
+
+    async function checkNewPaidOrders() {
+      try {
+        const data = await api("/api/admin/orders?status=paid");
+        const ids = (data.orders || []).map(function(order) { return order.id; });
+        const hasNew = ids.some(function(id) { return !seenPaidIds.has(id); });
+        if (seenPaidReady && hasNew) alertNewPaidOrder();
+        ids.forEach(function(id) { seenPaidIds.add(id); });
+        seenPaidReady = true;
+      } catch (_) {
+        // Falha pontual: a próxima rodada tenta de novo.
+      }
+    }
+
+    function printComanda(id) {
+      const order = ordersById.get(id);
+      if (!order) return;
+      const itens = (order.items || []).map(function(item) {
+        const extras = [];
+        if (item.options) extras.push(item.options);
+        if (item.size) extras.push(item.size);
+        if (item.lactose_free) extras.push("sem lactose");
+        const suffix = extras.length ? " (" + extras.join(", ") + ")" : "";
+        return "<tr><td>" + item.quantity + "×</td><td>" + escapeHtml(item.product_name + suffix) +
+          "</td><td class=\"num\">" + formatMoney(item.line_total) + "</td></tr>";
+      }).join("");
+      const a = order.delivery_address;
+      const endereco = a ? [a.street, a.number, a.complement, a.neighborhood, a.reference].filter(Boolean).join(", ") : "";
+      const html = '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">' +
+        '<title>Comanda ' + escapeHtml(order.id) + '</title>' +
+        '<style>body{font-family:monospace;width:280px;margin:12px auto;color:#000}' +
+        'h1{font-size:18px;text-align:center;margin:0 0 4px}table{width:100%;border-collapse:collapse}' +
+        'td{padding:3px 0;vertical-align:top}td.num{text-align:right}hr{border:0;border-top:1px dashed #000}</style>' +
+        '</head><body><h1>Tri Doçuras</h1><p style="text-align:center;margin:0">Pedido ' + escapeHtml(order.id) + '</p><hr>' +
+        '<p>' + escapeHtml(order.customer_name) + '<br>' + escapeHtml(order.whatsapp) + '</p>' +
+        '<p>' + escapeHtml(order.delivery_label) + (endereco ? '<br>' + escapeHtml(endereco) : '') + '</p><hr>' +
+        '<table>' + itens + '</table><hr>' +
+        '<p style="text-align:right;font-size:16px"><strong>Total ' + formatMoney(order.total) + '</strong></p>' +
+        '</body></html>';
+      const janela = window.open("", "_blank", "width=400,height=640");
+      if (!janela) {
+        listError.textContent = "Permita pop-ups para imprimir a comanda.";
+        return;
+      }
+      janela.document.write(html);
+      janela.document.close();
+      janela.focus();
+      janela.print();
+    }
+
+    function csvCell(value) {
+      return '"' + String(value).replace(/"/g, '""') + '"';
+    }
+
+    function csvNumber(value) {
+      return Number(value || 0).toFixed(2).replace(".", ",");
+    }
+
+    function exportFinanceCsv() {
+      if (!lastFinanceReport) return;
+      const linhas = [["Dia", "Pedidos", "Faturamento"].join(";")];
+      (lastFinanceReport.daily || []).forEach(function(day) {
+        linhas.push([csvCell(day.date), day.orders, csvNumber(day.revenue)].join(";"));
+      });
+      linhas.push("");
+      linhas.push(["Produto", "Quantidade", "Receita"].join(";"));
+      (lastFinanceReport.by_product || []).forEach(function(item) {
+        linhas.push([csvCell(item.product_name), item.quantity, csvNumber(item.revenue)].join(";"));
+      });
+      const blob = new Blob(["\uFEFF" + linhas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "financeiro-" + (financeFromInput.value || "inicio") + "-" + (financeToInput.value || "fim") + ".csv";
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+
+    document.getElementById("financeCsvBtn").addEventListener("click", exportFinanceCsv);
+
     ordersEl.addEventListener("click", function(event) {
       const button = event.target.closest("[data-history]");
       if (button) toggleHistory(button.dataset.history);
+      const printButton = event.target.closest("[data-print]");
+      if (printButton) printComanda(printButton.dataset.print);
     });
 
     function showSection(section) {
@@ -1341,7 +1456,11 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     function startOrdersTimer() {
       stopOrdersTimer();
       if (currentSection === "orders") {
-        ordersTimer = setInterval(loadOrders, 30000);
+        ordersTimer = setInterval(function() {
+          loadOrders();
+          checkNewPaidOrders();
+        }, 30000);
+        checkNewPaidOrders();
       }
     }
 
