@@ -69,3 +69,42 @@ jobs:
 
       - name: Rodar suite de testes
         run: dart test
+
+  # Testes de integração contra um Postgres de verdade (estoque, pedido e
+  # cancelamento). A suíte normal acima pula esses testes sem DATABASE_URL.
+  integracao:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tridocuras
+          POSTGRES_PASSWORD: ci-pw
+          POSTGRES_DB: tridocuras_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tridocuras"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://tridocuras:ci-pw@localhost:5432/tridocuras_test
+      APP1_DOMAIN: tridocuras.com.br
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Dart
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Instalar dependências
+        run: dart pub get
+
+      - name: Rodar testes de integração
+        run: dart test test/integration
