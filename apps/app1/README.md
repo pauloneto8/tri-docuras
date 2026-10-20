@@ -202,11 +202,11 @@ docker compose -f docker-compose.tridocuras.yml build app-tridocuras app-tridocu
 
 ### Pendente
 
-Estado em 20/10/2026. Detalhe no [`PLANO.md`](../../PLANO.md) (seção 5) e no [`FASE0.md`](../../FASE0.md) (seção 4).
+Estado em 20/10/2026 (implementação pausada). Detalhe no [`PLANO.md`](../../PLANO.md) (seção 5) e no [`FASE0.md`](../../FASE0.md) (seção 4).
 
 - **Depende do dono:** conferir o WhatsApp no app (Perfil → WhatsApp); chave CallMeBot para o aviso à loja; fotos dos produtos (`image_url`); teste ponta a ponta com dinheiro real (FASE0 0.8 a 0.10).
 - **Monitoramento:** uptime externo ([`MONITORAMENTO.md`](../../docs/MONITORAMENTO.md)); cópia dos backups fora da VPS ([`OPERACAO.md`](../../docs/OPERACAO.md)).
-- **Fase 2, operação:** configurações da loja no banco, usuários do painel, histórico de status, pronta entrega ou encomenda, estoque, variações por produto.
+- **Fase 2, operação (no ar desde 20/10):** configurações da loja, usuários do painel, histórico de status e estoque. Pendente: pronta entrega × encomenda e variações (aguardam decisões do dono); catálogo mostrar "Esgotado".
 - **Fase 3, cliente e marca:** PWA, SEO, status para o cliente, páginas legais e LGPD, acabamento de UX, painel responsivo.
 - **Contas de cliente:** Fase C (painel) e Fase D (LGPD).
 - **Fase 4:** migrações versionadas, testes de integração com Postgres, métricas.

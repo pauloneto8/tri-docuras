@@ -109,7 +109,23 @@ estorno no painel da loja e faça o estorno manualmente no MP.
   `APP1_MP_WEBHOOK_SECRET` no `.env` e recriar com
   `docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras`
   (o `env_file` só é relido ao recriar).
-- **Senha do painel:** `APP1_ADMIN_PASSWORD` no `.env`, seguido do mesmo `up -d`.
-  Trocar a senha **invalida na hora todas as sessões do painel**, porque o
-  token é assinado com a própria senha. Quem estiver logado precisa entrar de
-  novo. (A Fase 2.2 do PLANO.md separa a chave de assinatura da senha.)
+- **Chave dos tokens do painel:** `APP1_ADMIN_SECRET` no `.env`, seguido de
+  `up -d`. Trocar a chave derruba todas as sessões do painel, e todo mundo
+  precisa entrar de novo.
+- **Senha de um usuário do painel:** pela aba "Usuários" (só o dono). Trocar
+  a senha derruba as sessões desse usuário.
+- **`APP1_ADMIN_PASSWORD`:** só usada na criação do dono inicial (quando o
+  banco não tem usuários) e no modo legado. Mudar essa variável depois não
+  muda a senha de quem já existe no banco.
+
+
+## Usuários do painel
+
+- Tabela `admin_users`. Papéis: `dono` (gerencia usuários, a aba Loja e tudo
+  o mais) e `atendente` (pedidos, produtos e financeiro).
+- Desativar um usuário ou trocar a senha dele derruba as sessões na hora.
+- Ninguém consegue tirar o próprio papel de dono nem desativar a própria conta.
+- **Limitação:** não há recuperação de senha por e-mail. Se o único dono
+  esquecer a senha, a recuperação é manual: um operador com acesso ao banco
+  precisa gerar um hash bcrypt e atualizar `admin_users.password_hash`. Antes
+  de fazer isso, confirme com o dono.

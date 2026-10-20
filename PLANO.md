@@ -163,7 +163,7 @@ Ordem recomendada: 2.1 → 2.2 → 2.3 → 2.4 → 2.5 (2.3 e 2.4 dependem de 2.
 
 ---
 
-## 5. Status de execução (atualizado em 20/10/2026)
+## 5. Status de execução (atualizado em 20/10/2026, implementação pausada)
 
 Os commits estão no `main` (`git log --oneline`). Só o que não está
 concluído aparece como pendente.
@@ -178,15 +178,15 @@ concluído aparece como pendente.
 | Fase 1.1 a 1.4, 1.6, 1.7 | ✅ Feito | Backup diário, limites de requisição, expiração do Pix, estorno, CSP e headers, CORS e lint no CI. |
 | Fase 1.5 (monitoramento) | ⚠️ Parcial | Logs com ID do pedido e `/api/health` prontos. Falta o uptime externo (`docs/MONITORAMENTO.md`). |
 | Cópia do backup fora da VPS (1.1) | ⏳ Pendente | Destino ainda não definido (pergunta da seção 3). |
-| Fase 2.1 (configurações da loja) | 🟡 Em andamento | Feito: tabela `store_settings` (taxa de entrega, loja aberta, aviso), API e aba "Loja" no painel. Pedidos recusam quando a loja está fechada. Valores iniciais iguais aos antigos (R$ 6,00, aberta). Falta: horários, CEPs, aviso exibido no app e a fila de decisões do dono. |
-| Fase 2.2 (usuários do painel) | 🟡 Implementado, falta deploy | Tabela `admin_users` (bcrypt), login por e-mail, papéis dono e atendente, versão de sessão para revogar tokens, aba "Usuários". Modo legado: sem usuários no banco, a senha única ainda entra. Para ativar: definir `APP1_ADMIN_EMAIL` (e recomendado `APP1_ADMIN_SECRET`) no `.env`. |
-| Fase 2.3 (histórico de status) | 🟡 Implementado, falta deploy | Tabela `order_events`, gravada na mesma transação de cada mudança: criação (Cliente), pagamento (Mercado Pago), expiração (Sistema) e painel (nome do usuário). Botão "Histórico" em cada pedido. Testado contra Postgres real em teste de fumaça (descartado). |
-| Fase 2.5 (estoque) | 🟡 Implementado, falta deploy | Coluna `products.stock` (vazio = ilimitado). Reserva na mesma transação do pedido, com recusa se faltar. Devolve no cancelamento e na expiração. Campo no formulário de produto. Premissa: o estoque vale para todos os pedidos (pronta entrega e encomenda). Falta a decisão do dono sobre encomenda. Testado contra Postgres real. |
-| Fase 2.4 e 2.6 | ⏳ Não iniciada | Pronta entrega × encomenda (depende das respostas do dono) e variações por produto. |
-| Fase 3 (3.1 a 3.6) | ⏳ Não iniciada | Sem `sitemap.xml`/`robots.txt`; PWA, status para o cliente, páginas legais e UX pendentes. |
-| Fase 4 (4.1 a 4.6) | ⏳ Não iniciada | Parte da 4.4 (docs) feita nesta data: `README.md` raiz, `apps/app1/README.md` e `docs/`. |
+| Fase 2.1 (configurações da loja) | ✅ No ar (20/10) | Tabela `store_settings`: taxa de entrega, loja aberta e aviso. Aba "Loja" no painel (dono). Pedidos recusam com a loja fechada. Aviso ainda não aparece no app. Horários e CEPs pendem das respostas do dono. |
+| Fase 2.2 (usuários do painel) | ✅ No ar (20/10) | Tabela `admin_users` (bcrypt), login por e-mail, papéis dono e atendente, revogação por versão de sessão, aba "Usuários". Dono inicial criado de `APP1_ADMIN_EMAIL`. `APP1_ADMIN_SECRET` gerada no `.env`. |
+| Fase 2.3 (histórico de status) | ✅ No ar (20/10) | Tabela `order_events` gravada na mesma transação de cada mudança (cliente, Mercado Pago, sistema, usuário do painel). Botão "Histórico" no pedido. Pedidos antigos sem registros. |
+| Fase 2.5 (estoque) | ✅ No ar (20/10) | `products.stock` (vazio = sem controle; os 7 produtos atuais estão assim). Reserva na criação do pedido, devolve no cancelamento e na expiração. Premissa: vale para pronta entrega e encomenda, até o dono decidir. Catálogo do app ainda não mostra "Esgotado". |
+| Fase 2.4 e 2.6 | ⏸️ Pausada | Pronta entrega × encomenda (depende das respostas do dono) e variações por produto. Pausa solicitada em 20/10. |
+| Fase 3 (3.1 a 3.6) | ⏸️ Pausada | Não iniciada. Sem `sitemap.xml`/`robots.txt`; PWA, status para o cliente, páginas legais e UX pendentes. |
+| Fase 4 (4.1 a 4.6) | ⏸️ Pausada | Parte da 4.4 (docs) feita em 20/10: `README.md` da raiz, `apps/app1/README.md` e `docs/`. Restante não iniciado. |
 | Contas de cliente, Fases A e B | ✅ Feito | Ver [`CONTAS.md`](CONTAS.md). |
-| Contas de cliente, Fases C e D | ⏳ Não iniciada | Painel e LGPD. |
+| Contas de cliente, Fases C e D | ⏸️ Pausada | Painel e LGPD. |
 
 Sobre o item 4.4: a documentação de `apps/app2` (AssistFin) ainda cita
 `/opt/hosting`. Essa cópia está fora do escopo deste plano (ver topo do
