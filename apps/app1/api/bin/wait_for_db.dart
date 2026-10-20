@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:postgres/postgres.dart';
 import 'package:tri_docuras_api/db.dart';
 
 Future<void> main() async {

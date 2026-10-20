@@ -62,5 +62,10 @@ jobs:
       - name: Instalar dependências
         run: dart pub get
 
+      # Erros e avisos bloqueiam o merge. Infos (ex.: documentação pública)
+      # ainda não são gate: são cerca de 300 e serão tratadas aos poucos.
+      - name: Analisar (erros e avisos)
+        run: dart analyze --fatal-warnings lib routes bin test
+
       - name: Rodar suite de testes
         run: dart test
