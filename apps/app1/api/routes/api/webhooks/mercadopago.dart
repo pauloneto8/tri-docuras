@@ -15,10 +15,13 @@ Future<Response> onRequest(RequestContext context) async {
   return Response(statusCode: HttpStatus.methodNotAllowed);
 }
 
-Response _invalidSignature() => Response.json(
-      statusCode: HttpStatus.unauthorized,
-      body: {'error': 'Assinatura inválida.'},
-    );
+Response _invalidSignature(String? dataId) {
+  stderr.writeln('[mp] webhook rejeitado: assinatura inválida (data.id=$dataId)');
+  return Response.json(
+    statusCode: HttpStatus.unauthorized,
+    body: {'error': 'Assinatura inválida.'},
+  );
+}
 
 Future<Response> _handleLegacyIpn(RequestContext context) async {
   final rawId = context.request.uri.queryParameters['id'] ??
@@ -32,13 +35,16 @@ Future<Response> _handleLegacyIpn(RequestContext context) async {
   }
 
   if (!MercadoPagoWebhookSignature.verify(context, dataId: rawId)) {
-    return _invalidSignature();
+    return _invalidSignature(rawId);
   }
 
   try {
     final updated = await syncOrderPaymentFromMercadoPago(paymentId);
     return Response.json(body: {'processed': updated, 'payment_id': paymentId});
-  } catch (_) {
+  } catch (error) {
+    // Responde 200 para o MP não reenviar em loop; a reconsulta do polling
+    // do app cobre o pedido. O log é o único sinal da falha.
+    stderr.writeln('[mp] webhook: falha ao processar pagamento $paymentId: $error');
     return Response.json(
       statusCode: HttpStatus.ok,
       body: {'processed': false, 'payment_id': paymentId},
@@ -47,15 +53,17 @@ Future<Response> _handleLegacyIpn(RequestContext context) async {
 }
 
 Future<Response> _handleWebhook(RequestContext context) async {
+  int? paymentId;
   try {
     final bodyText = await context.request.body();
     if (bodyText.isEmpty) {
-      return _handleLegacyIpn(context);
+      return await _handleLegacyIpn(context);
     }
 
     final body = jsonDecode(bodyText);
-    final paymentId = _extractPaymentIdFromBody(body);
+    paymentId = _extractPaymentIdFromBody(body);
     if (paymentId == null) {
+      stderr.writeln('[mp] webhook sem ID de pagamento: $bodyText');
       return Response.json(body: {'processed': false});
     }
 
@@ -64,12 +72,13 @@ Future<Response> _handleWebhook(RequestContext context) async {
     final dataId =
         context.request.uri.queryParameters['data.id'] ?? paymentId.toString();
     if (!MercadoPagoWebhookSignature.verify(context, dataId: dataId)) {
-      return _invalidSignature();
+      return _invalidSignature(dataId);
     }
 
     final updated = await syncOrderPaymentFromMercadoPago(paymentId);
     return Response.json(body: {'processed': updated, 'payment_id': paymentId});
-  } catch (_) {
+  } catch (error) {
+    stderr.writeln('[mp] webhook: falha ao processar pagamento $paymentId: $error');
     return Response.json(
       statusCode: HttpStatus.ok,
       body: {'processed': false},

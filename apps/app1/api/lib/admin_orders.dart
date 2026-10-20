@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:postgres/postgres.dart';
 import 'package:tri_docuras_api/db.dart';
 import 'package:tri_docuras_api/mercado_pago_client.dart';
@@ -223,6 +225,7 @@ Future<({String status, String id})> _refundPix(
       'O Mercado Pago recusou o estorno ($mpStatus). O pedido não foi cancelado.',
     );
   } on MercadoPagoException catch (error) {
+    stderr.writeln('[mp] estorno do pedido $publicId falhou: ${error.message}');
     throw AdminOrderException(
       'Não foi possível estornar: ${error.message} O pedido não foi cancelado.',
     );

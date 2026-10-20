@@ -26,8 +26,10 @@ Future<Response> onRequest(RequestContext context) async {
         pix = await createPixForOrder(order['id'] as String);
       } on MercadoPagoException catch (error) {
         pixError = error.message;
-      } catch (_) {
+        stderr.writeln('[mp] Pix do pedido ${order['id']} não gerado: ${error.message}');
+      } catch (error) {
         pixError = 'Não foi possível gerar o Pix.';
+        stderr.writeln('[mp] Pix do pedido ${order['id']} falhou: $error');
       }
     } else {
       pixError = 'Pagamento Pix indisponível no momento.';

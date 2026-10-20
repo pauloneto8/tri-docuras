@@ -10,9 +10,11 @@ Future<Response> onRequest(RequestContext context) async {
 
   final dbOk = await pingDatabase();
 
+  // 503 quando o banco cai: o monitor externo precisa ver a falha.
   return Response.json(
+    statusCode: dbOk ? HttpStatus.ok : HttpStatus.serviceUnavailable,
     body: {
-      'status': 'ok',
+      'status': dbOk ? 'ok' : 'error',
       'service': 'Tri Doçuras API',
       'database': dbOk ? 'connected' : 'unavailable',
     },

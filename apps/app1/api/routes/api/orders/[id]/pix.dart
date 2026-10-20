@@ -22,11 +22,13 @@ Future<Response> onRequest(RequestContext context, String id) async {
       body: {'error': error.message},
     );
   } on MercadoPagoException catch (error) {
+    stderr.writeln('[mp] Pix do pedido $id não gerado: ${error.message}');
     return Response.json(
       statusCode: HttpStatus.badGateway,
       body: {'error': error.message},
     );
   } catch (error) {
+    stderr.writeln('[mp] Pix do pedido $id falhou: $error');
     return Response.json(
       statusCode: HttpStatus.internalServerError,
       body: {'error': 'Não foi possível gerar o Pix.'},
