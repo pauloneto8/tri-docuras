@@ -138,13 +138,15 @@ class CustomerAuth {
   }
 }
 
-/// Um pedido com cliente só pode ser visto pelo próprio cliente. Pedidos
-/// antigos, sem conta (`orderCustomerId == null`), seguem públicos como
-/// antes: o WhatsApp não é prova de identidade, então não são vinculados.
+/// Um pedido só é visto pelo próprio cliente. Pedido sem conta
+/// (`orderCustomerId == null`, anterior ao login obrigatório) não tem dono
+/// de sessão: quem acompanha esse pedido usa o link com `tracking_token`,
+/// que é checado na rota de acompanhamento. Antes, qualquer um lia esses
+/// pedidos pelo número sequencial (TD-0001, TD-0002...).
 bool canAccessOrder({
   required int? orderCustomerId,
   required int? sessionCustomerId,
 }) {
-  if (orderCustomerId == null) return true;
+  if (orderCustomerId == null) return false;
   return sessionCustomerId == orderCustomerId;
 }

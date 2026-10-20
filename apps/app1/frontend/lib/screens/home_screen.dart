@@ -582,7 +582,7 @@ class _BottomNav extends StatelessWidget {
 
   static const _idleColors = [
     AppColors.tan,
-    AppColors.sky,
+    AppColors.tan,
     AppColors.tan,
     AppColors.tan,
   ];

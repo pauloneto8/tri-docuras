@@ -146,10 +146,14 @@ void main() {
   });
 
   group('canAccessOrder', () {
-    test('pedido sem conta continua público (legado)', () {
+    test('pedido sem conta não é público, nem com sessão', () {
       expect(
         canAccessOrder(orderCustomerId: null, sessionCustomerId: null),
-        isTrue,
+        isFalse,
+      );
+      expect(
+        canAccessOrder(orderCustomerId: null, sessionCustomerId: 7),
+        isFalse,
       );
     });
 
