@@ -20,14 +20,22 @@ void main() {
     });
 
     test('issueToken + verifyToken: round-trip válido', () {
-      final token = AdminAuth.issueToken();
-      expect(token, contains('.'));
-      expect(AdminAuth.verifyToken(token), isTrue);
+      final claims = AdminAuth.verifyToken(AdminAuth.issueToken());
+      expect(claims, isNotNull);
+      expect(claims!.userId, 0);
+      expect(claims.sessionVersion, 0);
     });
 
-    test('token não é mais reversível para a senha em claro (não é base64 dela)', () {
-      final token = AdminAuth.issueToken();
-      expect(token, isNot(contains(_password)));
+    test('token carrega usuário e versão de sessão', () {
+      final claims = AdminAuth.verifyToken(
+        AdminAuth.issueToken(userId: 7, sessionVersion: 3),
+      );
+      expect(claims!.userId, 7);
+      expect(claims.sessionVersion, 3);
+    });
+
+    test('token não contém a senha em claro', () {
+      expect(AdminAuth.issueToken(), isNot(contains(_password)));
     });
 
     test('assinatura adulterada é rejeitada', () {
@@ -35,46 +43,73 @@ void main() {
       final lastChar = token[token.length - 1];
       final replacement = lastChar == '0' ? '1' : '0';
       final tampered = '${token.substring(0, token.length - 1)}$replacement';
-      expect(AdminAuth.verifyToken(tampered), isFalse);
+      expect(AdminAuth.verifyToken(tampered), isNull);
     });
 
-    test('expiração adulterada (estendida) é rejeitada — assinatura não bate', () {
-      final token = AdminAuth.issueToken();
-      final dotIndex = token.indexOf('.');
-      final expiry = int.parse(token.substring(0, dotIndex));
-      final signature = token.substring(dotIndex + 1);
-      final forgedExpiry = expiry + 1000 * 60 * 60 * 24; // +1 dia
-      final forgedToken = '$forgedExpiry.$signature';
-      expect(AdminAuth.verifyToken(forgedToken), isFalse);
+    test('trocar o id do usuário no token é rejeitado', () {
+      final parts = AdminAuth.issueToken(userId: 7).split('.');
+      final forged = ['8', parts[1], parts[2], parts[3]].join('.');
+      expect(AdminAuth.verifyToken(forged), isNull);
     });
 
-    test('token expirado é rejeitado mesmo com assinatura válida', () {
-      // A assinatura é HMAC do campo de expiração: para obtain-la com um
-      // timestamp no passado é preciso reaproveitar a assinatura de um token
-      // válido e trocar o timestamp — o que também invalida a assinatura.
-      // Nos dois caminhos (expiração ou assinatura) o esperado é `false`.
+    test('expiração estendida é rejeitada (assinatura não bate)', () {
+      final parts = AdminAuth.issueToken().split('.');
+      final forgedExpiry = int.parse(parts[2]) + 1000 * 60 * 60 * 24;
+      final forged = [parts[0], parts[1], '$forgedExpiry', parts[3]].join('.');
+      expect(AdminAuth.verifyToken(forged), isNull);
+    });
+
+    test('token expirado é rejeitado', () {
       final pastEpoch = DateTime.now()
           .toUtc()
           .subtract(const Duration(hours: 1))
           .millisecondsSinceEpoch;
-      final token = AdminAuth.issueToken();
-      final dotIndex = token.indexOf('.');
-      final signature = token.substring(dotIndex + 1);
-      final expiredToken = '$pastEpoch.$signature';
-      expect(AdminAuth.verifyToken(expiredToken), isFalse);
+      final parts = AdminAuth.issueToken().split('.');
+      final expired = [parts[0], parts[1], '$pastEpoch', parts[3]].join('.');
+      expect(AdminAuth.verifyToken(expired), isNull);
     });
 
     test('token malformado não lança exceção', () {
-      expect(AdminAuth.verifyToken('sem-ponto-nenhum'), isFalse);
-      expect(AdminAuth.verifyToken('123.'), isFalse);
-      expect(AdminAuth.verifyToken('.assinatura'), isFalse);
-      expect(AdminAuth.verifyToken(null), isFalse);
+      expect(AdminAuth.verifyToken('sem-pontos'), isNull);
+      expect(AdminAuth.verifyToken('1.2.3'), isNull);
+      expect(AdminAuth.verifyToken('a.b.c.d'), isNull);
+      expect(AdminAuth.verifyToken(null), isNull);
     });
 
     test('token emitido com outra senha não é aceito', () {
       final token = AdminAuth.issueToken();
       Env.override({'APP1_ADMIN_PASSWORD': 'outra-senha'});
-      expect(AdminAuth.verifyToken(token), isFalse);
+      expect(AdminAuth.verifyToken(token), isNull);
+    });
+  });
+
+  group('AdminAuth (APP1_ADMIN_SECRET separada da senha)', () {
+    setUp(() => Env.override({
+          'APP1_ADMIN_PASSWORD': _password,
+          'APP1_ADMIN_SECRET': 'chave-propria-do-token',
+        }));
+    tearDown(Env.reset);
+
+    test('token verifica com a chave própria', () {
+      expect(AdminAuth.verifyToken(AdminAuth.issueToken()), isNotNull);
+    });
+
+    test('trocar a senha não invalida tokens assinados pela chave própria', () {
+      final token = AdminAuth.issueToken();
+      Env.override({
+        'APP1_ADMIN_PASSWORD': 'senha-nova',
+        'APP1_ADMIN_SECRET': 'chave-propria-do-token',
+      });
+      expect(AdminAuth.verifyToken(token), isNotNull);
+    });
+
+    test('token não verifica quando a chave muda', () {
+      final token = AdminAuth.issueToken();
+      Env.override({
+        'APP1_ADMIN_PASSWORD': _password,
+        'APP1_ADMIN_SECRET': 'outra-chave',
+      });
+      expect(AdminAuth.verifyToken(token), isNull);
     });
   });
 
@@ -102,7 +137,7 @@ void main() {
     });
 
     test('verifyToken rejeita qualquer token', () {
-      expect(AdminAuth.verifyToken('1.abc'), isFalse);
+      expect(AdminAuth.verifyToken('0.0.9999999999999.abc'), isNull);
     });
 
     test('issueToken lança StateError', () {

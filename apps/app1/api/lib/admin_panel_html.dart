@@ -98,6 +98,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     .form-grid { display: grid; gap: 12px; }
     .form-row { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
     .checks { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+    .not-owner .owner-only { display: none !important; }
     .checks label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.9rem; letter-spacing: 0; }
     .checks input { width: auto; }
     .section-view[hidden] { display: none !important; }
@@ -153,6 +154,9 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     <div id="loginView" class="login card">
       <h1>Tri Doçuras</h1>
       <p class="sub">Painel da loja</p>
+      <label for="email">E-MAIL</label>
+      <input id="email" type="email" autocomplete="username" placeholder="Seu e-mail de acesso">
+      <div style="height:12px"></div>
       <label for="password">SENHA</label>
       <input id="password" type="password" autocomplete="current-password" placeholder="Senha do painel">
       <div style="height:12px"></div>
@@ -173,7 +177,8 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         <button class="main-tab active" data-section="orders">Pedidos</button>
         <button class="main-tab" data-section="products">Produtos</button>
         <button class="main-tab" data-section="finance">Financeiro</button>
-        <button class="main-tab" data-section="settings">Loja</button>
+        <button class="main-tab owner-only" data-section="settings">Loja</button>
+        <button class="main-tab owner-only" data-section="users">Usuários</button>
       </div>
 
       <div id="ordersView" class="section-view">
@@ -287,6 +292,54 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         <div id="productsError" class="error"></div>
       </div>
 
+      <div id="usersView" class="section-view" hidden>
+        <div class="toolbar">
+          <button id="newUserBtn" type="button">Novo usuário</button>
+          <button id="refreshUsersBtn" type="button" class="secondary">Atualizar</button>
+        </div>
+        <div class="card">
+          <h2>Usuários do painel</h2>
+          <div id="usersList"></div>
+          <div id="usersError" class="error"></div>
+        </div>
+        <div id="userFormCard" class="card" hidden>
+          <h2 id="userFormTitle">Novo usuário</h2>
+          <form id="userForm" class="form-grid">
+            <input type="hidden" id="userId" value="">
+            <div class="form-row">
+              <div>
+                <label for="userName">NOME</label>
+                <input id="userName" required maxlength="100" placeholder="Ex.: Maria">
+              </div>
+              <div>
+                <label for="userEmail">E-MAIL (LOGIN)</label>
+                <input id="userEmail" type="email" required maxlength="200">
+              </div>
+            </div>
+            <div class="form-row">
+              <div>
+                <label for="userRole">PAPEL</label>
+                <select id="userRole">
+                  <option value="atendente">Atendente: pedidos, produtos e financeiro</option>
+                  <option value="dono">Dono: também usuários e loja</option>
+                </select>
+              </div>
+              <div>
+                <label for="userPassword" id="userPasswordLabel">SENHA INICIAL</label>
+                <input id="userPassword" type="password" minlength="8" maxlength="72" autocomplete="new-password">
+              </div>
+            </div>
+            <div class="checks">
+              <label><input id="userActive" type="checkbox" checked> Ativo (pode entrar)</label>
+            </div>
+            <div class="actions">
+              <button id="saveUserBtn" type="submit">Salvar usuário</button>
+              <button id="cancelUserBtn" type="button" class="secondary">Cancelar</button>
+            </div>
+            <div id="userFormError" class="error"></div>
+          </form>
+        </div>
+      </div>
       <div id="settingsView" class="section-view" hidden>
         <div class="card">
           <h2>Loja</h2>
@@ -365,6 +418,23 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     const productsView = document.getElementById("productsView");
     const financeView = document.getElementById("financeView");
     const settingsView = document.getElementById("settingsView");
+    const usersView = document.getElementById("usersView");
+    const usersList = document.getElementById("usersList");
+    const usersError = document.getElementById("usersError");
+    const userFormCard = document.getElementById("userFormCard");
+    const userForm = document.getElementById("userForm");
+    const userFormTitle = document.getElementById("userFormTitle");
+    const userIdInput = document.getElementById("userId");
+    const userNameInput = document.getElementById("userName");
+    const userEmailInput = document.getElementById("userEmail");
+    const userRoleInput = document.getElementById("userRole");
+    const userActiveInput = document.getElementById("userActive");
+    const userPasswordInput = document.getElementById("userPassword");
+    const userPasswordLabel = document.getElementById("userPasswordLabel");
+    const userFormError = document.getElementById("userFormError");
+    const emailInput = document.getElementById("email");
+    const userSaveBtn = document.getElementById("saveUserBtn");
+    let currentUser = null;
     const settingsForm = document.getElementById("settingsForm");
     const settingsFee = document.getElementById("settingsFee");
     const settingsOpen = document.getElementById("settingsOpen");
@@ -522,9 +592,10 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       try {
         const data = await api("/api/admin/session", {
           method: "POST",
-          body: JSON.stringify({ password: passwordInput.value })
+          body: JSON.stringify({ email: emailInput.value, password: passwordInput.value })
         });
         setToken(data.token);
+        applyUser(data.user);
         showPanel();
         await refreshCurrentSection();
         startOrdersTimer();
@@ -769,6 +840,117 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       }
     }
 
+    function applyUser(user) {
+      currentUser = user;
+      document.body.classList.toggle("not-owner", !(user && user.role === "dono"));
+    }
+
+    async function loadMe() {
+      const data = await api("/api/admin/me");
+      applyUser(data.user);
+    }
+
+    function resetUserForm() {
+      userIdInput.value = "";
+      userNameInput.value = "";
+      userEmailInput.value = "";
+      userEmailInput.disabled = false;
+      userRoleInput.value = "atendente";
+      userActiveInput.checked = true;
+      userPasswordInput.value = "";
+      userPasswordInput.required = true;
+      userPasswordLabel.textContent = "SENHA INICIAL";
+      userFormTitle.textContent = "Novo usuário";
+      userFormError.textContent = "";
+      userFormCard.hidden = true;
+    }
+
+    function openUserForm(user) {
+      resetUserForm();
+      userIdInput.value = String(user.id);
+      userNameInput.value = user.name;
+      userEmailInput.value = user.email;
+      userEmailInput.disabled = true;
+      userRoleInput.value = user.role;
+      userActiveInput.checked = user.active;
+      userPasswordInput.required = false;
+      userPasswordLabel.textContent = "NOVA SENHA (OPCIONAL)";
+      userFormTitle.textContent = "Editar usuário";
+      userFormCard.hidden = false;
+      userNameInput.focus();
+    }
+
+    function renderUserRow(user) {
+      const row = document.createElement("div");
+      row.className = "card product-row";
+      const info = document.createElement("div");
+      info.style.flex = "1";
+      const title = document.createElement("div");
+      title.className = "product-name";
+      title.textContent = user.name + (user.role === "dono" ? " · dono" : " · atendente");
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = user.email + (user.active ? "" : " · desativado");
+      info.appendChild(title);
+      info.appendChild(meta);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.textContent = "Editar";
+      button.addEventListener("click", function() { openUserForm(user); });
+      row.appendChild(info);
+      row.appendChild(button);
+      return row;
+    }
+
+    async function loadUsers() {
+      usersError.textContent = "";
+      usersList.innerHTML = '<div class="empty">Carregando…</div>';
+      try {
+        const data = await api("/api/admin/users");
+        usersList.innerHTML = "";
+        if (!data.users.length) {
+          usersList.innerHTML = '<div class="empty">Nenhum usuário.</div>';
+          return;
+        }
+        data.users.forEach(function(user) { usersList.appendChild(renderUserRow(user)); });
+      } catch (error) {
+        usersList.innerHTML = "";
+        usersError.textContent = error.message;
+      }
+    }
+
+    async function saveUser(event) {
+      event.preventDefault();
+      userFormError.textContent = "";
+      userSaveBtn.disabled = true;
+      try {
+        const editingId = userIdInput.value;
+        const payload = {
+          name: userNameInput.value,
+          role: userRoleInput.value,
+          active: userActiveInput.checked
+        };
+        if (editingId) {
+          if (userPasswordInput.value) payload.password = userPasswordInput.value;
+          await api("/api/admin/users/" + encodeURIComponent(editingId), {
+            method: "PUT",
+            body: JSON.stringify(payload)
+          });
+        } else {
+          payload.email = userEmailInput.value;
+          payload.password = userPasswordInput.value;
+          await api("/api/admin/users", { method: "POST", body: JSON.stringify(payload) });
+        }
+        resetUserForm();
+        await loadUsers();
+      } catch (error) {
+        userFormError.textContent = error.message;
+      } finally {
+        userSaveBtn.disabled = false;
+      }
+    }
+
     async function loadSettings() {
       settingsError.textContent = "";
       try {
@@ -973,6 +1155,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       productsView.hidden = section !== "products";
       financeView.hidden = section !== "finance";
       settingsView.hidden = section !== "settings";
+      usersView.hidden = section !== "users";
       if (section === "orders") {
         loadOrders();
         startOrdersTimer();
@@ -982,6 +1165,10 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       } else if (section === "settings") {
         stopOrdersTimer();
         loadSettings();
+      } else if (section === "users") {
+        stopOrdersTimer();
+        resetUserForm();
+        loadUsers();
       } else {
         stopOrdersTimer();
         loadFinance();
@@ -992,6 +1179,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       if (currentSection === "orders") await loadOrders();
       else if (currentSection === "products") await loadProducts();
       else if (currentSection === "settings") await loadSettings();
+      else if (currentSection === "users") await loadUsers();
       else await loadFinance();
     }
 
@@ -1092,6 +1280,14 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     });
     categoryForm.addEventListener("submit", saveCategory);
     settingsForm.addEventListener("submit", saveSettings);
+    userForm.addEventListener("submit", saveUser);
+    document.getElementById("newUserBtn").addEventListener("click", function() {
+      resetUserForm();
+      userFormCard.hidden = false;
+      userNameInput.focus();
+    });
+    document.getElementById("refreshUsersBtn").addEventListener("click", loadUsers);
+    document.getElementById("cancelUserBtn").addEventListener("click", resetUserForm);
     productForm.addEventListener("submit", saveProduct);
     productImageInput.addEventListener("change", function() {
       const file = productImageInput.files[0];
@@ -1109,7 +1305,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     setFinancePeriod("today");
 
     if (token()) {
-      showPanel();
+      loadMe().then(showPanel).catch(showLogin);
     } else {
       showLogin();
     }

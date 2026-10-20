@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:postgres/postgres.dart';
+import 'package:tri_docuras_api/admin_users.dart';
 import 'package:tri_docuras_api/store_settings.dart';
 
 Connection? _connection;
@@ -203,6 +204,7 @@ Future<void> ensureSchema(Connection connection) async {
 
   await _seedCategories(connection);
   await ensureStoreSettingsSchema(connection);
+  await ensureAdminUsersSchema(connection);
 }
 
 Future<void> _seedCategories(Connection connection) async {
@@ -288,6 +290,7 @@ Future<void> initializeDatabase() async {
   final connection = await getConnection();
   await ensureSchema(connection);
   await seedProducts(connection);
+  await bootstrapAdminUser();
   _databaseInitialized = true;
 }
 

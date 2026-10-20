@@ -12,7 +12,8 @@ Future<Response> onRequest(RequestContext context) async {
     );
   }
 
-  if (!AdminAuth.isAuthorized(context.request)) {
+  final session = await AdminAuth.resolve(context.request);
+  if (session == null) {
     return AdminAuth.unauthorized();
   }
 
@@ -22,6 +23,7 @@ Future<Response> onRequest(RequestContext context) async {
   }
 
   if (context.request.method == HttpMethod.put) {
+    if (!session.isOwner) return AdminAuth.forbidden();
     try {
       final body = await context.request.json() as Map<String, dynamic>;
       final settings = await updateStoreSettings(

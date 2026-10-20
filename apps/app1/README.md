@@ -47,7 +47,10 @@ Domínio em `.env` → `APP1_DOMAIN` (`tridocuras.com.br`).
 | POST | `/api/webhooks/mercadopago` | Webhook de confirmação de pagamento |
 | GET | `/api/orders/{id}/tracking` | Timeline de rastreamento (cliente) |
 | GET | `/admin` | Painel web da loja |
-| POST | `/api/admin/session` | Login do painel. Limite: 5 tentativas a cada 15 min por IP |
+| POST | `/api/admin/session` | Login do painel (`email` + `password`; só senha no modo legado). Limite: 5 tentativas a cada 15 min por IP |
+| GET | `/api/admin/me` | Usuário logado e papel |
+| GET/POST | `/api/admin/users` | Lista e cria usuários do painel (só dono) |
+| PUT | `/api/admin/users/{id}` | Edita nome, papel, ativo e senha; invalida as sessões do usuário (só dono) |
 | GET | `/api/admin/orders` | Lista pedidos (filtros: `status`, `search`, `from`, `to`) |
 | POST | `/api/admin/orders/{id}/status` | Atualiza status. Cancelar pedido pago exige `refund: true` (estorna o Pix no MP) ou `refund: false` (cancela sem estorno). Status `expired` é automático |
 | GET | `/api/admin/products` | Lista produtos (inclui ocultos) + categorias |
@@ -146,7 +149,9 @@ Transições no painel: `paid` → `preparing` → `ready` → `completed` (com 
 | `APP1_MP_PUBLIC_KEY` | Recomendado | Public Key de produção |
 | `APP1_MP_CLIENT_ID` / `APP1_MP_CLIENT_SECRET` | Opcional | OAuth / integrações legadas (não usados no Pix atual) |
 | `APP1_MP_TEST_*` / `APP1_MP_USE_TEST` | Não | Sandbox Mercado Pago |
-| `APP1_ADMIN_PASSWORD` | Para painel | Senha de https://tridocuras.com.br/admin |
+| `APP1_ADMIN_PASSWORD` | Para painel | Senha de https://tridocuras.com.br/admin. Sem usuários no banco, ela sozinha abre o painel (modo legado) |
+| `APP1_ADMIN_EMAIL` | Recomendado | E-mail do dono. Na primeira subida, com o banco sem usuários, cria o dono com este e-mail e a senha acima |
+| `APP1_ADMIN_SECRET` | Recomendado | Chave que assina os tokens do painel. Se ausente, usa a senha |
 | `APP1_DOMAIN` | Sim | Domínio público + webhook MP |
 
 WhatsApp exibido no Perfil do app: `frontend/lib/config.dart` → `storeWhatsApp` (não é variável de `.env`).

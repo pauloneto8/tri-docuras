@@ -12,7 +12,8 @@ Future<Response> onRequest(RequestContext context, String id) async {
     );
   }
 
-  if (!AdminAuth.isAuthorized(context.request)) {
+  final session = await AdminAuth.resolve(context.request);
+  if (session == null) {
     return AdminAuth.unauthorized();
   }
 
