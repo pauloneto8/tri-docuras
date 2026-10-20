@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:postgres/postgres.dart';
 import 'package:tri_docuras_api/db.dart';
+import 'package:tri_docuras_api/order_events.dart';
 import 'package:tri_docuras_api/mercado_pago_client.dart';
 import 'package:tri_docuras_api/orders.dart';
 
@@ -124,6 +125,7 @@ Future<Map<String, Object?>> updateOrderStatus(
   String publicId,
   String nextStatus, {
   bool? refund,
+  required String actor,
 }) async {
   final normalized = nextStatus.trim();
   if (!adminAllStatuses.contains(normalized)) {
@@ -177,24 +179,44 @@ Future<Map<String, Object?>> updateOrderStatus(
   }
 
   final connection = await getConnection();
-  final result = await connection.execute(
-    '''
-    UPDATE orders
-    SET status = \$2,
-        refund_status = COALESCE(\$3::text, refund_status),
-        refunded_at = CASE WHEN \$3::text = 'refunded' THEN NOW() ELSE refunded_at END,
-        mp_refund_id = COALESCE(\$4::text, mp_refund_id)
-    WHERE public_id = \$1
-    RETURNING public_id, status, customer_name, whatsapp, delivery_mode,
-              delivery_street, delivery_number, delivery_complement,
-              delivery_neighborhood, delivery_reference,
-              subtotal, delivery_fee, total, paid_at, created_at,
-              refund_status, refunded_at;
-    ''',
-    parameters: [publicId, normalized, refundStatus, mpRefundId],
-  );
+  final result = await connection.runTx((tx) async {
+    final current = await tx.execute(
+      r'SELECT id, status FROM orders WHERE public_id = $1 FOR UPDATE;',
+      parameters: [publicId],
+    );
+    if (current.isEmpty) return null;
+    final orderId = current.first[0]! as int;
+    final fromStatus = current.first[1]! as String;
 
-  if (result.isEmpty) {
+    final updated = await tx.execute(
+      '''
+      UPDATE orders
+      SET status = \$2,
+          refund_status = COALESCE(\$3::text, refund_status),
+          refunded_at = CASE WHEN \$3::text = 'refunded' THEN NOW() ELSE refunded_at END,
+          mp_refund_id = COALESCE(\$4::text, mp_refund_id)
+      WHERE public_id = \$1
+      RETURNING public_id, status, customer_name, whatsapp, delivery_mode,
+                delivery_street, delivery_number, delivery_complement,
+                delivery_neighborhood, delivery_reference,
+                subtotal, delivery_fee, total, paid_at, created_at,
+                refund_status, refunded_at;
+      ''',
+      parameters: [publicId, normalized, refundStatus, mpRefundId],
+    );
+
+    await recordOrderEvent(
+      tx,
+      orderId: orderId,
+      from: fromStatus,
+      to: normalized,
+      actor: actor,
+      note: refundStatus == null ? null : 'estorno: $refundStatus',
+    );
+    return updated;
+  });
+
+  if (result == null) {
     throw AdminOrderException('Pedido não encontrado.');
   }
 

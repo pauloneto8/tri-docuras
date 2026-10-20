@@ -538,8 +538,46 @@ const adminPanelHtml = r'''<!DOCTYPE html>
           'Total ' + formatMoney(order.total) + ' · ' + formatDate(order.created_at) +
         '</div>' +
         '<ul class="items">' + items + '</ul>' +
-        '<div class="actions">' + actions + '</div>' +
+        '<div class="actions">' + actions +
+          '<button type="button" class="secondary" data-history="' + order.id + '">Histórico</button>' +
+        '</div>' +
+        '<div class="history" data-history-box="' + order.id + '" hidden></div>' +
       '</article>';
+    }
+
+    const historyStatusLabels = {
+      pending_payment: "Aguardando Pix", paid: "Pago", preparing: "Em preparo",
+      ready: "Pronto", completed: "Concluído", cancelled: "Cancelado", expired: "Expirado"
+    };
+
+    async function toggleHistory(id) {
+      const box = document.querySelector('[data-history-box="' + CSS.escape(id) + '"]');
+      if (!box) return;
+      if (!box.hidden) {
+        box.hidden = true;
+        return;
+      }
+      box.hidden = false;
+      box.textContent = "Carregando…";
+      try {
+        const data = await api("/api/admin/orders/" + encodeURIComponent(id) + "/events");
+        box.textContent = "";
+        if (!data.events.length) {
+          box.textContent = "Sem registros.";
+          return;
+        }
+        data.events.forEach(function(event) {
+          const line = document.createElement("div");
+          line.className = "meta";
+          const from = event.from ? (historyStatusLabels[event.from] || event.from) + " → " : "";
+          const to = historyStatusLabels[event.to] || event.to;
+          const note = event.note ? " (" + event.note + ")" : "";
+          line.textContent = formatDate(event.at) + " · " + from + to + " · " + event.actor + note;
+          box.appendChild(line);
+        });
+      } catch (error) {
+        box.textContent = error.message;
+      }
     }
 
     function renderProduct(product) {
@@ -1145,6 +1183,11 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         financeError.textContent = error.message;
       }
     }
+
+    ordersEl.addEventListener("click", function(event) {
+      const button = event.target.closest("[data-history]");
+      if (button) toggleHistory(button.dataset.history);
+    });
 
     function showSection(section) {
       currentSection = section;

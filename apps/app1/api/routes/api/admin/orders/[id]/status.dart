@@ -36,6 +36,7 @@ Future<Response> onRequest(RequestContext context, String id) async {
       id,
       status,
       refund: refundValue is bool ? refundValue : null,
+      actor: session.name,
     );
     return Response.json(body: {'order': order});
   } on AdminOrderException catch (error) {

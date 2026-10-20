@@ -4,6 +4,7 @@ import 'package:postgres/postgres.dart';
 import 'package:tri_docuras_api/db.dart';
 import 'package:tri_docuras_api/mercado_pago_client.dart';
 import 'package:tri_docuras_api/mercado_pago_config.dart';
+import 'package:tri_docuras_api/order_events.dart';
 import 'package:tri_docuras_api/payment_check_throttle.dart';
 import 'package:tri_docuras_api/store_settings.dart';
 import 'package:tri_docuras_api/whatsapp_notify.dart';
@@ -271,6 +272,13 @@ Future<Map<String, Object?>> createOrder(
       'UPDATE orders SET public_id = \$1 WHERE id = \$2;',
       parameters: [publicId, orderId],
     );
+    await recordOrderEvent(
+      tx,
+      orderId: orderId,
+      from: null,
+      to: 'pending_payment',
+      actor: actorCustomer,
+    );
 
     for (final item in input.items) {
       await tx.execute(
@@ -438,34 +446,57 @@ const expiredOrderGrace = Duration(hours: 24);
 /// Devolve quantos pedidos foram expirados.
 Future<int> expireStaleOrders() async {
   final connection = await getConnection();
-  final result = await connection.execute(
-    '''
-    UPDATE orders
-    SET status = 'expired'
-    WHERE status = 'pending_payment'
-      AND COALESCE(pix_expires_at, created_at)
-          < (NOW() AT TIME ZONE 'UTC') - make_interval(secs => \$1)
-    RETURNING public_id;
-    ''',
-    parameters: [expiredOrderGrace.inSeconds.toDouble()],
-  );
-  return result.length;
+  return connection.runTx((tx) async {
+    final result = await tx.execute(
+      '''
+      UPDATE orders
+      SET status = 'expired'
+      WHERE status = 'pending_payment'
+        AND COALESCE(pix_expires_at, created_at)
+            < (NOW() AT TIME ZONE 'UTC') - make_interval(secs => \$1)
+      RETURNING id;
+      ''',
+      parameters: [expiredOrderGrace.inSeconds.toDouble()],
+    );
+    for (final row in result) {
+      await recordOrderEvent(
+        tx,
+        orderId: row[0]! as int,
+        from: 'pending_payment',
+        to: 'expired',
+        actor: actorSystem,
+        note: 'Pix vencido há mais de 24 h',
+      );
+    }
+    return result.length;
+  });
 }
 
 Future<bool> markOrderPaid(String publicId, {int? paymentId}) async {
   final connection = await getConnection();
-  final result = await connection.execute(
-    '''
-    UPDATE orders
-    SET status = 'paid',
-        paid_at = NOW(),
-        mp_payment_id = COALESCE(\$2, mp_payment_id)
-    WHERE public_id = \$1 AND status = ANY(\$3::text[])
-    RETURNING public_id;
-    ''',
-    parameters: [publicId, paymentId, paymentConfirmableStatuses],
-  );
-  final updated = result.isNotEmpty;
+  final updated = await connection.runTx((tx) async {
+    final result = await tx.execute(
+      '''
+      UPDATE orders
+      SET status = 'paid',
+          paid_at = NOW(),
+          mp_payment_id = COALESCE(\$2, mp_payment_id)
+      WHERE public_id = \$1 AND status = ANY(\$3::text[])
+      RETURNING id, status;
+      ''',
+      parameters: [publicId, paymentId, paymentConfirmableStatuses],
+    );
+    if (result.isEmpty) return false;
+    await recordOrderEvent(
+      tx,
+      orderId: result.first[0]! as int,
+      from: 'pending_payment',
+      to: 'paid',
+      actor: actorMercadoPago,
+      note: paymentId == null ? null : 'pagamento $paymentId',
+    );
+    return true;
+  });
   if (!updated) {
     stderr.writeln(
       '[mp] pagamento $paymentId ignorado: pedido $publicId '

@@ -49,6 +49,7 @@ Domínio em `.env` → `APP1_DOMAIN` (`tridocuras.com.br`).
 | GET | `/admin` | Painel web da loja |
 | POST | `/api/admin/session` | Login do painel (`email` + `password`; só senha no modo legado). Limite: 5 tentativas a cada 15 min por IP |
 | GET | `/api/admin/me` | Usuário logado e papel |
+| GET | `/api/admin/orders/{id}/events` | Histórico de status do pedido: quem mudou, quando e de/para |
 | GET/POST | `/api/admin/users` | Lista e cria usuários do painel (só dono) |
 | PUT | `/api/admin/users/{id}` | Edita nome, papel, ativo e senha; invalida as sessões do usuário (só dono) |
 | GET | `/api/admin/orders` | Lista pedidos (filtros: `status`, `search`, `from`, `to`) |

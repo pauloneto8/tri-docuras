@@ -180,7 +180,8 @@ concluído aparece como pendente.
 | Cópia do backup fora da VPS (1.1) | ⏳ Pendente | Destino ainda não definido (pergunta da seção 3). |
 | Fase 2.1 (configurações da loja) | 🟡 Em andamento | Feito: tabela `store_settings` (taxa de entrega, loja aberta, aviso), API e aba "Loja" no painel. Pedidos recusam quando a loja está fechada. Valores iniciais iguais aos antigos (R$ 6,00, aberta). Falta: horários, CEPs, aviso exibido no app e a fila de decisões do dono. |
 | Fase 2.2 (usuários do painel) | 🟡 Implementado, falta deploy | Tabela `admin_users` (bcrypt), login por e-mail, papéis dono e atendente, versão de sessão para revogar tokens, aba "Usuários". Modo legado: sem usuários no banco, a senha única ainda entra. Para ativar: definir `APP1_ADMIN_EMAIL` (e recomendado `APP1_ADMIN_SECRET`) no `.env`. |
-| Fase 2.3 a 2.6 | ⏳ Não iniciada | `order_events` (depende de 2.2, já pronto), pronta entrega × encomenda, estoque e variações. |
+| Fase 2.3 (histórico de status) | 🟡 Implementado, falta deploy | Tabela `order_events`, gravada na mesma transação de cada mudança: criação (Cliente), pagamento (Mercado Pago), expiração (Sistema) e painel (nome do usuário). Botão "Histórico" em cada pedido. Testado contra Postgres real em teste de fumaça (descartado). |
+| Fase 2.4 a 2.6 | ⏳ Não iniciada | Pronta entrega × encomenda, estoque e variações por produto. |
 | Fase 3 (3.1 a 3.6) | ⏳ Não iniciada | Sem `sitemap.xml`/`robots.txt`; PWA, status para o cliente, páginas legais e UX pendentes. |
 | Fase 4 (4.1 a 4.6) | ⏳ Não iniciada | Parte da 4.4 (docs) feita nesta data: `README.md` raiz, `apps/app1/README.md` e `docs/`. |
 | Contas de cliente, Fases A e B | ✅ Feito | Ver [`CONTAS.md`](CONTAS.md). |
