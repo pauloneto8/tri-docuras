@@ -191,7 +191,8 @@ concluído aparece como pendente.
 | Fase 3.4 (páginas legais) | ⚠️ Parcial (20/10, sem deploy) | Termos de Compra e Política de Privacidade no Perfil e no checkout. Aceite obrigatório no checkout; o pedido grava `accepted_terms_at` e a API recusa pedido sem o aceite. Vendedor vem de `APP1_SELLER_NAME` e `APP1_SELLER_DOCUMENT` no `.env`; sem eles, o texto cita "a Tri Doçuras". Pendente: o dono preencher o CNPJ ou CPF e revisar os textos com advogado, principalmente cancelamento e arrependimento. |
 | Fase 4.5 (métricas) | ✅ Feito (20/10, sem deploy ainda) | Financeiro ganha pedidos criados, conversão (pagos / criados) e Pix vencido (vencidos / pagos + vencidos), pelo `created_at` do período. "Pedidos por dia" continua mostrando só os pagos, como antes. |
 | Fase 4.2 (testes de integração) | ✅ Feito (20/10) | Job `integracao` no CI com Postgres 16 como serviço. Cobre reserva da última unidade com pedidos simultâneos e devolução de estoque ao cancelar. Os testes são pulados sem `DATABASE_URL`, então a suíte normal não muda. Fluxo do webhook do Mercado Pago ainda não coberto. |
-| Fase 4 (4.1, 4.3, 4.4, 4.6) | ⏸️ Pausada | Parte da 4.4 (docs) feita em 20/10: `README.md` da raiz, `apps/app1/README.md` e `docs/`. Restante não iniciado. |
+| Fase 4.4 (limpeza) | ✅ Feito (20/10) | Removidos `docker-compose.yml`, `nginx/`, `scripts/issue-certs.sh` e `scripts/reload-nginx.sh` (stack antigo). `scripts/backup-tridocuras.sh` fica, porque o compose ativo o usa. Decisão sobre `apps/app2` continua aberta. |
+| Fase 4 (4.1, 4.3, 4.6) | ⏸️ Pausada | Parte da 4.4 (docs) feita em 20/10: `README.md` da raiz, `apps/app1/README.md` e `docs/`. Restante não iniciado. |
 | Contas de cliente, Fases A e B | ✅ Feito | Ver [`CONTAS.md`](CONTAS.md). |
 | Contas de cliente, Fases C e D | ⏸️ Pausada | Painel e LGPD. |
 

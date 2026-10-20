@@ -46,8 +46,9 @@ docker compose -f docker-compose.tridocuras.yml build app-tridocuras && \
 | `app-tridocuras-db` | `app-tridocuras-db` | PostgreSQL 16 |
 | `backup-tridocuras` | `backup-tridocuras` | Backup diário |
 
-O `docker-compose.yml` da raiz é **antigo** (stack `hosting-*`, já desligada)
-e não deve ser usado. Não rode `docker compose down -v`.
+O `docker-compose.yml` antigo (stack `hosting-*`) e o Nginx de antes foram
+removidos do repositório (ver PLANO.md, seção 4.4). Use só o compose ativo.
+Não rode `docker compose down -v`.
 
 ## Segredos
 
@@ -69,10 +70,9 @@ O modelo sem valores está em [`.env.example`](.env.example).
 ├── apps/
 │   ├── app1/                       # Tri Doçuras: api/, frontend/, README.md
 │   └── app2/                       # cópia antiga do AssistFin (fora do escopo)
-├── scripts/                        # backup-tridocuras.sh e utilitários
+├── scripts/                        # backup-tridocuras.sh
 ├── docs/                           # OPERACAO.md e MONITORAMENTO.md
 ├── backups/                        # backups locais (ignorados pelo git)
-├── nginx/ (antigo)                 # remover, ver PLANO.md, seção 4.4
 ├── PLANO.md, FASE0.md, CONTAS.md   # planos e registro de execução
 └── .github/workflows/              # CI do app1
 ```
