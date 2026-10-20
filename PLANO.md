@@ -193,7 +193,8 @@ concluído aparece como pendente.
 | Fase 4.2 (testes de integração) | ✅ Feito (20/10) | Job `integracao` no CI com Postgres 16 como serviço. Cobre reserva da última unidade com pedidos simultâneos e devolução de estoque ao cancelar. Os testes são pulados sem `DATABASE_URL`, então a suíte normal não muda. Fluxo do webhook do Mercado Pago ainda não coberto. |
 | Fase 4.4 (limpeza) | ✅ Feito (20/10) | Removidos `docker-compose.yml`, `nginx/`, `scripts/issue-certs.sh` e `scripts/reload-nginx.sh` (stack antigo). `scripts/backup-tridocuras.sh` fica, porque o compose ativo o usa. Decisão sobre `apps/app2` continua aberta. |
 | Fase 4.1 (migrações versionadas) | ✅ Feito (20/10, sem deploy ainda) | Runner em `api/lib/migrations.dart` com tabela `schema_migrations`. A versão 1 é o `ensureSchema` atual (idempotente). Versões repetidas são recusadas na subida. Cada migração roda na própria transação. |
-| Fase 4 (4.3, 4.6) | ⏸️ Pausada | Parte da 4.4 (docs) feita em 20/10: `README.md` da raiz, `apps/app1/README.md` e `docs/`. Restante não iniciado. |
+| Fase 4.3 (testes de widget) | ⚠️ Parcial (20/10) | Suíte Flutter rodada no SDK (`ghcr.io/cirruslabs/flutter:stable`): análise com `--fatal-infos` e 67 testes passando. Teste de widget do estado de erro do catálogo. Golden e testes do checkout com MP mockado ficam para depois. |
+| Fase 4 (4.6) | ⏸️ Pausada | Parte da 4.4 (docs) feita em 20/10: `README.md` da raiz, `apps/app1/README.md` e `docs/`. Restante não iniciado. |
 | Contas de cliente, Fases A e B | ✅ Feito | Ver [`CONTAS.md`](CONTAS.md). |
 | Contas de cliente, Fases C e D | ⏸️ Pausada | Painel e LGPD. |
 
