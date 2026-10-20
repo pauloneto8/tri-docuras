@@ -4,39 +4,51 @@ Doceria online especializada em brownies. Cliente multiplataforma (Android, iOS,
 
 **Produção:** https://tridocuras.com.br
 
+> **Atualizado em 20/10/2026 (Fase 0 e Fase 1 parcial).** As seções de
+> infraestrutura abaixo que ainda citam `/opt/hosting`, `hosting-*` e Nginx
+> estão desatualizadas. O estado real é descrito aqui e em
+> [`../../docs/MONITORAMENTO.md`](../../docs/MONITORAMENTO.md). A reescrita
+> completa é a Fase 4.4 do [`PLANO.md`](../../PLANO.md).
+
 ## Componentes
+
+Compose ativo: `/opt/tridocuras/docker-compose.tridocuras.yml` (projeto `tridocuras`).
+O `docker-compose.yml` da raiz é antigo e não deve ser usado.
 
 | Serviço | Container | Descrição |
 |---------|-----------|-----------|
-| Frontend | `hosting-app1-web` | Flutter web (build estático + Nginx interno) |
-| API | `hosting-app1` | Dart Frog na porta interna 8080 |
-| Banco | `hosting-app1-db` | PostgreSQL 16 (rede `app1_internal`) |
+| Frontend | `app-tridocuras-web` | Flutter web (build estático + Nginx interno, com CSP) |
+| API | `app-tridocuras` | Dart Frog na porta interna 8080 |
+| Banco | `app-tridocuras-db` | PostgreSQL 16 (rede interna) |
+| Backup | `backup-tridocuras` | `pg_dump` + `tar` dos uploads, 03:30 (Recife); 14 diários + 8 semanais em `/opt/tridocuras/backups/tridocuras/`. Script em `scripts/backup-tridocuras.sh` |
 
-## Roteamento (Nginx)
+## Roteamento
+
+HTTPS e roteamento ficam no Caddy do AssistFin (`/opt/assistfin/Caddyfile`), não neste repositório.
 
 | Caminho | Destino |
 |---------|---------|
-| `/` | Flutter web (`app1-web`) |
-| `/api/*` | Dart Frog (`app1:8080`) |
-| `/admin` | Painel da loja — pedidos e catálogo (`app1:8080`) |
+| `/` | Flutter web (`app-tridocuras-web:80`) |
+| `/api/*` | Dart Frog (`app-tridocuras:8080`) |
+| `/admin` | Painel da loja — pedidos e catálogo (`app-tridocuras:8080`) |
 
-Domínio em `/opt/hosting/.env` → `APP1_DOMAIN` (`tridocuras.com.br`). HTTPS via Let's Encrypt (`/opt/hosting/certs`).
+Domínio em `.env` → `APP1_DOMAIN` (`tridocuras.com.br`).
 
 ## API
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| GET | `/api/health` | Status da API + ping PostgreSQL |
+| GET | `/api/health` | Status da API + ping PostgreSQL. 200 com banco ok, 503 sem banco |
 | GET | `/api/products` | Catálogo (`available = true` no app) |
-| POST | `/api/orders` | Criar pedido + gerar Pix (Mercado Pago) |
-| GET | `/api/orders/{id}` | Status do pedido (`pending_payment` / `paid`) |
-| POST | `/api/orders/{id}/pix` | Regenerar cobrança Pix (se expirada) |
+| POST | `/api/orders` | Criar pedido + gerar Pix (Mercado Pago). Limite: 10 por hora por IP |
+| GET | `/api/orders/{id}` | Status do pedido. Em `pending_payment`, reconsulta o MP no máximo a cada 15 s (rede de segurança do webhook) |
+| POST | `/api/orders/{id}/pix` | Regenerar cobrança Pix (se expirada). Limite: 10 por hora por IP |
 | POST | `/api/webhooks/mercadopago` | Webhook de confirmação de pagamento |
 | GET | `/api/orders/{id}/tracking` | Timeline de rastreamento (cliente) |
 | GET | `/admin` | Painel web da loja |
-| POST | `/api/admin/session` | Login do painel |
+| POST | `/api/admin/session` | Login do painel. Limite: 5 tentativas a cada 15 min por IP |
 | GET | `/api/admin/orders` | Lista pedidos (filtros: `status`, `search`, `from`, `to`) |
-| POST | `/api/admin/orders/{id}/status` | Atualiza status do pedido (inclui `cancelled`) |
+| POST | `/api/admin/orders/{id}/status` | Atualiza status. Cancelar pedido pago exige `refund: true` (estorna o Pix no MP) ou `refund: false` (cancela sem estorno). Status `expired` é automático |
 | GET | `/api/admin/products` | Lista produtos (inclui ocultos) + categorias |
 | POST | `/api/admin/products` | Cria produto |
 | PUT | `/api/admin/products/{id}` | Atualiza produto |
