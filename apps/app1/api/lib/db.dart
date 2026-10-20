@@ -163,6 +163,14 @@ Future<void> ensureSchema(Connection connection) async {
     );
   ''');
   await connection.execute('''
+    CREATE TABLE IF NOT EXISTS customer_favorites (
+      customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (customer_id, product_id)
+    );
+  ''');
+  await connection.execute('''
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL;
   ''');
   await connection.execute('''

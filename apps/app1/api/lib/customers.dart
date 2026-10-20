@@ -362,6 +362,64 @@ Future<List<Map<String, Object?>>> listCustomerOrders(int customerId) async {
   return orders;
 }
 
+const maxCustomerFavorites = 200;
+
+/// IDs de produto favoritos: inteiros positivos, sem repetição.
+List<int> parseFavoriteIds(Object? raw) {
+  if (raw == null) return const [];
+  if (raw is! List) throw CustomerException('Favoritos em formato inválido.');
+  if (raw.length > maxCustomerFavorites) {
+    throw CustomerException('Você pode ter até $maxCustomerFavorites favoritos.');
+  }
+
+  final ids = <int>{};
+  for (final item in raw) {
+    final id = item is int ? item : int.tryParse(item.toString());
+    if (id == null || id <= 0) {
+      throw CustomerException('Favoritos em formato inválido.');
+    }
+    ids.add(id);
+  }
+  return ids.toList();
+}
+
+Future<List<int>> getCustomerFavorites(int customerId) async {
+  final connection = await getConnection();
+  final result = await connection.execute(
+    r'''
+    SELECT product_id FROM customer_favorites
+    WHERE customer_id = $1
+    ORDER BY created_at ASC;
+    ''',
+    parameters: [customerId],
+  );
+  return result.map((row) => (row[0] as num).toInt()).toList();
+}
+
+/// Substitui a lista inteira de favoritos. IDs de produto inexistentes são
+/// ignorados pela chave estrangeira em vez de derrubar a operação.
+Future<void> replaceCustomerFavorites(int customerId, List<int> productIds) async {
+  final connection = await getConnection();
+  await connection.runTx((tx) async {
+    await tx.execute(
+      r'''
+      DELETE FROM customer_favorites WHERE customer_id = $1;
+      ''',
+      parameters: [customerId],
+    );
+    for (final productId in productIds) {
+      await tx.execute(
+        r'''
+        INSERT INTO customer_favorites (customer_id, product_id)
+        SELECT $1, id FROM products WHERE id = $2
+        ON CONFLICT DO NOTHING;
+        ''',
+        parameters: [customerId, productId],
+      );
+    }
+  });
+}
+
 String _cleanName(Object? value) {
   final raw = value?.toString().trim() ?? '';
   return raw.replaceAll(RegExp(r'\s+'), ' ');

@@ -49,6 +49,35 @@ void main() {
     });
   });
 
+  group('parseFavoriteIds', () {
+    test('remove repetidos e preserva a ordem', () {
+      expect(parseFavoriteIds([3, 1, 3, 2]), [3, 1, 2]);
+    });
+
+    test('aceita números em texto', () {
+      expect(parseFavoriteIds(['4', 5]), [4, 5]);
+    });
+
+    test('recusa IDs inválidos', () {
+      for (final bad in ['abc', 0, -1, 1.5]) {
+        expect(() => parseFavoriteIds([bad]), throwsA(isA<CustomerException>()),
+            reason: '$bad');
+      }
+    });
+
+    test('recusa lista grande demais', () {
+      expect(
+        () => parseFavoriteIds(List.generate(201, (i) => i + 1)),
+        throwsA(isA<CustomerException>()),
+      );
+    });
+
+    test('lista vazia limpa os favoritos', () {
+      expect(parseFavoriteIds(const []), isEmpty);
+      expect(parseFavoriteIds(null), isEmpty);
+    });
+  });
+
   group('parseCustomerAddresses', () {
     test('sem endereços devolve lista vazia', () {
       expect(parseCustomerAddresses(null), isEmpty);
