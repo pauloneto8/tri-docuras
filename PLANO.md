@@ -68,7 +68,7 @@ As fases são sequenciais. Dentro de cada fase, os itens são independentes, sal
 Regras para quem executar:
 
 - Todo deploy é feito via `docker compose -f docker-compose.tridocuras.yml` em `/opt/tridocuras`, **nunca** via o `docker-compose.yml` antigo.
-- Toda mudança de schema entra em `ensureSchema` (`api/lib/db.dart`) de forma idempotente (`ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`) até a Fase 4 introduzir migrações versionadas.
+- Mudança de schema é uma migração numerada em `appMigrations` (`api/lib/db.dart`), aplicada uma vez e registrada em `schema_migrations` (`api/lib/migrations.dart`). A versão 1 é o `ensureSchema` atual, idempotente, e não se edita. Dentro de uma migração, use `ADD COLUMN IF NOT EXISTS` e `CREATE TABLE IF NOT EXISTS` mesmo assim.
 - Toda leitura de env passa por `Env.get`.
 - Cada item novo vem com teste na suíte hermética. CI verde antes do deploy.
 - Commits por item, no padrão `tipo(app1): descrição`.
@@ -192,7 +192,8 @@ concluído aparece como pendente.
 | Fase 4.5 (métricas) | ✅ Feito (20/10, sem deploy ainda) | Financeiro ganha pedidos criados, conversão (pagos / criados) e Pix vencido (vencidos / pagos + vencidos), pelo `created_at` do período. "Pedidos por dia" continua mostrando só os pagos, como antes. |
 | Fase 4.2 (testes de integração) | ✅ Feito (20/10) | Job `integracao` no CI com Postgres 16 como serviço. Cobre reserva da última unidade com pedidos simultâneos e devolução de estoque ao cancelar. Os testes são pulados sem `DATABASE_URL`, então a suíte normal não muda. Fluxo do webhook do Mercado Pago ainda não coberto. |
 | Fase 4.4 (limpeza) | ✅ Feito (20/10) | Removidos `docker-compose.yml`, `nginx/`, `scripts/issue-certs.sh` e `scripts/reload-nginx.sh` (stack antigo). `scripts/backup-tridocuras.sh` fica, porque o compose ativo o usa. Decisão sobre `apps/app2` continua aberta. |
-| Fase 4 (4.1, 4.3, 4.6) | ⏸️ Pausada | Parte da 4.4 (docs) feita em 20/10: `README.md` da raiz, `apps/app1/README.md` e `docs/`. Restante não iniciado. |
+| Fase 4.1 (migrações versionadas) | ✅ Feito (20/10, sem deploy ainda) | Runner em `api/lib/migrations.dart` com tabela `schema_migrations`. A versão 1 é o `ensureSchema` atual (idempotente). Versões repetidas são recusadas na subida. Cada migração roda na própria transação. |
+| Fase 4 (4.3, 4.6) | ⏸️ Pausada | Parte da 4.4 (docs) feita em 20/10: `README.md` da raiz, `apps/app1/README.md` e `docs/`. Restante não iniciado. |
 | Contas de cliente, Fases A e B | ✅ Feito | Ver [`CONTAS.md`](CONTAS.md). |
 | Contas de cliente, Fases C e D | ⏸️ Pausada | Painel e LGPD. |
 

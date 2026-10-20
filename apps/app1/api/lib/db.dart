@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:postgres/postgres.dart';
 import 'package:tri_docuras_api/admin_users.dart';
+import 'package:tri_docuras_api/migrations.dart';
 import 'package:tri_docuras_api/order_events.dart';
 import 'package:tri_docuras_api/product_options.dart';
 import 'package:tri_docuras_api/store_settings.dart';
@@ -51,7 +52,7 @@ Future<Connection> getConnection() async {
   return _connection!;
 }
 
-Future<void> ensureSchema(Connection connection) async {
+Future<void> ensureSchema(Session connection) async {
   await connection.execute('''
     CREATE TABLE IF NOT EXISTS products (
       id SERIAL PRIMARY KEY,
@@ -232,7 +233,7 @@ Future<void> ensureSchema(Connection connection) async {
   await ensureProductOptionsSchema(connection);
 }
 
-Future<void> _seedCategories(Connection connection) async {
+Future<void> _seedCategories(Session connection) async {
   const defaults = [
     ['brownies', 'Brownies', 1],
     ['combos', 'Combos', 2],
@@ -311,10 +312,17 @@ bool _databaseInitialized = false;
 /// Idempotente e executada uma vez por processo (o middleware a chama a cada
 /// requisição). Só marca como pronta após sucesso, para tentar de novo se o
 /// banco ainda estiver subindo.
+/// Mudanças de schema, em ordem. A versão 1 é o schema inicial, idempotente:
+/// no banco que já existe, ela só registra que foi aplicada. Mudanças novas
+/// entram aqui com um número maior e nunca editam uma versão já publicada.
+final appMigrations = <Migration>[
+  Migration(version: 1, name: 'baseline', apply: ensureSchema),
+];
+
 Future<void> initializeDatabase() async {
   if (_databaseInitialized) return;
   final connection = await getConnection();
-  await ensureSchema(connection);
+  await runMigrations(connection, appMigrations);
   await seedProducts(connection);
   await bootstrapAdminUser();
   _databaseInitialized = true;

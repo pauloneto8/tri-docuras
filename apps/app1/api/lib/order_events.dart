@@ -6,7 +6,7 @@ const actorCustomer = 'Cliente';
 const actorMercadoPago = 'Mercado Pago';
 const actorSystem = 'Sistema';
 
-Future<void> ensureOrderEventsSchema(Connection connection) async {
+Future<void> ensureOrderEventsSchema(Session connection) async {
   await connection.execute('''
     CREATE TABLE IF NOT EXISTS order_events (
       id SERIAL PRIMARY KEY,

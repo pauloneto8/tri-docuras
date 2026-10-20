@@ -121,7 +121,7 @@ AdminUserInput parseAdminUserInput(
   );
 }
 
-Future<void> ensureAdminUsersSchema(Connection connection) async {
+Future<void> ensureAdminUsersSchema(Session connection) async {
   await connection.execute('''
     CREATE TABLE IF NOT EXISTS admin_users (
       id SERIAL PRIMARY KEY,

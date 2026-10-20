@@ -77,7 +77,7 @@ double? _parseMoney(Object? value) {
   };
 }
 
-Future<void> ensureStoreSettingsSchema(Connection connection) async {
+Future<void> ensureStoreSettingsSchema(Session connection) async {
   await connection.execute('''
     CREATE TABLE IF NOT EXISTS store_settings (
       id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),

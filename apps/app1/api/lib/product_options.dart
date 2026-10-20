@@ -96,7 +96,7 @@ ResolvedOptions resolveProductOptions({
   );
 }
 
-Future<void> ensureProductOptionsSchema(Connection connection) async {
+Future<void> ensureProductOptionsSchema(Session connection) async {
   final existed = await connection.execute(
     "SELECT to_regclass('product_options') IS NOT NULL;",
   );
@@ -128,7 +128,7 @@ Future<void> ensureProductOptionsSchema(Connection connection) async {
   }
 }
 
-Future<void> seedDefaultBrownieOptions(Connection connection) async {
+Future<void> seedDefaultBrownieOptions(Session connection) async {
   await connection.execute(r'''
     INSERT INTO product_options (product_id, kind, label, price_delta, active, sort_order)
     SELECT p.id, v.kind, v.label, v.price_delta, TRUE, v.sort_order
