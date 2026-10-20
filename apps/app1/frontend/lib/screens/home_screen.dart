@@ -203,10 +203,30 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCatalogContent(List<Product> products) {
+    final notice = StoreConfigHolder.instance.config.notice.trim();
     return ColoredBox(
       color: AppColors.cream,
       child: CustomScrollView(
         slivers: [
+          if (notice.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.peach,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Text(
+                      notice,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -396,9 +416,13 @@ class _ProductGridCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 TdButton(
-                  label: product.available ? 'Adicionar' : 'Indisponível',
-                  variant: product.available ? TdButtonVariant.primary : TdButtonVariant.disabled,
-                  onPressed: product.available ? onAdd : null,
+                  label: product.soldOut
+                      ? 'Esgotado'
+                      : product.available
+                          ? 'Adicionar'
+                          : 'Indisponível',
+                  variant: product.canBuy ? TdButtonVariant.primary : TdButtonVariant.disabled,
+                  onPressed: product.canBuy ? onAdd : null,
                 ),
               ],
             ),

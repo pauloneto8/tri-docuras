@@ -314,7 +314,7 @@ Future<List<Map<String, Object?>>> fetchProducts() async {
   final connection = await getConnection();
   final result = await connection.execute(
     '''
-    SELECT id, name, description, price, featured, category, available, image_url
+    SELECT id, name, description, price, featured, category, available, image_url, stock
     FROM products
     WHERE available = TRUE
     ORDER BY featured DESC, name ASC;
@@ -336,6 +336,7 @@ Future<List<Map<String, Object?>>> fetchProducts() async {
           'category': row[5],
           'available': row[6],
           'image_url': row[7],
+          'stock': row[8],
         },
       )
       .toList();

@@ -168,9 +168,9 @@ class _ProductScreenState extends State<ProductScreen> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                       child: TdButton(
-                        label: 'Adicionar',
-                        onPressed: widget.product.available ? _addToCart : null,
-                        variant: widget.product.available
+                        label: widget.product.soldOut ? 'Esgotado' : 'Adicionar',
+                        onPressed: widget.product.canBuy ? _addToCart : null,
+                        variant: widget.product.canBuy
                             ? TdButtonVariant.primary
                             : TdButtonVariant.disabled,
                         trailing: Text(_formatPrice(_totalPrice)),

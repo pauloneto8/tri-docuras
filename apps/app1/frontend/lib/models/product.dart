@@ -8,6 +8,7 @@ class Product {
     required this.category,
     this.available = true,
     this.imageUrl,
+    this.stock,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -20,6 +21,7 @@ class Product {
       category: json['category'] as String? ?? 'brownies',
       available: json['available'] != false,
       imageUrl: json['image_url'] as String?,
+      stock: (json['stock'] as num?)?.toInt(),
     );
   }
 
@@ -31,6 +33,15 @@ class Product {
   final String category;
   final bool available;
   final String? imageUrl;
+
+  /// Unidades em estoque; nulo significa sem controle de estoque.
+  final int? stock;
+
+  /// Esgotado: há controle de estoque e nada sobrou.
+  bool get soldOut => stock != null && stock! <= 0;
+
+  /// Pode entrar no carrinho agora.
+  bool get canBuy => available && !soldOut;
 
   String get formattedPrice => 'R\$ ${price.toStringAsFixed(2).replaceAll('.', ',')}';
 
