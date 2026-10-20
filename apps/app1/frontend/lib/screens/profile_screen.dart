@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:tri_docuras/account/account_login_prompt.dart';
+import 'package:tri_docuras/account/account_scope.dart';
 import 'package:tri_docuras/checkout/delivery_address.dart';
+import 'package:tri_docuras/screens/account_edit_screen.dart';
 import 'package:tri_docuras/config.dart';
 import 'package:tri_docuras/store_config_holder.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
@@ -30,6 +33,8 @@ class ProfileScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),
+            const _AccountCard(),
+            const SizedBox(height: 12),
             const _InfoCard(
               icon: Icons.storefront_outlined,
               title: 'Retirada na loja',
@@ -106,6 +111,53 @@ class ProfileScreen extends StatelessWidget {
         ),
       );
     }
+  }
+}
+
+/// Conta do cliente: convite para entrar, ou dados e saída quando logado.
+class _AccountCard extends StatelessWidget {
+  const _AccountCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final account = AccountScope.of(context);
+    if (!account.isLoggedIn) {
+      return const AccountLoginPrompt(
+        message:
+            'Entre ou crie sua conta para comprar, acompanhar seus pedidos e salvar seus endereços.',
+      );
+    }
+
+    final profile = account.profile;
+    return _InfoCard(
+      icon: Icons.person_outline,
+      title: profile?.name ?? 'Minha conta',
+      body: profile == null
+          ? 'Não foi possível carregar sua conta agora. Tente de novo mais tarde.'
+          : profile.email,
+      action: profile == null
+          ? null
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TdButton(
+                  label: 'Meus dados e endereços',
+                  variant: TdButtonVariant.soft,
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AccountEditScreen(profile: profile),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TdButton(
+                  label: 'Sair da conta',
+                  variant: TdButtonVariant.outline,
+                  onPressed: () => account.logout(),
+                ),
+              ],
+            ),
+    );
   }
 }
 

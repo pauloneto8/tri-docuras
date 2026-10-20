@@ -1,16 +1,20 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tri_docuras/account/auth_token.dart';
 import 'package:tri_docuras/orders/order_history_entry.dart';
+import 'package:tri_docuras/services/api_service.dart';
 
-const _prefsKey = 'order_history_entries';
-const _maxEntries = 20;
-
+/// Histórico de pedidos do cliente logado, vindo da API. Sem conta, fica
+/// vazio. Pedido criado nesta sessão entra na lista em memória até a
+/// próxima atualização.
 class OrderHistoryController extends ChangeNotifier {
-  OrderHistoryController({List<OrderHistoryEntry>? seed}) : _entries = [...?seed];
+  OrderHistoryController({
+    List<OrderHistoryEntry>? seed,
+    ApiService? api,
+  })  : _entries = [...?seed],
+        _api = api ?? ApiService();
 
   final List<OrderHistoryEntry> _entries;
+  final ApiService _api;
   bool _loaded = false;
 
   List<OrderHistoryEntry> get entries => List.unmodifiable(_entries);
@@ -18,29 +22,28 @@ class OrderHistoryController extends ChangeNotifier {
   bool get isEmpty => _entries.isEmpty;
 
   Future<void> load() async {
-    if (_loaded) return;
-    final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getStringList(_prefsKey);
-    if (stored != null) {
-      _entries
-        ..clear()
-        ..addAll(
-          stored.map((raw) {
-            final json = jsonDecode(raw) as Map<String, dynamic>;
-            return OrderHistoryEntry.fromJson(json);
-          }),
-        );
+    if (AuthToken.value == null) {
+      _entries.clear();
+    } else {
+      try {
+        final orders = await _api.fetchMyOrders();
+        _entries
+          ..clear()
+          ..addAll(orders.map(_entryFromTracking));
+      } catch (_) {
+        // Sem rede ou sessão recusada: mantém a lista atual.
+      }
     }
     _loaded = true;
     notifyListeners();
   }
 
-  Future<void> remember({
+  void remember({
     required String id,
     required double total,
     String deliveryMode = 'pickup',
     DateTime? createdAt,
-  }) async {
+  }) {
     _entries.removeWhere((entry) => entry.id == id);
     _entries.insert(
       0,
@@ -51,33 +54,30 @@ class OrderHistoryController extends ChangeNotifier {
         deliveryMode: deliveryMode,
       ),
     );
-    if (_entries.length > _maxEntries) {
-      _entries.removeRange(_maxEntries, _entries.length);
-    }
     notifyListeners();
-    await _persist();
   }
 
-  Future<void> remove(String id) async {
+  /// Tira o pedido da lista desta sessão. Não apaga nada no servidor.
+  void remove(String id) {
     final index = _entries.indexWhere((entry) => entry.id == id);
     if (index < 0) return;
     _entries.removeAt(index);
     notifyListeners();
-    await _persist();
   }
 
-  Future<void> clear() async {
+  void clear() {
     if (_entries.isEmpty) return;
     _entries.clear();
     notifyListeners();
-    await _persist();
   }
 
-  Future<void> _persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      _prefsKey,
-      _entries.map((entry) => jsonEncode(entry.toJson())).toList(),
+  OrderHistoryEntry _entryFromTracking(Map<String, dynamic> tracking) {
+    final order = tracking['order'] as Map<String, dynamic>;
+    return OrderHistoryEntry(
+      id: order['id'] as String,
+      total: (order['total'] as num).toDouble(),
+      createdAt: DateTime.parse(order['created_at'] as String).toLocal(),
+      deliveryMode: order['delivery_mode'] as String? ?? 'pickup',
     );
   }
 }

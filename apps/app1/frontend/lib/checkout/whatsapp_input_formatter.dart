@@ -16,6 +16,12 @@ class WhatsAppInputFormatter extends TextInputFormatter {
     );
   }
 
+  /// Máscara aplicada a dígitos já prontos (ex.: vindos do perfil).
+  static String formatDigits(String digits) {
+    final limited = digits.length > 11 ? digits.substring(0, 11) : digits;
+    return _mask(limited);
+  }
+
   static String _mask(String digits) {
     if (digits.isEmpty) return '';
     final buf = StringBuffer('(');

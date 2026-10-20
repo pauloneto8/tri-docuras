@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:tri_docuras/account/account_login_prompt.dart';
+import 'package:tri_docuras/account/account_scope.dart';
 import 'package:tri_docuras/cart/cart_scope.dart';
 import 'package:tri_docuras/cart/delivery_mode.dart';
 import 'package:tri_docuras/checkout/checkout_draft.dart';
@@ -8,6 +10,7 @@ import 'package:tri_docuras/checkout/checkout_validators.dart';
 import 'package:tri_docuras/checkout/delivery_address.dart';
 import 'package:tri_docuras/checkout/delivery_address_validators.dart';
 import 'package:tri_docuras/checkout/whatsapp_input_formatter.dart';
+import 'package:tri_docuras/models/customer_profile.dart';
 import 'package:tri_docuras/orders/order_history_scope.dart';
 import 'package:tri_docuras/screens/pix_screen.dart';
 import 'package:tri_docuras/services/api_service.dart';
@@ -107,7 +110,39 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   void _onFieldChanged(String _) => setState(() {});
 
+  bool _prefilled = false;
+
+  /// Preenche nome e WhatsApp com o perfil, uma vez por sessão. Quem já
+  /// digitou alguma coisa não perde o que escreveu.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final profile = AccountScope.of(context).profile;
+    if (profile == null) {
+      _prefilled = false;
+      return;
+    }
+    if (_prefilled) return;
+    _prefilled = true;
+    if (_nameController.text.isEmpty) _nameController.text = profile.name;
+    if (_whatsappController.text.isEmpty) {
+      _whatsappController.text =
+          WhatsAppInputFormatter.formatDigits(profile.whatsapp);
+    }
+  }
+
+  void _fillAddress(CustomerAddress address) {
+    setState(() {
+      _streetController.text = address.street;
+      _numberController.text = address.number;
+      _neighborhoodController.text = address.neighborhood;
+      _complementController.text = address.complement ?? '';
+      _referenceController.text = address.reference ?? '';
+    });
+  }
+
   Future<void> _generatePix() async {
+    if (!AccountScope.of(context).isLoggedIn) return;
     setState(() => _submitted = true);
     final cart = CartScope.of(context);
     if (cart.items.isEmpty) {
@@ -141,7 +176,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         items: cart.items,
       );
       if (!mounted) return;
-      await OrderHistoryScope.of(context).remember(
+      OrderHistoryScope.of(context).remember(
         id: order.id,
         total: order.total,
         deliveryMode: cart.deliveryMode == DeliveryMode.delivery
@@ -183,6 +218,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   Widget build(BuildContext context) {
     final cart = CartScope.of(context);
+    final account = AccountScope.of(context);
+    final savedAddresses = account.profile?.addresses ?? const <CustomerAddress>[];
 
     if (cart.items.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -194,6 +231,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     final isPickup = cart.deliveryMode == DeliveryMode.pickup;
     final formValid = _isFormValid(cart.deliveryMode);
+    final canPay = account.isLoggedIn &&
+        formValid &&
+        cart.items.isNotEmpty &&
+        !_submitting;
 
     return ColoredBox(
       color: AppColors.cream,
@@ -218,6 +259,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              if (!account.isLoggedIn) ...[
+                                const AccountLoginPrompt(
+                                  message:
+                                      'Entre na sua conta para concluir o pedido. Seus dados e endereços ficam salvos para as próximas compras.',
+                                ),
+                                const SizedBox(height: 20),
+                              ],
                               Text(
                                 'NOME COMPLETO',
                                 style: Theme.of(context)
@@ -296,6 +344,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                       ?.copyWith(letterSpacing: 0.8),
                                 ),
                                 const SizedBox(height: 8),
+                                if (savedAddresses.isNotEmpty) ...[
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      for (final address in savedAddresses)
+                                        ActionChip(
+                                          label: Text(address.label),
+                                          onPressed: () => _fillAddress(address),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
                                 _FieldLabel(label: 'RUA'),
                                 TdTextField(
                                   controller: _streetController,
@@ -410,12 +472,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       child: TdButton(
                         label: _submitting ? 'Registrando pedido…' : 'Gerar Pix',
                         trailing: Text(cart.formattedTotal),
-                        variant: formValid && cart.items.isNotEmpty && !_submitting
+                        variant: canPay
                             ? TdButtonVariant.primary
                             : TdButtonVariant.disabled,
-                        onPressed: formValid && cart.items.isNotEmpty && !_submitting
-                            ? _generatePix
-                            : null,
+                        onPressed: canPay ? _generatePix : null,
                       ),
                     ),
                   ],

@@ -12,8 +12,8 @@ void main() {
 
   test('remember adiciona pedido no topo', () async {
     final history = OrderHistoryController();
-    await history.remember(id: 'TD-0001', total: 24.0);
-    await history.remember(id: 'TD-0002', total: 36.0);
+    history.remember(id: 'TD-0001', total: 24.0);
+    history.remember(id: 'TD-0002', total: 36.0);
 
     expect(history.entries.first.id, 'TD-0002');
     expect(history.entries.length, 2);
@@ -21,8 +21,8 @@ void main() {
 
   test('remember atualiza pedido existente', () async {
     final history = OrderHistoryController();
-    await history.remember(id: 'TD-0001', total: 24.0);
-    await history.remember(id: 'TD-0001', total: 30.0);
+    history.remember(id: 'TD-0001', total: 24.0);
+    history.remember(id: 'TD-0001', total: 30.0);
 
     expect(history.entries.length, 1);
     expect(history.entries.first.total, 30.0);
@@ -38,7 +38,7 @@ void main() {
         ),
       ],
     );
-    await history.remove('TD-0001');
+    history.remove('TD-0001');
     expect(history.isEmpty, isTrue);
   });
 }

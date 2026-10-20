@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tri_docuras/models/order_tracking.dart';
 import 'package:tri_docuras/orders/order_history_entry.dart';
+import 'package:tri_docuras/account/account_login_prompt.dart';
+import 'package:tri_docuras/account/account_scope.dart';
 import 'package:tri_docuras/orders/order_history_scope.dart';
 import 'package:tri_docuras/services/api_service.dart';
 import 'package:tri_docuras/theme/app_colors.dart';
@@ -280,7 +282,7 @@ class _OrderLookupScreenState extends State<OrderLookupScreen> {
   }
 
   Future<void> _removeEntry(String id) async {
-    await OrderHistoryScope.of(context).remove(id);
+    OrderHistoryScope.of(context).remove(id);
     if (!mounted) return;
     setState(() => _statusLabels.remove(id));
   }
@@ -296,6 +298,7 @@ class _OrderLookupScreenState extends State<OrderLookupScreen> {
   @override
   Widget build(BuildContext context) {
     final history = OrderHistoryScope.of(context);
+    final account = AccountScope.of(context);
 
     return ColoredBox(
       color: AppColors.cream,
@@ -311,10 +314,18 @@ class _OrderLookupScreenState extends State<OrderLookupScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Seus pedidos recentes ficam salvos neste aparelho.',
+                account.isLoggedIn
+                    ? 'Seus pedidos ficam salvos na sua conta.'
+                    : 'Entre na sua conta para ver seus pedidos.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              if (!history.isLoaded)
+              if (!account.isLoggedIn) ...[
+                const SizedBox(height: 24),
+                const AccountLoginPrompt(
+                  message:
+                      'Seus pedidos aparecem aqui depois que você entra na sua conta.',
+                ),
+              ] else if (!history.isLoaded)
                 const Padding(
                   padding: EdgeInsets.only(top: 32),
                   child: Center(

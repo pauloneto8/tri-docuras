@@ -17,6 +17,7 @@ class TdTextField extends StatelessWidget {
     this.maxLength,
     this.onChanged,
     this.enabled = true,
+    this.obscureText = false,
   });
 
   final TextEditingController controller;
@@ -29,12 +30,14 @@ class TdTextField extends StatelessWidget {
   final int? maxLength;
   final ValueChanged<String>? onChanged;
   final bool enabled;
+  final bool obscureText;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
       enabled: enabled,
+      obscureText: obscureText,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
       autofillHints: autofillHints,
