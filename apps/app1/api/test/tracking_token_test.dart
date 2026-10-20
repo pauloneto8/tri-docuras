@@ -14,6 +14,15 @@ void main() {
     });
   });
 
+  group('trackingUrl', () {
+    test('monta o link público do pedido com o token', () {
+      expect(
+        trackingUrl('TD-0007', 'abc'),
+        'https://tridocuras.com.br/pedido/TD-0007?t=abc',
+      );
+    });
+  });
+
   group('trackingTokenMatches', () {
     test('aceita o token exato', () {
       expect(trackingTokenMatches('abc123', 'abc123'), isTrue);

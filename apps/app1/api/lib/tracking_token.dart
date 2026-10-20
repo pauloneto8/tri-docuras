@@ -9,6 +9,11 @@ String newTrackingToken() {
   return base64UrlEncode(bytes).replaceAll('=', '');
 }
 
+/// Link de acompanhamento que o painel manda ao cliente pelo WhatsApp.
+String trackingUrl(String publicId, String token) {
+  return 'https://tridocuras.com.br/pedido/$publicId?t=$token';
+}
+
 /// Compara sem parar no primeiro caractere diferente, para não vazar o token
 /// pelo tempo de resposta.
 bool trackingTokenMatches(String? expected, String? given) {

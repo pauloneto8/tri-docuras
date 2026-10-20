@@ -5,6 +5,7 @@ import 'package:tri_docuras_api/db.dart';
 import 'package:tri_docuras_api/order_events.dart';
 import 'package:tri_docuras_api/mercado_pago_client.dart';
 import 'package:tri_docuras_api/orders.dart';
+import 'package:tri_docuras_api/tracking_token.dart';
 
 const adminOperationalStatuses = ['paid', 'preparing', 'ready'];
 const adminAllStatuses = [
@@ -105,7 +106,7 @@ Future<List<Map<String, Object?>>> listOrdersForAdmin({
            delivery_street, delivery_number, delivery_complement,
            delivery_neighborhood, delivery_reference,
            subtotal, delivery_fee, total, paid_at, created_at,
-           refund_status, refunded_at
+           refund_status, refunded_at, tracking_token
     FROM orders
     $whereClause
     ORDER BY created_at DESC
@@ -200,7 +201,7 @@ Future<Map<String, Object?>> updateOrderStatus(
                 delivery_street, delivery_number, delivery_complement,
                 delivery_neighborhood, delivery_reference,
                 subtotal, delivery_fee, total, paid_at, created_at,
-                refund_status, refunded_at;
+                refund_status, refunded_at, tracking_token;
       ''',
       parameters: [publicId, normalized, refundStatus, mpRefundId],
     );
@@ -307,7 +308,15 @@ Map<String, Object?> _rowToAdminOrderMap(ResultRow row) {
     'created_at': row[14],
     'refund_status': row[15],
     'refunded_at': row[16],
+    'tracking_token': row[17] as String?,
   };
+}
+
+/// Link para o painel mandar ao cliente. Pedido sem token devolve `null`.
+String? _trackingLink(Map<String, Object?> order) {
+  final token = order['tracking_token'] as String?;
+  if (token == null || token.isEmpty) return null;
+  return trackingUrl(order['id']! as String, token);
 }
 
 Map<String, Object?> orderToAdminJson(
@@ -334,6 +343,7 @@ Map<String, Object?> orderToAdminJson(
     'customer_name': order['customer_name'],
     'whatsapp': order['whatsapp'],
     'whatsapp_link': whatsappLink(order['whatsapp'] as String),
+    'tracking_link': _trackingLink(order),
     'delivery_mode': deliveryMode,
     'delivery_label': deliveryMode == 'pickup' ? 'Retirada' : 'Entrega',
     'delivery_address': address,

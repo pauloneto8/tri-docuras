@@ -504,6 +504,12 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       return "R$ " + Number(value).toFixed(2).replace(".", ",");
     }
 
+    function avisarClienteLink(order) {
+      const primeiroNome = (order.customer_name || "").split(" ")[0];
+      const texto = "Olá, " + primeiroNome + "! Acompanhe seu pedido " + order.id + " da Tri Doçuras por aqui: " + order.tracking_link;
+      return order.whatsapp_link + "?text=" + encodeURIComponent(texto);
+    }
+
     function formatPhone(digits) {
       if (!digits || digits.length !== 11) return digits || "";
       return "(" + digits.slice(0,2) + ") " + digits.slice(2,7) + "-" + digits.slice(7);
@@ -553,6 +559,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         '<div class="meta">' +
           '<strong>' + order.customer_name + '</strong><br>' +
           '<a class="wa" href="' + order.whatsapp_link + '" target="_blank" rel="noopener">WhatsApp ' + formatPhone(order.whatsapp) + '</a><br>' +
+          (order.tracking_link ? '<a class="wa" href="' + avisarClienteLink(order) + '" target="_blank" rel="noopener">Avisar cliente</a><br>' : '') +
           order.delivery_label + ' · ' + renderAddress(order) + '<br>' +
           (order.refund_label ? '<strong>' + order.refund_label + '</strong><br>' : '') +
           'Total ' + formatMoney(order.total) + ' · ' + formatDate(order.created_at) +
