@@ -110,4 +110,6 @@ estorno no painel da loja e faça o estorno manualmente no MP.
   `docker compose -f docker-compose.tridocuras.yml up -d app-tridocuras`
   (o `env_file` só é relido ao recriar).
 - **Senha do painel:** `APP1_ADMIN_PASSWORD` no `.env`, seguido do mesmo `up -d`.
-  Trocar a senha não invalida tokens já emitidos, que expiram sozinhos.
+  Trocar a senha **invalida na hora todas as sessões do painel**, porque o
+  token é assinado com a própria senha. Quem estiver logado precisa entrar de
+  novo. (A Fase 2.2 do PLANO.md separa a chave de assinatura da senha.)
