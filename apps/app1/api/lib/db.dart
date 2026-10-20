@@ -72,6 +72,10 @@ Future<void> ensureSchema(Connection connection) async {
   await connection.execute('''
     ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
   ''');
+  await connection.execute('''
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS stock INTEGER
+      CHECK (stock IS NULL OR stock >= 0);
+  ''');
 
   await connection.execute('''
     CREATE TABLE IF NOT EXISTS orders (

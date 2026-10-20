@@ -286,6 +286,7 @@ CRUD do catálogo sem rebuild do app:
 | Nome / descrição | Exibidos no app |
 | Preço | Em reais (ex.: `12.00`) |
 | Categoria | Escolhida entre as categorias cadastradas |
+| Estoque | Quantidade disponível. Em branco = sem controle. O pedido reserva a quantidade ao ser criado; cancelar ou deixar expirar devolve ao estoque |
 | Destaque | Aparece primeiro no catálogo |
 | Visível no app | `available` — desmarque para ocultar sem excluir |
 

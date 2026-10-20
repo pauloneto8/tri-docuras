@@ -281,6 +281,23 @@ Future<Map<String, Object?>> createOrder(
     );
 
     for (final item in input.items) {
+      // Reserva o estoque na mesma transação do pedido. Produto sem controle
+      // (stock NULL) não é alterado. Se faltar, a transação inteira é desfeita.
+      final reserved = await tx.execute(
+        r'''
+        UPDATE products
+        SET stock = stock - $2
+        WHERE id = $1 AND (stock IS NULL OR stock >= $2)
+        RETURNING id;
+        ''',
+        parameters: [item.productId, item.quantity],
+      );
+      if (reserved.isEmpty) {
+        throw OrderValidationException(
+          'Sem estoque de ${item.productName}. Ajuste a quantidade.',
+        );
+      }
+
       await tx.execute(
         r'''
         INSERT INTO order_items (
@@ -438,6 +455,25 @@ Future<Map<String, Object?>> refreshOrderPaymentIfStale(
   return order;
 }
 
+/// Devolve ao estoque os itens do pedido. Chamar uma única vez por pedido,
+/// ao expirar ou cancelar (a máquina de estados impede o segundo cancelamento).
+Future<void> restockOrderItems(Session db, int orderId) async {
+  await db.execute(
+    r'''
+    UPDATE products p
+    SET stock = p.stock + totals.quantity
+    FROM (
+      SELECT product_id, SUM(quantity)::int AS quantity
+      FROM order_items
+      WHERE order_id = $1
+      GROUP BY product_id
+    ) totals
+    WHERE p.id = totals.product_id AND p.stock IS NOT NULL;
+    ''',
+    parameters: [orderId],
+  );
+}
+
 /// Carência após o vencimento do Pix antes de o pedido virar `expired`.
 const expiredOrderGrace = Duration(hours: 24);
 
@@ -459,14 +495,16 @@ Future<int> expireStaleOrders() async {
       parameters: [expiredOrderGrace.inSeconds.toDouble()],
     );
     for (final row in result) {
+      final orderId = row[0]! as int;
       await recordOrderEvent(
         tx,
-        orderId: row[0]! as int,
+        orderId: orderId,
         from: 'pending_payment',
         to: 'expired',
         actor: actorSystem,
         note: 'Pix vencido há mais de 24 h',
       );
+      await restockOrderItems(tx, orderId);
     }
     return result.length;
   });

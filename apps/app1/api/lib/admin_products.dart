@@ -21,6 +21,7 @@ class ProductInput {
     required this.featured,
     required this.category,
     required this.available,
+    this.stock,
   });
 
   final String name;
@@ -29,6 +30,24 @@ class ProductInput {
   final bool featured;
   final String category;
   final bool available;
+
+  /// `null` = estoque ilimitado (padrão para produtos sem controle).
+  final int? stock;
+}
+
+const maxStock = 100000;
+
+int? _parseStock(Object? raw) {
+  if (raw == null) return null;
+  final text = raw.toString().trim();
+  if (text.isEmpty) return null;
+  final value = int.tryParse(text);
+  if (value == null || value < 0 || value > maxStock) {
+    throw AdminProductException(
+      'Estoque inválido (use um número de 0 a $maxStock, ou deixe em branco).',
+    );
+  }
+  return value;
 }
 
 ProductInput parseProductInput(Map<String, dynamic> body) {
@@ -70,6 +89,7 @@ ProductInput parseProductInput(Map<String, dynamic> body) {
     featured: _parseBool(body['featured'], fallback: false),
     category: category,
     available: _parseBool(body['available'], fallback: true),
+    stock: _parseStock(body['stock']),
   );
 }
 
@@ -91,7 +111,7 @@ Future<List<Map<String, Object?>>> listProductsForAdmin() async {
   final result = await connection.execute(
     '''
     SELECT p.id, p.name, p.description, p.price, p.featured, p.category,
-           p.available, p.image_url, c.label
+           p.available, p.image_url, p.stock, c.label
     FROM products p
     LEFT JOIN product_categories c ON c.slug = p.category
     ORDER BY p.available DESC, p.featured DESC, p.name ASC;
@@ -99,7 +119,7 @@ Future<List<Map<String, Object?>>> listProductsForAdmin() async {
   );
   return result.map((row) {
     final map = _rowToProductMap(row);
-    map['category_label'] = row[8]?.toString();
+    map['category_label'] = row[9]?.toString();
     return map;
   }).toList();
 }
@@ -119,9 +139,9 @@ Future<Map<String, Object?>> createProduct(ProductInput input) async {
   await _ensureCategoryExists(connection, input.category);
   final result = await connection.execute(
     '''
-    INSERT INTO products (name, description, price, featured, category, available)
-    VALUES (\$1, \$2, \$3, \$4, \$5, \$6)
-    RETURNING id, name, description, price, featured, category, available, image_url;
+    INSERT INTO products (name, description, price, featured, category, available, stock)
+    VALUES (\$1, \$2, \$3, \$4, \$5, \$6, \$7)
+    RETURNING id, name, description, price, featured, category, available, image_url, stock;
     ''',
     parameters: [
       input.name,
@@ -130,6 +150,7 @@ Future<Map<String, Object?>> createProduct(ProductInput input) async {
       input.featured,
       input.category,
       input.available,
+      input.stock,
     ],
   );
 
@@ -155,9 +176,10 @@ Future<Map<String, Object?>> updateProduct(int id, ProductInput input) async {
         price = \$4,
         featured = \$5,
         category = \$6,
-        available = \$7
+        available = \$7,
+        stock = \$8
     WHERE id = \$1
-    RETURNING id, name, description, price, featured, category, available, image_url;
+    RETURNING id, name, description, price, featured, category, available, image_url, stock;
     ''',
     parameters: [
       id,
@@ -167,6 +189,7 @@ Future<Map<String, Object?>> updateProduct(int id, ProductInput input) async {
       input.featured,
       input.category,
       input.available,
+      input.stock,
     ],
   );
 
@@ -187,6 +210,7 @@ Map<String, Object?> _rowToProductMap(ResultRow row) {
     'category': row[5],
     'available': row[6] == true,
     'image_url': row[7],
+    'stock': row[8] == null ? null : (row[8]! as int),
   };
 }
 
@@ -201,7 +225,7 @@ Future<Map<String, Object?>> updateProductImage(int id, String imageUrl) async {
     UPDATE products
     SET image_url = \$2
     WHERE id = \$1
-    RETURNING id, name, description, price, featured, category, available, image_url;
+    RETURNING id, name, description, price, featured, category, available, image_url, stock;
     ''',
     parameters: [id, imageUrl],
   );
@@ -248,6 +272,7 @@ Map<String, Object?> productToAdminJson(Map<String, Object?> product) {
     'available': available,
     'availability_label': available ? 'No catálogo' : 'Oculto',
     'image_url': product['image_url'],
+    'stock': product['stock'],
   };
 }
 

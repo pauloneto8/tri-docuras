@@ -266,6 +266,10 @@ const adminPanelHtml = r'''<!DOCTYPE html>
                 <input id="productPrice" type="number" min="0.01" step="0.01" required placeholder="12.00">
               </div>
               <div>
+                <label for="productStock">ESTOQUE</label>
+                <input id="productStock" type="number" min="0" step="1" placeholder="Vazio = sem controle">
+              </div>
+              <div>
                 <label for="productCategory">CATEGORIA</label>
                 <select id="productCategory" required></select>
               </div>
@@ -469,6 +473,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
     const productNameInput = document.getElementById("productName");
     const productDescriptionInput = document.getElementById("productDescription");
     const productPriceInput = document.getElementById("productPrice");
+    const productStockInput = document.getElementById("productStock");
     const productCategoryInput = document.getElementById("productCategory");
     const productFeaturedInput = document.getElementById("productFeatured");
     const productAvailableInput = document.getElementById("productAvailable");
@@ -602,6 +607,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         description +
         '<div class="meta">' +
           formatMoney(product.price) + ' · ' + product.category_label + featured +
+          (product.stock === null || product.stock === undefined ? '' : ' · Estoque: ' + product.stock) +
         '</div>' +
         '<div class="actions">' +
           '<button type="button" class="secondary" data-edit-product="' + product.id + '">Editar</button>' +
@@ -707,6 +713,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
       productNameInput.value = "";
       productDescriptionInput.value = "";
       productPriceInput.value = "";
+      productStockInput.value = "";
       populateProductCategorySelect();
       productFeaturedInput.checked = false;
       productAvailableInput.checked = true;
@@ -726,6 +733,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         productNameInput.value = product.name;
         productDescriptionInput.value = product.description || "";
         productPriceInput.value = Number(product.price).toFixed(2);
+        productStockInput.value = product.stock === null || product.stock === undefined ? "" : String(product.stock);
         populateProductCategorySelect(product.category);
         productFeaturedInput.checked = !!product.featured;
         productAvailableInput.checked = !!product.available;
@@ -745,6 +753,7 @@ const adminPanelHtml = r'''<!DOCTYPE html>
         name: productNameInput.value.trim(),
         description: productDescriptionInput.value.trim(),
         price: Number(productPriceInput.value),
+        stock: productStockInput.value.trim() === "" ? null : Number(productStockInput.value),
         category: productCategoryInput.value,
         featured: productFeaturedInput.checked,
         available: productAvailableInput.checked

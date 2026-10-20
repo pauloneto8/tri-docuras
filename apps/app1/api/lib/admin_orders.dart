@@ -213,6 +213,9 @@ Future<Map<String, Object?>> updateOrderStatus(
       actor: actor,
       note: refundStatus == null ? null : 'estorno: $refundStatus',
     );
+    if (normalized == 'cancelled') {
+      await restockOrderItems(tx, orderId);
+    }
     return updated;
   });
 
