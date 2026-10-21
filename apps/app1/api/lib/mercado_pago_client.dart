@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:tri_docuras_api/mercado_pago_config.dart';
@@ -67,41 +68,55 @@ class MercadoPagoClient {
     required double amount,
     required String customerName,
     required String whatsapp,
+    String? payerEmail,
+    List<PixItem> items = const [],
     Duration expiry = const Duration(minutes: 10),
   }) async {
-    final token = MercadoPagoConfig.accessToken;
+    final token = _accessToken ?? MercadoPagoConfig.accessToken;
     if (token == null) {
       throw MercadoPagoException(
         'Pagamento Pix indisponível: credencial Mercado Pago não configurada.',
       );
     }
 
-    final nameParts = _splitName(customerName);
     final expiresAt = DateTime.now().toUtc().add(expiry);
-
-    final body = {
-      'transaction_amount': double.parse(amount.toStringAsFixed(2)),
-      'description': 'Pedido Tri Doçuras $orderPublicId',
-      'payment_method_id': 'pix',
-      'external_reference': orderPublicId,
-      'notification_url': MercadoPagoConfig.notificationUrl,
-      'date_of_expiration': _formatMpDate(expiresAt),
-      'payer': {
-        'email': _payerEmail(orderPublicId, whatsapp),
-        'first_name': nameParts.first,
-        'last_name': nameParts.last,
-      },
-    };
-
-    final response = await _client.post(
-      Uri.parse('$_baseUrl/v1/payments'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-        'X-Idempotency-Key': '$orderPublicId-${expiresAt.millisecondsSinceEpoch}',
-      },
-      body: jsonEncode(body),
+    final body = buildPixBody(
+      orderPublicId: orderPublicId,
+      amount: amount,
+      customerName: customerName,
+      whatsapp: whatsapp,
+      payerEmail: payerEmail,
+      items: items,
+      notificationUrl: MercadoPagoConfig.notificationUrl,
+      expiresAt: expiresAt,
     );
+
+    Future<http.Response> send(Map<String, Object?> payload, String key) {
+      return _client.post(
+        Uri.parse('$_baseUrl/v1/payments'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': key,
+        },
+        body: jsonEncode(payload),
+      );
+    }
+
+    final key = '$orderPublicId-${expiresAt.millisecondsSinceEpoch}';
+    var response = await send(body, key);
+    // Rede de segurança: se o Mercado Pago recusar os dados extras do
+    // comprador, o Pix ainda sai com os dados básicos. O log mostra o motivo.
+    if (response.statusCode == 400 && body.containsKey('additional_info')) {
+      stderr.writeln(
+        '[mp] Pix de $orderPublicId recusado com additional_info, '
+        'tentando sem: ${response.body}',
+      );
+      response = await send(
+        Map.of(body)..remove('additional_info'),
+        '$key-basico',
+      );
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw MercadoPagoException(
@@ -116,7 +131,7 @@ class MercadoPagoClient {
   }
 
   Future<Map<String, dynamic>> fetchPayment(int paymentId) async {
-    final token = MercadoPagoConfig.accessToken;
+    final token = _accessToken ?? MercadoPagoConfig.accessToken;
     if (token == null) {
       throw MercadoPagoException('Credencial Mercado Pago não configurada.');
     }
@@ -236,12 +251,87 @@ class MercadoPagoClient {
     return 'pedido+$slug+$whatsapp@pagador.tridocuras.com.br';
   }
 
+  /// Corpo do POST /v1/payments. Manda os dados reais do comprador (e-mail da
+  /// conta, nome, telefone) e os itens: a análise antifraude do Mercado Pago
+  /// usa esses dados, e um e-mail inventado aumenta a chance de recusa.
+  static Map<String, Object?> buildPixBody({
+    required String orderPublicId,
+    required double amount,
+    required String customerName,
+    required String whatsapp,
+    required String? payerEmail,
+    required List<PixItem> items,
+    required String notificationUrl,
+    required DateTime expiresAt,
+  }) {
+    final nameParts = _splitName(customerName);
+    final email = payerEmail?.trim() ?? '';
+    final phone = _phone(whatsapp);
+    return {
+      'transaction_amount': double.parse(amount.toStringAsFixed(2)),
+      'description': 'Pedido Tri Doçuras $orderPublicId',
+      'payment_method_id': 'pix',
+      'external_reference': orderPublicId,
+      'notification_url': notificationUrl,
+      'date_of_expiration': _formatMpDate(expiresAt),
+      'payer': {
+        // Pedido antigo, sem conta, não tem e-mail: mantém o sintético.
+        'email': email.isNotEmpty ? email : _payerEmail(orderPublicId, whatsapp),
+        'first_name': nameParts.first,
+        'last_name': nameParts.last,
+      },
+      'additional_info': {
+        if (items.isNotEmpty) 'items': [for (final item in items) item.toJson()],
+        'payer': {
+          'first_name': nameParts.first,
+          'last_name': nameParts.last,
+          if (phone != null) 'phone': phone,
+        },
+      },
+    };
+  }
+
+  /// WhatsApp com DDD (11 dígitos) no formato do Mercado Pago.
+  static Map<String, String>? _phone(String whatsapp) {
+    final digits = whatsapp.replaceAll(RegExp(r'\D'), '');
+    if (digits.length != 11) return null;
+    return {'area_code': digits.substring(0, 2), 'number': digits.substring(2)};
+  }
+
   static ({String first, String last}) _splitName(String fullName) {
     final parts = fullName.trim().split(RegExp(r'\s+'));
     if (parts.isEmpty) return (first: 'Cliente', last: 'Tri');
     if (parts.length == 1) return (first: parts.first, last: 'Doçuras');
     return (first: parts.first, last: parts.sublist(1).join(' '));
   }
+}
+
+/// Item do pedido mandado ao Mercado Pago em `additional_info.items`.
+class PixItem {
+  const PixItem({
+    required this.productId,
+    required this.title,
+    required this.quantity,
+    required this.unitPrice,
+  });
+
+  final int productId;
+  final String title;
+  final int quantity;
+  final double unitPrice;
+
+  Map<String, Object?> toJson() => {
+        'id': '$productId',
+        'title': title,
+        'quantity': quantity,
+        'unit_price': double.parse(unitPrice.toStringAsFixed(2)),
+      };
+}
+
+/// O Mercado Pago recusou o pagamento (ex.: `rejected_high_risk`). Se o
+/// cliente já tinha pago, o próprio Mercado Pago devolve o valor.
+bool mercadoPagoStatusIsRejected(String? status) {
+  return status?.toLowerCase().trim() == 'rejected';
 }
 
 bool mercadoPagoStatusIsPaid(String? status) {

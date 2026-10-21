@@ -45,5 +45,11 @@ void main() {
       'order': {'id': 'TD-0001', 'status': 'paid'},
     });
     expect(paid.isPaid, isTrue);
+
+    final cancelled = OrderStatus.fromJson({
+      'order': {'id': 'TD-0002', 'status': 'cancelled'},
+    });
+    expect(cancelled.isCancelled, isTrue);
+    expect(cancelled.isPaid, isFalse);
   });
 }

@@ -38,6 +38,9 @@ class _PixScreenState extends State<PixScreen> {
   String? _pixError;
   bool _isTestMode = false;
   bool _loadingPix = false;
+
+  /// O pedido foi cancelado enquanto o cliente via o Pix: não há o que tentar.
+  bool _cancelled = false;
   Timer? _pollTimer;
   Timer? _tickTimer;
   Duration _remaining = Duration.zero;
@@ -103,6 +106,16 @@ class _PixScreenState extends State<PixScreen> {
       if (status.isPaid) {
         _pollTimer?.cancel();
         _goToConfirmation();
+      } else if (status.isCancelled) {
+        _pollTimer?.cancel();
+        setState(() {
+          _cancelled = true;
+          _pix = null;
+          _pixError =
+              'Este pedido foi cancelado e este Pix não vale mais. Se você '
+              'pagou e o Mercado Pago recusou o pagamento, ele devolve o '
+              'valor automaticamente. Em caso de dúvida, fale com a loja.';
+        });
       }
     } catch (_) {
       // Mantém polling; falha de rede é temporária.
@@ -217,14 +230,18 @@ class _PixScreenState extends State<PixScreen> {
                             if (_pixError != null) ...[
                               _ErrorBanner(message: _pixError!),
                               const SizedBox(height: 12),
-                              TdButton(
-                                label: _loadingPix ? 'Gerando Pix…' : 'Tentar novamente',
-                                variant: _loadingPix
-                                    ? TdButtonVariant.disabled
-                                    : TdButtonVariant.primary,
-                                onPressed: _loadingPix ? null : _retryPix,
-                              ),
-                              const SizedBox(height: 16),
+                              if (!_cancelled) ...[
+                                TdButton(
+                                  label: _loadingPix
+                                      ? 'Gerando Pix…'
+                                      : 'Tentar novamente',
+                                  variant: _loadingPix
+                                      ? TdButtonVariant.disabled
+                                      : TdButtonVariant.primary,
+                                  onPressed: _loadingPix ? null : _retryPix,
+                                ),
+                                const SizedBox(height: 16),
+                              ],
                             ],
                             if (showPix) ...[
                               Text(

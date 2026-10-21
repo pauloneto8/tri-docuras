@@ -84,4 +84,7 @@ class OrderStatus {
   final String status;
 
   bool get isPaid => status == 'paid';
+
+  /// Cancelado pela loja ou porque o Mercado Pago recusou o pagamento.
+  bool get isCancelled => status == 'cancelled';
 }

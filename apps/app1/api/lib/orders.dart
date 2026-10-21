@@ -438,12 +438,15 @@ Future<Map<String, Object?>> createPixForOrder(String publicId) async {
     );
   }
 
+  final payer = await _pixPayerDetails(publicId);
   final client = MercadoPagoClient();
   final pix = await client.createPixPayment(
     orderPublicId: publicId,
     amount: (order['total'] as num).toDouble(),
     customerName: order['customer_name'] as String,
     whatsapp: order['whatsapp'] as String,
+    payerEmail: payer.email,
+    items: payer.items,
   );
 
   final connection = await getConnection();
@@ -468,13 +471,62 @@ Future<Map<String, Object?>> createPixForOrder(String publicId) async {
   return MercadoPagoConfig.enrichPixPayload(pix.toJson());
 }
 
+/// E-mail da conta do cliente e itens do pedido, para o Mercado Pago.
+Future<({String? email, List<PixItem> items})> _pixPayerDetails(
+  String publicId,
+) async {
+  final connection = await getConnection();
+  final emailRows = await connection.execute(
+    r'''
+    SELECT c.email
+    FROM orders o
+    JOIN customers c ON c.id = o.customer_id
+    WHERE o.public_id = $1
+    LIMIT 1;
+    ''',
+    parameters: [publicId],
+  );
+  final itemRows = await connection.execute(
+    r'''
+    SELECT oi.product_id, oi.product_name, oi.options, oi.quantity, oi.unit_price
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    WHERE o.public_id = $1
+    ORDER BY oi.id;
+    ''',
+    parameters: [publicId],
+  );
+  return (
+    email: emailRows.isEmpty ? null : emailRows.first[0] as String?,
+    items: [
+      for (final row in itemRows)
+        PixItem(
+          productId: (row[0] as num).toInt(),
+          title: (row[2] as String?)?.isNotEmpty == true
+              ? '${row[1]} (${row[2]})'
+              : row[1] as String,
+          quantity: (row[3] as num).toInt(),
+          unitPrice: _toDouble(row[4]),
+        ),
+    ],
+  );
+}
+
 Future<bool> syncOrderPaymentFromMercadoPago(int paymentId) async {
   final client = MercadoPagoClient();
   final payment = await client.fetchPayment(paymentId);
   final externalRef = payment['external_reference']?.toString();
   if (externalRef == null || externalRef.isEmpty) return false;
 
-  if (!mercadoPagoStatusIsPaid(payment['status']?.toString())) {
+  final status = payment['status']?.toString();
+  if (mercadoPagoStatusIsRejected(status)) {
+    return markOrderPaymentRejected(
+      externalRef,
+      paymentId: paymentId,
+      detail: payment['status_detail']?.toString(),
+    );
+  }
+  if (!mercadoPagoStatusIsPaid(status)) {
     return false;
   }
 
@@ -557,6 +609,47 @@ Future<int> expireStaleOrders() async {
     }
     return result.length;
   });
+}
+
+/// O Mercado Pago recusou o pagamento atual do pedido (ex.: antifraude).
+/// Cancela o pedido, devolve o estoque e registra o motivo. Só vale para o
+/// pagamento ligado ao pedido e enquanto ele aguarda o Pix.
+Future<bool> markOrderPaymentRejected(
+  String publicId, {
+  required int paymentId,
+  String? detail,
+}) async {
+  final connection = await getConnection();
+  final updated = await connection.runTx((tx) async {
+    final result = await tx.execute(
+      r'''
+      UPDATE orders
+      SET status = 'cancelled'
+      WHERE public_id = $1
+        AND status = 'pending_payment'
+        AND mp_payment_id = $2
+      RETURNING id;
+      ''',
+      parameters: [publicId, paymentId],
+    );
+    if (result.isEmpty) return false;
+    final orderId = result.first[0]! as int;
+    await restockOrderItems(tx, orderId);
+    final reason = detail == null || detail.isEmpty ? '' : ' ($detail)';
+    await recordOrderEvent(
+      tx,
+      orderId: orderId,
+      from: 'pending_payment',
+      to: 'cancelled',
+      actor: actorMercadoPago,
+      note: 'pagamento $paymentId recusado pelo Mercado Pago$reason',
+    );
+    return true;
+  });
+  if (updated) {
+    stderr.writeln('[mp] pagamento $paymentId recusado: pedido $publicId cancelado');
+  }
+  return updated;
 }
 
 Future<bool> markOrderPaid(String publicId, {int? paymentId}) async {
