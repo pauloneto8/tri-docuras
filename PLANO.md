@@ -163,7 +163,7 @@ Ordem recomendada: 2.1 → 2.2 → 2.3 → 2.4 → 2.5 (2.3 e 2.4 dependem de 2.
 
 ---
 
-## 5. Status de execução (atualizado em 20/10/2026, implementação pausada)
+## 5. Status de execução (atualizado em 21/10/2026, implementação pausada; sem mudanças de código desde 20/10)
 
 Os commits estão no `main` (`git log --oneline`). Só o que não está
 concluído aparece como pendente.
