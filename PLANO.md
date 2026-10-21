@@ -199,7 +199,7 @@ concluído aparece como pendente.
 | Segurança (20/10) | ✅ Feito | Pedido sem cliente (anterior ao login) deixou de ser público: `canAccessOrder` recusa, e o acompanhamento só abre com `tracking_token`. Antes, qualquer um lia esses pedidos pelo número sequencial. |
 | Fase 4 (4.6) | ⏸️ Pausada | Parte da 4.4 (docs) feita em 20/10: `README.md` da raiz, `apps/app1/README.md` e `docs/`. Restante não iniciado. |
 | Contas de cliente, Fases A e B | ✅ Feito | Ver [`CONTAS.md`](CONTAS.md). |
-| Contas de cliente, Fases C e D | ✅ Feito (20/10, sem deploy ainda) | C.1: o card do pedido mostra "Cliente com conta · e-mail" ou "Pedido sem conta (anterior)". C.2: revisado, o JSON do painel não inclui hash de senha. D.1: cadastro exige o aceite, grava `accepted_terms_at`. D.2: `DELETE /api/customers/me` pede a senha, recusa com pedido em andamento, apaga a conta e anonimiza os pedidos. D.3 (exportação) fica opcional. |
+| Contas de cliente, Fases C e D | ✅ Feito (20/10, sem deploy ainda) | C.1: o card do pedido mostra "Cliente com conta · e-mail" ou "Pedido sem conta (anterior)". C.2: revisado, o JSON do painel não inclui hash de senha. D.1: cadastro exige o aceite, grava `accepted_terms_at`. D.2: `DELETE /api/customers/me` pede a senha, recusa com pedido em andamento, apaga a conta e anonimiza os pedidos. D.3 (exportação): `GET /api/customers/me/export` devolve perfil com endereços, pedidos e favoritos, sem hash de senha; o perfil mostra "Baixar meus dados" (texto copiável). |
 
 Sobre o item 4.4: a documentação de `apps/app2` (AssistFin) ainda cita
 `/opt/hosting`. Essa cópia está fora do escopo deste plano (ver topo do

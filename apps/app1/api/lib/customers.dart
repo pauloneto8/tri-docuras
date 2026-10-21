@@ -509,3 +509,25 @@ String? _nullableText(Object? value) {
 
 String _digitsOnly(Object? value) =>
     (value?.toString() ?? '').replaceAll(RegExp(r'\D'), '');
+
+/// Cópia dos dados pessoais do cliente (LGPD, direito de acesso): perfil com
+/// endereços, pedidos no formato do acompanhamento e favoritos. `null` se a
+/// conta não existe.
+Future<Map<String, Object?>?> buildCustomerExport(int customerId) async {
+  final profile = await getCustomerProfile(customerId);
+  if (profile == null) return null;
+
+  final orders = await listCustomerOrders(customerId);
+  final favorites = await getCustomerFavorites(customerId);
+  return {
+    'exported_at': DateTime.now().toUtc().toIso8601String(),
+    'customer': {
+      'email': profile['email'],
+      'name': profile['name'],
+      'whatsapp': profile['whatsapp'],
+      'addresses': profile['addresses'],
+    },
+    'orders': orders,
+    'favorite_product_ids': favorites,
+  };
+}

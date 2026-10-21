@@ -68,6 +68,8 @@ class AccountController extends ChangeNotifier {
 
   Future<void> logout() => _endSession();
 
+  Future<Map<String, dynamic>> exportData() => _api.exportData();
+
   Future<void> deleteAccount({required String password}) async {
     await _api.deleteAccount(password: password);
     await _endSession();

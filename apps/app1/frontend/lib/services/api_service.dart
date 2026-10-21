@@ -243,6 +243,16 @@ class ApiService {
     return CustomerProfile.fromJson(body['customer'] as Map<String, dynamic>);
   }
 
+  /// Cópia dos dados do cliente logado (perfil, endereços, pedidos, favoritos).
+  Future<Map<String, dynamic>> exportData() async {
+    return _json(
+      'GET',
+      '/customers/me/export',
+      auth: true,
+      fallback: 'Não foi possível baixar seus dados.',
+    );
+  }
+
   /// Exclui a conta do cliente logado. Pede a senha de novo.
   Future<void> deleteAccount({required String password}) async {
     await _json(

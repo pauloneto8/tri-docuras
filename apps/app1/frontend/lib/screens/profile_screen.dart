@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tri_docuras/account/account_login_prompt.dart';
 import 'package:tri_docuras/account/account_scope.dart';
@@ -168,6 +171,12 @@ class _AccountCard extends StatelessWidget {
                   label: 'Sair da conta',
                   variant: TdButtonVariant.outline,
                   onPressed: () => account.logout(),
+                ),
+                const SizedBox(height: 8),
+                TdButton(
+                  label: 'Baixar meus dados',
+                  variant: TdButtonVariant.soft,
+                  onPressed: () => _showDataExport(context),
                 ),
                 const SizedBox(height: 8),
                 TdButton(
@@ -352,6 +361,61 @@ class _MenuTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Mostra a cópia dos dados do cliente em texto, para ler ou copiar.
+Future<void> _showDataExport(BuildContext context) async {
+  final account = AccountScope.of(context);
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final data = await account.exportData();
+    if (!context.mounted) return;
+    final text = const JsonEncoder.withIndent('  ').convert(data);
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _DataExportDialog(text: text),
+    );
+  } on ApiException catch (error) {
+    messenger.showSnackBar(SnackBar(content: Text(error.message)));
+  }
+}
+
+class _DataExportDialog extends StatelessWidget {
+  const _DataExportDialog({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Meus dados'),
+      content: SizedBox(
+        height: 360,
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: SelectableText(
+            text,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: text));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Dados copiados.')),
+            );
+          },
+          child: const Text('Copiar'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Fechar'),
+        ),
+      ],
     );
   }
 }

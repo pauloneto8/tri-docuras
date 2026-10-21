@@ -63,6 +63,8 @@ function check(name, ok, detail) { results.push((ok ? 'OK   ' : 'FAIL ') + name 
   r = await call('GET', `/api/orders/${id}/tracking?t=${orderToken}`);
   check('acompanhamento com token certo (200)', r.status === 200, String(r.status));
 
+  r = await call('GET', '/api/customers/me/export', null, token);
+  check('exportação dos dados (200) sem hash de senha', r.status === 200 && r.data.customer && !JSON.stringify(r.data).includes('password_hash') && !JSON.stringify(r.data).includes('$2'), String(r.status));
   r = await call('GET', '/api/customers/me/orders', null, token);
   check('pedido aparece no histórico da conta', r.status === 200 && JSON.stringify(r.data).includes(id), String(r.status));
 
