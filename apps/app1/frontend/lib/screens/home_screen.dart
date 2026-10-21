@@ -21,14 +21,17 @@ import 'package:tri_docuras/widgets/td_photo_frame.dart';
 import 'package:tri_docuras/widgets/td_search_field.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.api});
+
+  /// Serviço de API. Nulo usa o padrão; os testes passam um cliente falso.
+  final ApiService? api;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final ApiService _api = ApiService();
+  late final ApiService _api = widget.api ?? ApiService();
   final TextEditingController _searchController = TextEditingController();
 
   int _navIndex = 0;
