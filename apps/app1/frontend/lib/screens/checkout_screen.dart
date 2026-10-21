@@ -23,7 +23,10 @@ import 'package:tri_docuras/widgets/td_text_field.dart';
 
 /// Checkout (tela 4) — formulário + resumo; Gerar Pix abre tela de pagamento.
 class CheckoutScreen extends StatefulWidget {
-  const CheckoutScreen({super.key});
+  const CheckoutScreen({super.key, this.api});
+
+  /// Serviço de API. Nulo usa o padrão; os testes passam um cliente falso.
+  final ApiService? api;
 
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
@@ -42,7 +45,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool _submitting = false;
   bool _acceptedTerms = false;
 
-  final ApiService _api = ApiService();
+  late final ApiService _api = widget.api ?? ApiService();
 
   @override
   void dispose() {
