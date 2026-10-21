@@ -1,7 +1,7 @@
 # Tri Doçuras — repositório da VPS
 
 Repositório da loja **Tri Doçuras** (app1: Flutter web + API Dart Frog +
-PostgreSQL, com painel da loja em `/admin`). Atualizado em 20/10/2026.
+PostgreSQL, com painel da loja em `/admin`). Atualizado em 21/10/2026.
 
 - **Produção:** https://tridocuras.com.br
 - **Escopo do plano atual:** [`PLANO.md`](PLANO.md) (estado na seção 5)

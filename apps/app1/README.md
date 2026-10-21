@@ -4,9 +4,9 @@ Doceria online especializada em brownies. Cliente multiplataforma (Android, iOS,
 
 **Produção:** https://tridocuras.com.br
 
-> **Atualizado em 20/10/2026.** Fases 0 e 1 do [`PLANO.md`](../../PLANO.md)
+> **Atualizado em 21/10/2026.** Fases 0 e 1 do [`PLANO.md`](../../PLANO.md)
 > concluídas, exceto os itens que dependem do dono (ver [Pendente](#pendente)).
-> Contas de cliente: Fases A e B feitas; C e D pendentes
+> Contas de cliente: Fases A a D feitas, C e D sem deploy ainda
 > ([`CONTAS.md`](../../CONTAS.md)). Monitoramento e operação:
 > [`docs/MONITORAMENTO.md`](../../docs/MONITORAMENTO.md) e
 > [`docs/OPERACAO.md`](../../docs/OPERACAO.md).
@@ -202,14 +202,14 @@ docker compose -f docker-compose.tridocuras.yml build app-tridocuras app-tridocu
 
 ### Pendente
 
-Estado em 20/10/2026 (implementação pausada). Detalhe no [`PLANO.md`](../../PLANO.md) (seção 5) e no [`FASE0.md`](../../FASE0.md) (seção 4).
+Estado em 21/10/2026 (implementação pausada; sem mudanças de código desde 20/10). Detalhe no [`PLANO.md`](../../PLANO.md) (seção 5) e no [`FASE0.md`](../../FASE0.md) (seção 4).
 
-- **Depende do dono:** conferir o WhatsApp no app (Perfil → WhatsApp); chave CallMeBot para o aviso à loja; fotos dos produtos (`image_url`); teste ponta a ponta com dinheiro real (FASE0 0.8 a 0.10).
-- **Monitoramento:** uptime externo ([`MONITORAMENTO.md`](../../docs/MONITORAMENTO.md)); cópia dos backups fora da VPS ([`OPERACAO.md`](../../docs/OPERACAO.md)).
-- **Fase 2, operação (no ar desde 20/10):** configurações da loja, usuários do painel, histórico de status e estoque. Pendente: pronta entrega × encomenda e variações (aguardam decisões do dono); catálogo mostrar "Esgotado".
-- **Fase 3, cliente e marca:** PWA, SEO, status para o cliente, páginas legais e LGPD, acabamento de UX, painel responsivo.
-- **Contas de cliente:** Fase C (painel) e Fase D (LGPD).
-- **Fase 4:** migrações versionadas, testes de integração com Postgres, métricas.
+- **Depende do dono:** conferir o WhatsApp no app (Perfil → WhatsApp); chave CallMeBot para o aviso à loja; fotos dos produtos (`image_url`); teste ponta a ponta com dinheiro real (FASE0 0.8 a 0.10); destino da cópia do backup fora da VPS; decisões da Fase 2.4 (horários, antecedência, limite por faixa); se a encomenda consome estoque; horários e CEPs; logo para os ícones do PWA; foto do brownie para a `og:image`; conteúdo do aviso de alergênicos; decisão sobre a Meta API (mensagem automática ao cliente); revisão jurídica dos Termos de Compra (cancelamento e arrependimento).
+- **Monitoramento:** uptime externo ([`MONITORAMENTO.md`](../../docs/MONITORAMENTO.md)).
+- **Fase 2, operação (no ar desde 20/10):** configurações da loja, usuários do painel, histórico de status e estoque. Variações por produto (2.6) feitas, sem deploy. Pendente: pronta entrega × encomenda (2.4), que aguarda as decisões do dono.
+- **Fase 3, cliente e marca (sem deploy, parcial):** PWA, SEO, status para o cliente (falta a mensagem automática), páginas legais, acabamento de UX (falta o aviso de alergênicos) e painel com cara de produto.
+- **Contas de cliente:** Fases A a D feitas (C e D sem deploy ainda).
+- **Fase 4:** migrações versionadas, testes de integração, testes de widget e métricas feitos (sem deploy, exceto integração e widgets). Pendente: restante da 4.6 (docs), teste do webhook do Mercado Pago na suíte de integração e decisão sobre `apps/app2`.
 
 ### Contato da loja no app
 
